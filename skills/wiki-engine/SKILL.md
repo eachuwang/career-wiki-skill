@@ -374,7 +374,14 @@ relations:
 
 #### 8. 清理旧 wiki（全量重建）
 
-compile 前清空 `wiki/` 下所有子目录，确保是全新重建。旧文件不保留。
+> 🔴 **CHECKPOINT · 🛑 STOP — 清空 wiki/ 前必须确认**
+>
+> 全量重建会删除 `wiki/` 下所有旧文件，**不可逆**。执行前必须：
+> 1. 向用户确认：`"即将清空 wiki/ 目录并全量重建，已有 wiki 页面将被覆盖。确认继续？"`
+> 2. 用户明确回答"确认/继续/是"后才执行
+> 3. 如果用户犹豫，先建议运行 OKF 导出备份：`node skills/wiki-engine/scripts/okf_export.mjs ~/.career_wiki/wiki/ -o wiki-backup.json`
+
+用户确认后，清空 `wiki/` 下所有子目录，确保是全新重建。旧文件不保留。
 
 ---
 

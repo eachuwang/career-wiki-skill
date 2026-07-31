@@ -1,0 +1,15 @@
+{
+  "name": "resume-generator",
+  "version": "1.0.0",
+  "description": "Career-Wiki 简历生成 API Server — 读 wiki markdown → gray-matter 解析 → 按模板组装结构化简历 JSON",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "node scripts/api_server.mjs",
+    "dev": "PORT=3001 node scripts/api_server.mjs"
+  },
+  "dependencies": {
+    "gray-matter": "^4.0.3"
+  }
+}

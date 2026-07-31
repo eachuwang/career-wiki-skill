@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ---------- 全局 ---------- */
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- 滚动条 ---------- */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #c1c7d0;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #9aa3af;
+}
+
+/* ---------- dnd-kit 拖拽样式 ---------- */
+
+.dnd-dragging {
+  opacity: 0.5;
+}
+
+.dnd-overlay {
+  cursor: grabbing !important;
+}
+
+/* ---------- 简历预览区 ---------- */
+
+.preview-container {
+  transition: transform 0.15s ease;
+  transform-origin: top center;
+}
+
+/* ---------- 打印样式（导出 PDF 用） ---------- */
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    box-shadow: none !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

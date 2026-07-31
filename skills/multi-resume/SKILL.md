@@ -202,6 +202,19 @@ metadata:
 
 ### 步骤 8：写文件 + 确认
 
+> 🔴 **CHECKPOINT** — 写文件前必须让用户确认最终简历配置
+>
+> 在用 `write_file` 写入简历配置 JSON 之前，**必须**向用户复述以下内容并等待确认：
+> - 简历名 + 目标公司/岗位
+> - 使用的模板
+> - 包含的模块列表（顺序）
+> - 强调项（emphasize）概要
+> - 脱敏设置（privacy）
+> - 隐藏字段（hide）概要
+> - 排序设置（order）
+>
+> 🛑 确认后才写文件。简历配置写入后会被 resume-generator 读取用于渲染，配置错误（如 emphasize 项跟 wiki 对不上）会导致渲染异常。
+
 1. 用 `write_file` 写 `~/.career_wiki/resumes/{id}.json`
    - 写入配置 JSON（含 created/updated 日期 = 今天）
 2. 告诉用户：

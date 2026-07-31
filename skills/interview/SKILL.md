@@ -64,9 +64,13 @@ interviewer: career-wiki-skill
 
 ### 阶段 0：开场定位
 
-1. 确认 `~/.career_wiki/` 存在；不存在 → 提示跑 env-init
-2. 如果是续采，先读上一轮 raw 文件，告诉用户已有什么、问要补哪节
-3. 如果首轮，说明流程："我会按 7 节问，基本信息快过，经历项目你自由讲我来整理确认"
+> 🔴 **CHECKPOINT** — 开始采访前必须完成以下确认
+>
+> 1. 确认 `~/.career_wiki/` 存在；不存在 → 🛑 STOP，提示用户先跑 env-init
+> 2. 如果是续采，先读上一轮 raw 文件，告诉用户已有什么、问要补哪节
+> 3. 如果首轮，说明流程："我会按 7 节问，基本信息快过，经历项目你自由讲我来整理确认"
+>
+> 🛑 目录不存在时不要继续。没有数据目录，采集的内容无处可写。
 
 ### 阶段 1：基本信息（填表式快过）
 
@@ -143,13 +147,19 @@ interviewer: career-wiki-skill
 
 ### 阶段 8：写文件 + 触发 compile
 
-1. 用 `write_file` 写 `~/.career_wiki/sources/raw/interview-{timestamp}.md`
-   - frontmatter：`interview_date / round / interviewer: career-wiki-skill`
-   - 正文按 7 节组织，用户原话用 `>` 引用块，Agent 确认用普通文本
-2. **自动触发 wiki 引擎 compile**（F04）：
-   - **有 subagent 能力**：并行触发 compile，不阻塞用户
-   - **无 subagent 能力**：同步执行 compile，跑完告诉用户"已编译进 wiki"
-3. 告诉用户文件路径 + compile 状态
+> 🔴 **CHECKPOINT** — 触发 compile 前必须完成以下确认
+>
+> 1. 向用户确认：采访已结束，即将写入 raw 文件并触发 wiki 引擎 compile
+> 2. 告知用户 compile 可能需要时间（有 subagent 则并行，无则同步阻塞）
+> 3. 用户确认后，执行以下步骤：
+>
+> 1. 用 `write_file` 写 `~/.career_wiki/sources/raw/interview-{timestamp}.md`
+>    - frontmatter：`interview_date / round / interviewer: career-wiki-skill`
+>    - 正文按 7 节组织，用户原话用 `>` 引用块，Agent 确认用普通文本
+> 2. **自动触发 wiki 引擎 compile**（F04）：
+>    - **有 subagent 能力**：并行触发 compile，不阻塞用户
+>    - **无 subagent 能力**：同步执行 compile，跑完告诉用户"已编译进 wiki"
+> 3. 告诉用户文件路径 + compile 状态
 
 ## 续采支持
 

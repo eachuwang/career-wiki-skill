@@ -432,6 +432,15 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 
 触发 wiki 重新 compile。**这个接口不自己编译 wiki**——wiki compile 是 Agent LLM 操作（见 wiki-engine skill），Node 脚本做不了。这个接口的作用是提示前端告诉用户"需要调 Agent 重新 compile wiki"。
 
+> 🔴 **CHECKPOINT** — 前端收到此响应后必须提示用户
+>
+> 这个接口返回的响应**不是**同步编译完成，而是需要用户在 Agent 对话中手动触发：
+> - 前端收到 200 响应后，**必须**向用户显示提示信息
+> - 用户需在 Hermes 中说"编译 wiki"来触发 wiki-engine skill
+> - 编译完成后 API server 会自动读到新数据
+>
+> 🛑 不要向用户暗示"刷新已完成"。Wiki compile 是 LLM 操作，必须用户在对话里触发。
+
 **响应 200：**
 ```json
 {

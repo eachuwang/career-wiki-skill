@@ -200,6 +200,16 @@ metadata:
 
 ### 步骤 5：写文件 + 确认
 
+> 🔴 **CHECKPOINT** — 写文件前必须让用户确认最终配置
+>
+> 在用 `write_file` 写入模板文件之前，**必须**向用户复述以下内容并等待确认：
+> - 模板名 + id
+> - 布局（单栏/双栏）
+> - sections 数组（每个模块的名称、标题、字段列表、排序、分组）
+> - CSS 来源（复制预设还是新生成）
+>
+> 🛑 确认后才写文件。模板写入后会被 resume-generator 和 web-editor 读取，配置错误会导致下游渲染异常。
+
 1. 用 `write_file` 写两个文件：
    - `~/.career_wiki/templates/{id}.json` — 模板配置
    - `~/.career_wiki/templates/{id}.css` — 样式（复制或新生成）

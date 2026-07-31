@@ -159,7 +159,7 @@ career-wiki-skill 在以下 Agent 工具中均可使用：
 - **Gemini CLI** — Google 的 Agent CLI
 - 以及所有支持 `SKILL.md` 格式的 Agent 工具
 
-所有 SKILL.md 已通过达尔文 Runtime 适配性扫描（9/9 全绿灯，无单一 Agent 绑定措辞）。
+所有 SKILL.md 已通过 Runtime 适配性扫描（9/9 全绿灯，无单一 Agent 绑定措辞）。
 
 ---
 

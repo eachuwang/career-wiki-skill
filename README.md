@@ -1,0 +1,208 @@
+<div align="center">
+
+# career-wiki-skill
+
+**用 AI Agent 采访采集信息，自动生成结构化 Wiki 知识库，从 Wiki 一键生成多份简历。**
+
+跨 Agent 兼容 · 纯本地 Markdown · 支持 Claude Code / Codex / Hermes / OpenClaw 等所有支持 Skill 的 Agent
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Agent Skill](https://img.shields.io/badge/Agent%20Skill-Compatible-blueviolet)](https://skills.sh)
+[![Runtime Neutral](https://img.shields.io/badge/Runtime-Neutral-green)](#runtime-兼容性)
+[![OKF](https://img.shields.io/badge/OKF-v0.2-blue)](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf)
+
+</div>
+
+---
+
+## 它解决什么问题
+
+求职者在准备简历时面临三个痛点：
+
+1. **信息散落** — 工作经历、项目、技能、教育等散在脑子里、旧简历、各种文档里，没有统一管理
+2. **简历重复劳动** — 投不同公司要强调不同重点，每次手动改一遍，数据和格式不一致
+3. **没有知识沉淀** — 面试结束后面经和反思没有沉淀，下次准备还是从零开始
+
+career-wiki-skill 把这些问题一次性解决：**采访采集 → Wiki 知识库 → 多份简历 → 可视化编辑导出**。
+
+---
+
+## 核心循环
+
+```
+采访采集 ──→ raw markdown ──→ Wiki 编译 ──→ 结构化知识库
+                                              │
+                                    ┌─────────┴─────────┐
+                                    ↓                   ↓
+                              简历生成              Web 可视化
+                              (模板+配置)           (拖拽+预览+导出)
+```
+
+---
+
+## 9 个 Skill 组成
+
+| # | Skill | 形式 | 职责 |
+|---|-------|------|------|
+| 1 | **env-init** | SKILL.md + Python 脚本 | 环境检查、目录初始化、依赖安装 |
+| 2 | **interview** | 纯 SKILL.md | 多轮对话采访，混合模式采集，产出 raw markdown |
+| 3 | **file-parser** | 纯 SKILL.md | 上传 PDF/图片/文档，Agent 提取内容落到 raw |
+| 4 | **wiki-engine** | SKILL.md + Node 脚本 | 数据 schema 定义、compile/lint/OKF 导入导出 |
+| 5 | **resume-generator** | SKILL.md + Node API server | 从 Wiki 查询数据，按模板组装简历 JSON |
+| 6 | **web-editor** | SKILL.md + React 项目 | 拖拽编辑简历、实时预览、Wiki 图谱、导出 |
+| 7 | **template-manager** | SKILL.md + 模板文件 | 预设/自定义简历模板（JSON + CSS） |
+| 8 | **multi-resume** | 纯 SKILL.md | 一个 Wiki → 多份不同岗位简历配置 |
+| 9 | **privacy-filter** | SKILL.md + Python 脚本 | 导出前实时脱敏，字段可见性控制 |
+
+---
+
+## 数据规范
+
+### 10 个实体类型
+
+```
+person · experience · project · skill · education ·
+certificate · award · publication · activity · summary
+```
+
+### 13 个关系类型
+
+```
+has_experience · has_skill · has_education · has_certificate ·
+has_award · has_publication · has_activity · has_summary ·
+used_skill · did_project · at_company · took_course · references
+```
+
+### 存储
+
+纯本地 Markdown + YAML frontmatter，Git 友好，不依赖数据库。
+
+```
+~/.career_wiki/
+├── sources/
+│   ├── raw/               ← 采访产出 + 文件提取（原始材料）
+│   └── uploads/           ← 用户上传的原始文件
+├── wiki/                  ← 编译产出的结构化页面（不允许人工编辑）
+│   ├── persons/
+│   ├── experiences/
+│   ├── projects/
+│   ├── skills/
+│   └── ...
+├── resumes/               ← 简历配置（每份一个 JSON）
+├── templates/             ← 简历模板（JSON + CSS）
+└── .career-wiki-skill/    ← 运行时状态
+```
+
+schema 写在 wiki-engine 的 SKILL.md 里，不用 profile.json，跟 OKF 理念一致。
+
+---
+
+## 快速开始
+
+### 1. 安装
+
+```bash
+git clone https://github.com/eachuwang/career-wiki-skill.git
+```
+
+把 `skills/` 下的目录放到你 Agent 的 skill 目录（如 `~/.claude/skills/`）。
+
+### 2. 初始化环境
+
+在你的 Agent 里说：
+
+```
+检查环境 / 初始化 career-wiki
+```
+
+env-init skill 会检查 Node.js / Python，创建 `~/.career_wiki/` 目录结构，安装依赖。
+
+### 3. 开始采访
+
+```
+开始采访 / 帮我录入信息
+```
+
+interview skill 启动多轮对话采集，基本信息填表快过，经历和项目自由讲再提取确认。
+
+### 4. 查看和编辑简历
+
+```
+打开编辑器 / 看看简历预览
+```
+
+web-editor skill 启动 React 前端，拖拽模块、实时预览、导出 PDF/HTML/JSON。
+
+---
+
+## 设计原则
+
+| # | 原则 | 说明 |
+|:---|:---|:---|
+| 01 | **Skill 只编排，不执行** | SKILL.md 指导 Agent 怎么做，LLM 推理让 Agent 做，脚本只做确定性操作 |
+| 02 | **跨 Agent 兼容** | 只用通用工具链（Bash + Python + Node），不依赖任何特定 Agent 的工具 |
+| 03 | **纯本地数据** | 用户数据在 `~/.career_wiki/`，自选目录和同步方式（Git/硬盘） |
+| 04 | **Wiki 是编译产物** | 全量重建，不允许人工编辑，改信息改 raw 再 recompile |
+| 05 | **OKF 标准导出** | 支持谷歌 OKF 格式导入导出，跨系统交换 |
+
+---
+
+## Runtime 兼容性
+
+career-wiki-skill 在以下 Agent 工具中均可使用：
+
+- **Claude Code** — Anthropic 的 CLI 编码工具
+- **Codex** — OpenAI 的编码 CLI
+- **Hermes Agent** — Nous Research 的开源 Agent 框架
+- **OpenClaw** — 开源 Agent 生态
+- **Cursor** — AI 代码编辑器
+- **Gemini CLI** — Google 的 Agent CLI
+- 以及所有支持 `SKILL.md` 格式的 Agent 工具
+
+所有 SKILL.md 已通过达尔文 Runtime 适配性扫描（9/9 全绿灯，无单一 Agent 绑定措辞）。
+
+---
+
+## 技术栈
+
+| 组件 | 技术 |
+|------|------|
+| Wiki 数据 | Markdown + YAML frontmatter + wikilink |
+| API Server | Node.js + gray-matter（纯 `node:http`，无框架） |
+| Web 前端 | React 18 + Vite + dnd-kit + Tailwind CSS + vis-network |
+| Python 脚本 | 环境检查、隐私脱敏（标准库） |
+| 导出格式 | PDF（浏览器 print）/ HTML / JSON / OKF |
+| 模板系统 | JSON 配置 + CSS 样式 |
+
+---
+
+## 达尔文评估
+
+本项目经过达尔文 skill 2.1 的 9 维度 rubric 评估：
+
+| 维度 | 分数 |
+|------|------|
+| Frontmatter 质量 | 9.0 |
+| 工作流清晰度 | 9.0 |
+| 失败模式编码 | 9.0 |
+| 检查点设计 | 7.1 |
+| 可执行具体性 | 9.0 |
+| 资源整合度 | 9.0 |
+| 整体架构 | 9.0 |
+| 实测表现 | 8.0 |
+| 反例与黑名单 | 8.0 |
+| **平均总分** | **86.0** |
+
+---
+
+## 设计灵感
+
+- **OKF（Open Knowledge Format）** — 谷歌的知识格式标准，纯 Markdown + frontmatter，无中心化 schema
+- **LLM Wiki** — Karpathy 的概念：把知识"编译"成互链的 wiki 页面，不每次从零检索
+- **SkillLens + SkillOpt** — 微软研究院的 Skill 评估和优化框架
+
+---
+
+## License
+
+MIT

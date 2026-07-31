@@ -107,7 +107,7 @@ schema 写在 wiki-engine 的 SKILL.md 里，不用 profile.json，跟 OKF 理�
 安装 skill：https://github.com/eachuwang/career-wiki-skill
 ```
 
-Agent 会自动 clone 仓库到 skill 目录，然后说"初始化环境"即可完成配置。
+Agent 会自动 clone 仓库到 skill 目录。
 
 手动安装：
 
@@ -117,7 +117,9 @@ git clone https://github.com/eachuwang/career-wiki-skill.git
 
 把 `skills/` 下的目录放到你 Agent 的 skill 目录（如 `~/.claude/skills/`）。
 
-### 2. 初始化环境
+### 2. 初始化环境（🔴 安装后必须执行，不能跳过）
+
+安装只是把文件放到了 skill 目录，数据目录和依赖还没建。必须先初始化：
 
 在你的 Agent 里说：
 
@@ -125,7 +127,13 @@ git clone https://github.com/eachuwang/career-wiki-skill.git
 检查环境 / 初始化 career-wiki
 ```
 
-env-init skill 会检查 Node.js / Python，创建 `~/.career_wiki/` 目录结构，安装依赖。
+env-init skill 会：
+1. 检查 Node.js ≥ 18 / Python ≥ 3.9 / npm
+2. 创建 `~/.career_wiki/` 目录结构（sources/raw、wiki/、resumes/、templates/ 等 16 个子目录）
+3. 安装 Node 依赖（gray-matter 等）
+4. 写入配置文件
+
+**初始化完成后才能开始采访、编译 wiki、生成简历。**
 
 ### 3. 开始采访
 

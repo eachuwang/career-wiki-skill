@@ -146,6 +146,24 @@ git clone https://github.com/eachuwang/career-wiki-skill.git
 
 把 `skills/` 下的目录放到你 Agent 的 skill 目录（如 `~/.claude/skills/`）。
 
+### 安装后第一步：必须初始化环境
+
+🔴 **安装完不能直接用，必须先运行环境初始化。**
+
+在你的 Agent 里说：
+
+```
+检查环境 / 初始化 career-wiki
+```
+
+env-init skill 会：
+1. 检查 Node.js ≥ 18 / Python ≥ 3.9 / npm
+2. 创建 `~/.career_wiki/` 目录结构（sources/raw、wiki/、resumes/、templates/ 等 16 个子目录）
+3. 安装 Node 依赖（gray-matter 等）
+4. 写入配置文件
+
+**初始化完成后才能开始采访、编译 wiki、生成简历。**
+
 首次使用时说"检查环境"或"初始化"，env-init skill 会检查环境并创建数据目录。
 
 ---

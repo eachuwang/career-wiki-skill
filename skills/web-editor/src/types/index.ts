@@ -1,5 +1,5 @@
 /**
- * Career-Wiki 前端类型定义
+ * Career-Wiki-Skill 前端类型定义
  *
  * 对应 wiki-engine schema（10 实体 + 13 关系）、
  * template-manager（模板 JSON）、multi-resume（简历配置 JSON）。

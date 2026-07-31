@@ -70,7 +70,7 @@ export default function App() {
       <div className="h-full flex items-center justify-center bg-ink-100">
         <div className="text-center">
           <div className="text-4xl mb-3 animate-pulse">📚</div>
-          <div className="text-sm text-ink-400">加载 Career-Wiki 数据...</div>
+          <div className="text-sm text-ink-400">加载 Career-Wiki-Skill 数据...</div>
         </div>
       </div>
     );
@@ -80,7 +80,7 @@ export default function App() {
     <div className="h-full flex flex-col bg-ink-100">
       {/* 全局导航栏 */}
       <nav className="flex items-center gap-4 px-4 py-2 bg-ink-800 text-white no-print">
-        <span className="text-sm font-bold">Career-Wiki</span>
+        <span className="text-sm font-bold">Career-Wiki-Skill</span>
         <div className="flex gap-1 ml-4">
           <button
             onClick={() => setPage('editor')}

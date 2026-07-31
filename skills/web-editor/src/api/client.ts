@@ -1,5 +1,5 @@
 /**
- * Career-Wiki API client — 封装对 resume-generator API server 的调用。
+ * Career-Wiki-Skill API client — 封装对 resume-generator API server 的调用。
  *
  * 开发时 Vite proxy 把 /api 代理到 http://localhost:3001。
  * 生产环境通过 VITE_API_URL 环境变量配置。

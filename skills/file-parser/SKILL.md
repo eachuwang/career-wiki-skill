@@ -10,7 +10,7 @@ metadata:
     related_skills: [wiki-engine, interview]
 ---
 
-# 文件解析 Skill（Career-Wiki）
+# 文件解析 Skill（Career-Wiki-Skill）
 
 ## 概述
 

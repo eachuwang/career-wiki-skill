@@ -1,5 +1,5 @@
 /**
- * api_server.mjs — Career-Wiki 简历生成 API Server
+ * api_server.mjs — Career-Wiki-Skill 简历生成 API Server
  *
  * 用法:
  *   node skills/resume-generator/scripts/api_server.mjs
@@ -820,7 +820,7 @@ async function start() {
 
   server.listen(port, () => {
     console.log(`┌─────────────────────────────────────────────┐`);
-    console.log(`│  Career-Wiki Resume Generator API Server   │`);
+    console.log(`│  Career-Wiki-Skill Resume Generator API Server   │`);
     console.log(`├─────────────────────────────────────────────┤`);
     console.log(`│  Version:    ${VERSION.padEnd(28)} │`);
     console.log(`│  Port:       ${String(port).padEnd(28)} │`);

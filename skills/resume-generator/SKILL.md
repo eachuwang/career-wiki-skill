@@ -11,7 +11,7 @@ metadata:
     tickets: [F06]
 ---
 
-# 简历生成 Skill（Career-Wiki）
+# 简历生成 Skill（Career-Wiki-Skill）
 
 ## 概述
 

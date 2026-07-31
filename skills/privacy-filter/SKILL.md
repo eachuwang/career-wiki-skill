@@ -10,7 +10,7 @@ metadata:
     related_skills: [wiki-engine, interview, file-parser]
 ---
 
-# 隐私脱敏 Skill（Career-Wiki）
+# 隐私脱敏 Skill（Career-Wiki-Skill）
 
 ## 概述
 

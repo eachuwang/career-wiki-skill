@@ -10,7 +10,7 @@ metadata:
     related_skills: [env-init, interview, file-parser]
 ---
 
-# Wiki 引擎 Skill（Career-Wiki）
+# Wiki 引擎 Skill（Career-Wiki-Skill）
 
 ## 概述
 

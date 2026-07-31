@@ -11,7 +11,7 @@ metadata:
     tickets: [F09]
 ---
 
-# 多简历管理 Skill（Career-Wiki）
+# 多简历管理 Skill（Career-Wiki-Skill）
 
 ## 概述
 

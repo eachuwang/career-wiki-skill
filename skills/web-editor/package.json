@@ -1,7 +1,7 @@
 {
   "name": "career-wiki-skill-web-editor",
   "version": "1.0.0",
-  "description": "Career-Wiki 前端 — 简历编辑器 + Wiki 图谱",
+  "description": "Career-Wiki-Skill 前端 — 简历编辑器 + Wiki 图谱",
   "type": "module",
   "private": true,
   "scripts": {

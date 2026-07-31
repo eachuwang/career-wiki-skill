@@ -1,7 +1,7 @@
 {
   "name": "resume-generator",
   "version": "1.0.0",
-  "description": "Career-Wiki 简历生成 API Server — 读 wiki markdown → gray-matter 解析 → 按模板组装结构化简历 JSON",
+  "description": "Career-Wiki-Skill 简历生成 API Server — 读 wiki markdown → gray-matter 解析 → 按模板组装结构化简历 JSON",
   "type": "module",
   "license": "MIT",
   "private": true,

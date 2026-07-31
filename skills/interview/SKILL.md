@@ -10,7 +10,7 @@ metadata:
     related_skills: [wiki-engine, file-parser]
 ---
 
-# 采访 Skill（Career-Wiki）
+# 采访 Skill（Career-Wiki-Skill）
 
 ## 概述
 

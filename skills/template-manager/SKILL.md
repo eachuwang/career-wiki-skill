@@ -11,7 +11,7 @@ metadata:
     tickets: [F08]
 ---
 
-# 模板管理 Skill（Career-Wiki）
+# 模板管理 Skill（Career-Wiki-Skill）
 
 ## 概述
 

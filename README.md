@@ -101,6 +101,16 @@ schema 写在 wiki-engine 的 SKILL.md 里，不用 profile.json，跟 OKF 理�
 
 ### 1. 安装
 
+在你的 Agent 里直接说：
+
+```
+安装 skill：https://github.com/eachuwang/career-wiki-skill
+```
+
+Agent 会自动 clone 仓库到 skill 目录，然后说"初始化环境"即可完成配置。
+
+手动安装：
+
 ```bash
 git clone https://github.com/eachuwang/career-wiki-skill.git
 ```

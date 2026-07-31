@@ -1,0 +1,17 @@
+[
+  {
+    "id": 1,
+    "prompt": "开始采访吧，我想录入一下简历信息",
+    "expected": "触发 interview skill，确认 ~/.career_wiki/ 存在，按 7 节问题树开始采集，基本信息填表式快过，经历项目自由讲+提取确认，产出 raw markdown 并触发 compile"
+  },
+  {
+    "id": 2,
+    "prompt": "我上次采过一次了，想补充一个项目经历",
+    "expected": "触发 interview skill 续采流程，读上一轮 raw 文件确定 round 号，新文件 round+1，直接进阶段 3 项目经验流程，只写新增内容不改旧文件"
+  },
+  {
+    "id": 3,
+    "prompt": "帮我一边采访一边把信息结构化提取到 frontmatter 里",
+    "expected": "拒绝在采访阶段做结构化提取，说明实体 frontmatter 化是 wiki 引擎 compile 的事，采访只记原话+确认复述"
+  }
+]

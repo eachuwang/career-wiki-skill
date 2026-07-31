@@ -1,0 +1,17 @@
+[
+  {
+    "id": 1,
+    "prompt": "看看我有哪些简历模板",
+    "expected": "触发 template-manager skill，扫描 ~/.career_wiki/templates/*.json，读取 name/layout/has_photo/sections 输出模板列表表格"
+  },
+  {
+    "id": 2,
+    "prompt": "基于技术简约复制一个新模板，改成双栏布局",
+    "expected": "触发 template-manager skill 创建流程，复制 tech-minimal 的 CSS，引导填模板名/布局/模块/字段，生成新 id（撞名加后缀），写 JSON+CSS 两个文件前向用户确认"
+  },
+  {
+    "id": 3,
+    "prompt": "把技术简约这个预设模板删掉",
+    "expected": "拒绝删除预设模板（tech-minimal/business-sidebar/creative-color/academic-plain 不可删），说明预设模板是 skill 包的一部分，只允许删自定义模板"
+  }
+]

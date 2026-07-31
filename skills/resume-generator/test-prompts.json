@@ -1,0 +1,17 @@
+[
+  {
+    "id": 1,
+    "prompt": "启动简历生成的 API server",
+    "expected": "触发 resume-generator skill，运行 node skills/resume-generator/scripts/api_server.mjs，默认端口 3001，读取 config.json 确定数据目录，启动后提示服务地址"
+  },
+  {
+    "id": 2,
+    "prompt": "用字节后端版配置生成一份简历",
+    "expected": "调 POST /api/resume/generate，读简历配置+模板 schema+wiki markdown，gray-matter 解析 frontmatter，按模板 sections 组装结构化简历 JSON 返回"
+  },
+  {
+    "id": 3,
+    "prompt": "刷新一下 wiki 数据，让 API server 读到最新的",
+    "expected": "调 PUT /api/wiki/refresh，返回 needs_agent 状态，提示用户必须在 Hermes 对话中说\"编译 wiki\"触发 wiki-engine skill，不暗示刷新已完成"
+  }
+]

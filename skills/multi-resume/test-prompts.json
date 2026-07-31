@@ -1,0 +1,17 @@
+[
+  {
+    "id": 1,
+    "prompt": "创建一份字节后端版的简历",
+    "expected": "触发 multi-resume skill，确认 wiki 有数据，引导填简历名/目标公司岗位/选模板/选模块/设强调方向/设脱敏隐藏/排序，写 resumes/{id}.json 前向用户确认"
+  },
+  {
+    "id": 2,
+    "prompt": "看看我有几份简历",
+    "expected": "触发 multi-resume skill，扫描 ~/.career_wiki/resumes/*.json，读取 name/target/template/modules 输出简历列表表格"
+  },
+  {
+    "id": 3,
+    "prompt": "这份简历强调 Go 技能，但 wiki 里写的是 Golang",
+    "expected": "说明 emphasize items 必须跟 wiki 实体的 name 字段对得上，应从 wiki 拉真实 name 填入而非用用户原话，引导用户确认 wiki 里的技能名后修正配置"
+  }
+]

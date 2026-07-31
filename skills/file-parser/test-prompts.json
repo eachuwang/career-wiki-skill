@@ -1,0 +1,17 @@
+[
+  {
+    "id": 1,
+    "prompt": "我上传了一份简历 PDF，帮我解析一下",
+    "expected": "触发 file-parser skill，保存原始文件到 sources/uploads/，用 Read 工具提取文字层，写成 markdown 存 sources/raw/uploads/，触发 wiki 引擎 compile"
+  },
+  {
+    "id": 2,
+    "prompt": "这张图片是我的简历截图，帮我读出来",
+    "expected": "触发 file-parser skill，用 vision 能力识别图片内容，置信度低时暂停让用户核对，确认后写成 markdown 存 raw/uploads/ 并触发 compile"
+  },
+  {
+    "id": 3,
+    "prompt": "解析完帮我顺便把技能提取成结构化字段吧",
+    "expected": "拒绝在解析阶段做结构化提取，说明实体识别和 frontmatter 化是 wiki 引擎 compile 的事，解析只产出纯文字 markdown 保持原文件结构"
+  }
+]

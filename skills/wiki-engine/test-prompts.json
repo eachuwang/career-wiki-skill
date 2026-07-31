@@ -1,0 +1,17 @@
+[
+  {
+    "id": 1,
+    "prompt": "编译一下 wiki",
+    "expected": "触发 wiki-engine compile，扫描 sources/raw/ 所有 markdown，Agent 识别实体、跨源合并、去重、标注 confidence、生成 wikilink，全量重建 wiki/ 目录"
+  },
+  {
+    "id": 2,
+    "prompt": "帮我检查 wiki 有没有什么问题",
+    "expected": "触发 wiki-engine lint，检查孤儿页面/断链/frontmatter 合规/confidence 偏低/无来源/重复实体/过期信息 7 类问题，输出 lint 报告"
+  },
+  {
+    "id": 3,
+    "prompt": "采访和文件解析都跑完了，但 wiki 里一个人出现了两次",
+    "expected": "说明这是 compile 跨源合并/去重没做好，同一个实体在多个 raw 文件出现应合并而非重复，引导用户重新 compile 或检查 lint 报告的重复实体项"
+  }
+]

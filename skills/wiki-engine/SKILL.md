@@ -1,12 +1,12 @@
 ---
 name: wiki-engine
-description: Wiki 引擎 skill。定义 career-wiki 的核心数据 schema（10 实体 + 13 关系 + frontmatter 规范 + 目录结构），编排 Agent 执行 compile（全量重建）/ lint（7 类检查），并提供 OKF 导入导出 Node 脚本。当用户说"编译 wiki""检查 wiki""导出 OKF""导入 OKF"时触发。
+description: Wiki 引擎 skill。定义 career-wiki-skill 的核心数据 schema（10 实体 + 13 关系 + frontmatter 规范 + 目录结构），编排 Agent 执行 compile（全量重建）/ lint（7 类检查），并提供 OKF 导入导出 Node 脚本。当用户说"编译 wiki""检查 wiki""导出 OKF""导入 OKF"时触发。
 version: 1.0.0
-author: career-wiki
+author: career-wiki-skill
 license: MIT
 metadata:
   hermes:
-    tags: [wiki-engine, career-wiki, compile, lint, okf, schema]
+    tags: [wiki-engine, career-wiki-skill, compile, lint, okf, schema]
     related_skills: [env-init, interview, file-parser]
 ---
 
@@ -14,7 +14,7 @@ metadata:
 
 ## 概述
 
-career-wiki 的核心引擎。做三件事：
+career-wiki-skill 的核心引擎。做三件事：
 
 1. **Compile** — 扫描 `sources/raw/` 所有 markdown，用 LLM 理解能力识别实体、跨源合并、去重、标注 confidence、生成 wikilink，全量重建 `wiki/` 目录。
 2. **Lint** — 检查 wiki/ 下所有页面的完整性：孤儿页面、断链、frontmatter 合规、confidence 偏低、无来源、重复实体、过期信息。
@@ -230,10 +230,10 @@ relations:
 │   └── summaries/
 ├── resumes/               ← 简历配置
 ├── templates/             ← 简历模板
-└── .career-wiki/          ← 运行时状态
+└── .career-wiki-skill/          ← 运行时状态
 ```
 
-**schema 声明位置：** 写在本 SKILL.md 里，不用 `.career-wiki/profile.json`。Agent 读取本文件即获得全部 schema 约束。
+**schema 声明位置：** 写在本 SKILL.md 里，不用 `.career-wiki-skill/profile.json`。Agent 读取本文件即获得全部 schema 约束。
 
 ---
 
@@ -484,7 +484,7 @@ node skills/wiki-engine/scripts/okf_import.mjs okf-export.json -o ~/.career_wiki
 
 ### 依赖安装
 
-在 career-wiki 仓库根目录运行：
+在 career-wiki-skill 仓库根目录运行：
 
 ```bash
 npm install

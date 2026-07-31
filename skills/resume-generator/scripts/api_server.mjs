@@ -8,7 +8,7 @@
  *
  * 环境变量:
  *   PORT      — 监听端口，默认 3001
- *   WIKI_ROOT — 数据目录根路径，默认读 ~/.career_wiki/.career-wiki/config.json 的 root，再 fallback 到 ~/.career_wiki/
+ *   WIKI_ROOT — 数据目录根路径，默认读 ~/.career_wiki/.career-wiki-skill/config.json 的 root，再 fallback 到 ~/.career_wiki/
  *
  * 9 个接口:
  *   GET    /api/health              — 健康检查
@@ -59,7 +59,7 @@ async function resolveWikiRoot() {
   if (process.env.WIKI_ROOT) return process.env.WIKI_ROOT;
 
   // 2. 读 config.json 的 root 字段
-  const configPath = join(homedir(), '.career_wiki', '.career-wiki', 'config.json');
+  const configPath = join(homedir(), '.career_wiki', '.career-wiki-skill', 'config.json');
   try {
     const raw = await readFile(configPath, 'utf-8');
     const cfg = JSON.parse(raw);
@@ -255,7 +255,7 @@ async function handleHealth(wikiRoot, res) {
 
   sendJson(res, 200, {
     status: 'ok',
-    service: 'career-wiki-resume-generator',
+    service: 'career-wiki-skill-resume-generator',
     version: VERSION,
     wiki_root: wikiRoot,
     wiki_exists: existsSync(wikiPath),
@@ -734,7 +734,7 @@ async function handleRequest(req, wikiRoot, res) {
     // 根路径返回服务信息
     if (segs.length === 0) {
       return sendJson(res, 200, {
-        service: 'career-wiki-resume-generator',
+        service: 'career-wiki-skill-resume-generator',
         version: VERSION,
         endpoints: [
           'GET /api/health',

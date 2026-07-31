@@ -16,7 +16,7 @@ Wiki 引擎 skill 的完整设计——不用 llmwiki CLI，Agent 自己做：
 2. **Compile 流程**：Agent 怎么从 raw 文本提取概念、合并跨源信息、生成 wiki 页面、去重、标注 confidence
 3. **Lint 流程**：检查什么？孤儿页面/断链/过期/矛盾/frontmatter 合规
 4. **Export 流程**：OKF 导出格式，Node 脚本还是 Agent 做
-5. **CLP profile**：`.career-wiki/profile.json` 定义实体/关系约束，Agent 读取后按约束工作
+5. **CLP profile**：`.career-wiki-skill/profile.json` 定义实体/关系约束，Agent 读取后按约束工作
 
 ## Notes
 

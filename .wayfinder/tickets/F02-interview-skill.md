@@ -41,7 +41,7 @@ title: 采访 skill 设计（问题树/混合模式/产出格式）
 **采访模式：** 混合 C — 基本信息填表式快过，经历/项目让用户自由讲再提取确认
 
 **产出格式：** 一个 markdown 文件存 `sources/raw/interview-{timestamp}.md`
-- frontmatter: interview_date, round（第几轮，续采递增）, interviewer: career-wiki
+- frontmatter: interview_date, round（第几轮，续采递增）, interviewer: career-wiki-skill
 - 按问题树结构组织
 - 保留用户原话，不做结构化提取（提取是 F04 的活）
 

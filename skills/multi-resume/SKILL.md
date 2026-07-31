@@ -2,11 +2,11 @@
 name: multi-resume
 description: 用途：基于 wiki 创建和管理多份简历配置。用户说"创建字节版简历"、"生成产品岗简历"、"看看我有几份简历"时触发。每份简历一个 JSON 配置存 resumes/，定义模板+模块+强调方向+脱敏+排序。被 F06 简历生成读取，被 F07 Web 前端用于多简历切换 UI。
 version: 1.0.0
-author: career-wiki
+author: career-wiki-skill
 license: MIT
 metadata:
   hermes:
-    tags: [multi-resume, career-wiki, resumes, job-applications]
+    tags: [multi-resume, career-wiki-skill, resumes, job-applications]
     related_skills: [template-manager, resume-generator, web-frontend, privacy-filter]
     tickets: [F09]
 ---

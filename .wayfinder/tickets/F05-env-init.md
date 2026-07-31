@@ -41,7 +41,7 @@ title: 环境初始化 skill（检查 Node/Python/依赖/首次引导）
 **初始化流程：**
 1. 检查 ~/.career_wiki/ 是否存在
 2. 不存在 → 问用户：默认 ~/.career_wiki/ 还是自定义路径
-3. 创建目录结构：sources/raw/, sources/uploads/, sources/raw/uploads/, wiki/{persons,experiences,projects,skills,education,certificates,awards,publications,activities,summaries}/, resumes/, templates/, .career-wiki/
+3. 创建目录结构：sources/raw/, sources/uploads/, sources/raw/uploads/, wiki/{persons,experiences,projects,skills,education,certificates,awards,publications,activities,summaries}/, resumes/, templates/, .career-wiki-skill/
 4. npm install（wiki 引擎的 Node 依赖，如 gray-matter）
 5. 提示用户：环境就绪，可以开始用采访 skill 了
 

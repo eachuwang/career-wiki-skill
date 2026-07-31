@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""环境检查脚本 — career-wiki 的前置依赖与目录结构初始化。
+"""环境检查脚本 — career-wiki-skill 的前置依赖与目录结构初始化。
 
 用法:
     python3 skills/env-init/scripts/env_check.py
@@ -45,7 +45,7 @@ ALL_DIRS = [
     *[f"wiki/{d}" for d in WIKI_SUBDIRS],
     "resumes",
     "templates",
-    ".career-wiki",
+    ".career-wiki-skill",
 ]
 
 
@@ -152,8 +152,8 @@ def ensure_dirs(root: Path) -> list[str]:
 
 
 def write_config(root: Path) -> bool:
-    """写 ~/.career_wiki/.career-wiki/config.json。返回是否新建。"""
-    cfg_path = root / ".career-wiki" / "config.json"
+    """写 ~/.career_wiki/.career-wiki-skill/config.json。返回是否新建。"""
+    cfg_path = root / ".career-wiki-skill" / "config.json"
     if cfg_path.exists():
         return False
     cfg = {
@@ -178,7 +178,7 @@ def main() -> int:
             root_arg = args[i + 1]
 
     print("=" * 50)
-    print("career-wiki 环境检查")
+    print("career-wiki-skill 环境检查")
     print("=" * 50)
 
     failures: list[str] = []
@@ -229,7 +229,7 @@ def main() -> int:
     print("\n[3/3] 配置文件")
     cfg_written = write_config(root)
     if cfg_written:
-        print(f"  ✅ 写入 {root / '.career-wiki' / 'config.json'}")
+        print(f"  ✅ 写入 {root / '.career-wiki-skill' / 'config.json'}")
     else:
         print(f"  ℹ️  config.json 已存在，跳过")
 

@@ -40,7 +40,7 @@ title: 文件解析 skill 设计（支持格式/解析库/落到 raw 规则）
 **流程：**
 1. 用户上传文件 → 存到 `sources/uploads/`（保留原始文件）
 2. Agent Read 文件 → 提取全部文字内容
-3. 写成 markdown 存到 `sources/raw/uploads/`，带 frontmatter（upload_date, original_file, file_type, interviewer: career-wiki）
+3. 写成 markdown 存到 `sources/raw/uploads/`，带 frontmatter（upload_date, original_file, file_type, interviewer: career-wiki-skill）
 4. 自动调 wiki 引擎 compile（跟 F02 一致）
 
 **目录结构：**

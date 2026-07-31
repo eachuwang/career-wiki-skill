@@ -1,16 +1,16 @@
 ---
 name: env-init
 description: 环境初始化 skill。检查 Node.js/Python/npm 版本、创建 ~/.career_wiki/ 目录结构、npm 安装 Node 依赖、首次引导用户选数据目录。所有其他 skill 的前置依赖。
-category: career-wiki
+category: career-wiki-skill
 ---
 
 # 环境初始化（env-init）
 
 ## 何时使用
 
-- 用户第一次使用 career-wiki 包时
+- 用户第一次使用 career-wiki-skill 包时
 - 用户环境变化后（升级了 Node、重装系统、切换机器）
-- 任何其他 career-wiki skill 报告依赖缺失时
+- 任何其他 career-wiki-skill skill 报告依赖缺失时
 - 用户显式要求"检查环境"/"初始化环境"时
 
 ## 检查项
@@ -36,7 +36,7 @@ category: career-wiki
    - 问用户：使用默认目录 `~/.career_wiki/` 还是自定义路径？
    - 用户给自定义路径 → 校验路径可写，用它
    - 用户接受默认 → 用 `~/.career_wiki/`
-   - 把最终路径写入 `~/.career_wiki/.career-wiki/config.json` 的 `root` 字段
+   - 把最终路径写入 `~/.career_wiki/.career-wiki-skill/config.json` 的 `root` 字段
 
 3. **创建目录结构**（脚本已做，但若用户选了自定义路径，需在自定义路径下建）
    ```
@@ -55,11 +55,11 @@ category: career-wiki
    wiki/summaries/
    resumes/
    templates/
-   .career-wiki/
+   .career-wiki-skill/
    ```
 
 4. **npm install**
-   - 在 career-wiki 仓库根目录运行 `npm install`（装 wiki 引擎用的 Node 依赖，如 gray-matter）
+   - 在 career-wiki-skill 仓库根目录运行 `npm install`（装 wiki 引擎用的 Node 依赖，如 gray-matter）
    - 如果 `package.json` 不存在，跳过这一步并提示用户
 
 5. **提示用户**

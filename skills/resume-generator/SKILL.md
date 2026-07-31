@@ -2,11 +2,11 @@
 name: resume-generator
 description: 简历生成 skill。提供 Node API server（9 个 HTTP 接口），读 wiki markdown → gray-matter 解析 frontmatter → 正则提取 wikilink → 按模板 schema 组装结构化简历 JSON。用户说"生成简历""导出简历""启动 API server"时触发。纯确定性操作，不需要 LLM。PDF/HTML 导出由前端渲染。
 version: 1.0.0
-author: career-wiki
+author: career-wiki-skill
 license: MIT
 metadata:
   hermes:
-    tags: [resume-generator, career-wiki, api-server, resume, generate, export]
+    tags: [resume-generator, career-wiki-skill, api-server, resume, generate, export]
     related_skills: [wiki-engine, template-manager, multi-resume, web-frontend, privacy-filter]
     tickets: [F06]
 ---
@@ -15,7 +15,7 @@ metadata:
 
 ## 概述
 
-career-wiki 的简历生成层。提供 **Node HTTP API server**，从 wiki markdown 读数据、解析 frontmatter、按模板+简历配置组装结构化简历 JSON。Web 前端（F07）调用这些接口完成简历渲染和导出。
+career-wiki-skill 的简历生成层。提供 **Node HTTP API server**，从 wiki markdown 读数据、解析 frontmatter、按模板+简历配置组装结构化简历 JSON。Web 前端（F07）调用这些接口完成简历渲染和导出。
 
 **核心理念：** 简历生成是**纯确定性操作**（Node 做，不需要 LLM）。读 wiki → 解析 → 按模板 schema 组装 → 返回 JSON。数据组装、字段映射、排序、过滤全在 Node 脚本完成。简历润色是 LLM 操作（用户需要时在 Web 前端触发 Agent）。
 
@@ -63,12 +63,12 @@ career-wiki 的简历生成层。提供 **Node HTTP API server**，从 wiki mark
 │   ├── tech-minimal.json
 │   ├── tech-minimal.css
 │   └── ...
-└── .career-wiki/
+└── .career-wiki-skill/
     └── config.json        ← root 字段存数据目录路径
 ```
 
 - 数据目录默认 `~/.career_wiki/`，用户可在 env-init 时自定义
-- API server 启动时读 `~/.career_wiki/.career-wiki/config.json` 的 `root` 字段确定数据目录
+- API server 启动时读 `~/.career_wiki/.career-wiki-skill/config.json` 的 `root` 字段确定数据目录
 - 所有 wiki/ resumes/ templates/ 路径都基于 root 计算
 
 ---
@@ -78,19 +78,19 @@ career-wiki 的简历生成层。提供 **Node HTTP API server**，从 wiki mark
 ### 启动
 
 ```bash
-# 在 career-wiki 仓库根目录运行
+# 在 career-wiki-skill 仓库根目录运行
 node skills/resume-generator/scripts/api_server.mjs
 
 # 指定端口（默认 3001）
 PORT=4000 node skills/resume-generator/scripts/api_server.mjs
 
-# 指定数据目录（默认从 ~/.career_wiki/.career-wiki/config.json 读）
+# 指定数据目录（默认从 ~/.career_wiki/.career-wiki-skill/config.json 读）
 WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 ```
 
 环境变量：
 - `PORT` — 监听端口，默认 `3001`
-- `WIKI_ROOT` — 数据目录根路径，默认读 `~/.career_wiki/.career-wiki/config.json` 的 `root`，再 fallback 到 `~/.career_wiki/`
+- `WIKI_ROOT` — 数据目录根路径，默认读 `~/.career_wiki/.career-wiki-skill/config.json` 的 `root`，再 fallback 到 `~/.career_wiki/`
 
 ### 依赖
 
@@ -256,7 +256,7 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 ```json
 {
   "status": "ok",
-  "service": "career-wiki-resume-generator",
+  "service": "career-wiki-skill-resume-generator",
   "version": "1.0.0",
   "wiki_root": "/Users/joewang/.career_wiki",
   "wiki_exists": true,

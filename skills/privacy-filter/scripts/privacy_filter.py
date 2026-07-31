@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""隐私脱敏脚本 — career-wiki 导出前对文本做 PII 脱敏。
+"""隐私脱敏脚本 — career-wiki-skill 导出前对文本做 PII 脱敏。
 
 用法:
     python3 privacy_filter.py input.md
@@ -283,7 +283,7 @@ def extract_company_from_frontmatter(text: str) -> list[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="隐私脱敏：对 career-wiki 文本做 PII 脱敏",
+        description="隐私脱敏：对 career-wiki-skill 文本做 PII 脱敏",
     )
     parser.add_argument("input", help="输入文件路径（markdown/文本）")
     parser.add_argument(

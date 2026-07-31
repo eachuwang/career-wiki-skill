@@ -2,11 +2,11 @@
 name: template-manager
 description: 用途：管理简历模板（创建/查看/复制预设模板）。用户说"创建一个新模板"、"看看有哪些模板"、"复制技术简约改一下"时触发。模板由 JSON 配置（布局+模块+字段映射）+ CSS 样式文件组成，存 ~/.career_wiki/templates/。被 F06 简历生成读取，被 F07 Web 前端用于模板选择 UI。
 version: 1.0.0
-author: career-wiki
+author: career-wiki-skill
 license: MIT
 metadata:
   hermes:
-    tags: [template-manager, career-wiki, templates, resume]
+    tags: [template-manager, career-wiki-skill, templates, resume]
     related_skills: [resume-generator, web-frontend, multi-resume]
     tickets: [F08]
 ---

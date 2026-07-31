@@ -2,11 +2,11 @@
 name: file-parser
 description: 用途：解析用户上传的简历/文档文件（PDF/图片/Word/Excel/文本）提取文字内容。当用户上传文件、"解析简历"、"读这个文件"时触发。产出 markdown 存 sources/raw/uploads/，采完自动调 wiki 引擎 compile。
 version: 1.0.0
-author: career-wiki
+author: career-wiki-skill
 license: MIT
 metadata:
   hermes:
-    tags: [file-parser, career-wiki, data-collection, sources, ocr]
+    tags: [file-parser, career-wiki-skill, data-collection, sources, ocr]
     related_skills: [wiki-engine, interview]
 ---
 
@@ -82,7 +82,7 @@ metadata:
 upload_date: 2026-07-31
 original_file: 老王简历_2026-07-31.pdf
 file_type: pdf
-interviewer: career-wiki
+interviewer: career-wiki-skill
 ---
 ```
 
@@ -130,7 +130,7 @@ interviewer: career-wiki
 
 - [ ] 原始文件已存 `~/.career_wiki/sources/uploads/{name}_{date}{ext}`
 - [ ] 提取的 markdown 已存 `~/.career_wiki/sources/raw/uploads/{name}_{date}.md`
-- [ ] markdown frontmatter 含 `upload_date / original_file / file_type / interviewer: career-wiki`
+- [ ] markdown frontmatter 含 `upload_date / original_file / file_type / interviewer: career-wiki-skill`
 - [ ] 正文为纯文字，保持原文件结构，无结构化提取标注
 - [ ] wiki 引擎 compile 已触发（并行或同步）
 - [ ] 已告知用户原始文件路径 + markdown 路径 + compile 状态

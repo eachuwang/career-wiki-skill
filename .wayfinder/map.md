@@ -1,4 +1,4 @@
-# career-wiki — Wayfinder Map
+# career-wiki-skill — Wayfinder Map
 
 ## Destination
 

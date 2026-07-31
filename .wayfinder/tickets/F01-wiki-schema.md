@@ -10,7 +10,7 @@ title: Wiki 数据 schema 定义（CLP 实体/关系/frontmatter/目录结构）
 
 ## Question
 
-career-wiki 的核心数据 schema 怎么定义？需要确定：
+career-wiki-skill 的核心数据 schema 怎么定义？需要确定：
 
 1. **实体类型**：person / experience / skill / project / education / ... 还需要加吗？
 2. **每种实体的 frontmatter 字段**：必填/可选字段
@@ -18,7 +18,7 @@ career-wiki 的核心数据 schema 怎么定义？需要确定：
 4. **confidence 取值**：verified / extracted / inferred / ... 还有？
 5. **sources 字段格式**：指向 `sources/raw/` 的路径
 6. **目录结构**：`sources/raw/` 和 `wiki/` 同级，wiki 下按实体类型分子目录
-7. **CLP profile 文件**：是否有 `.career-wiki/profile.json` 声明实体/关系/字段约束
+7. **CLP profile 文件**：是否有 `.career-wiki-skill/profile.json` 声明实体/关系/字段约束
 
 ## Notes
 
@@ -71,7 +71,7 @@ has_experience / has_skill / has_education / has_certificate / has_award / has_p
 │   └── summaries/
 ├── resumes/               ← 简历配置
 ├── templates/             ← 简历模板
-└── .career-wiki/          ← 运行时状态（不放 schema）
+└── .career-wiki-skill/          ← 运行时状态（不放 schema）
 
 **schema 声明：** 写在 SKILL.md 里，不用 profile.json，跟 OKF 理念一致
 **OKF 导出：** wiki markdown → Node 解析 → OKF 格式 JSON

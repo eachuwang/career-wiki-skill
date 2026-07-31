@@ -2,11 +2,11 @@
 name: privacy-filter
 description: 用途：对 wiki 导出内容做隐私脱敏。当用户"预览脱敏效果"、"导出前脱敏"、"隐藏敏感信息"时触发。正则匹配姓名/电话/邮箱/薪资/公司名/GitHub 用户名，按固定规则替换，用户勾选字段开关实时看效果，满意后导出。导出格式 PDF/HTML/JSON 均调用本 skill 的 Python 脚本。
 version: 1.0.0
-author: career-wiki
+author: career-wiki-skill
 license: MIT
 metadata:
   hermes:
-    tags: [privacy-filter, career-wiki, export, mask, pii]
+    tags: [privacy-filter, career-wiki-skill, export, mask, pii]
     related_skills: [wiki-engine, interview, file-parser]
 ---
 

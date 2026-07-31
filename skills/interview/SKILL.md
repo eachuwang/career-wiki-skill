@@ -2,11 +2,11 @@
 name: interview
 description: 用途：通过结构化采访采集求职者信息。当用户说"开始采访"、"录入信息"、"补充经历"或主动提供个人/职业信息时触发。产出原始 markdown 存 sources/raw/，不预提取，采完自动调 wiki 引擎 compile。
 version: 1.0.0
-author: career-wiki
+author: career-wiki-skill
 license: MIT
 metadata:
   hermes:
-    tags: [interview, career-wiki, data-collection, sources]
+    tags: [interview, career-wiki-skill, data-collection, sources]
     related_skills: [wiki-engine, file-parser]
 ---
 
@@ -39,7 +39,7 @@ metadata:
 ---
 interview_date: 2026-07-31
 round: 1
-interviewer: career-wiki
+interviewer: career-wiki-skill
 ---
 
 # 基本信息
@@ -144,7 +144,7 @@ interviewer: career-wiki
 ### 阶段 8：写文件 + 触发 compile
 
 1. 用 `write_file` 写 `~/.career_wiki/sources/raw/interview-{timestamp}.md`
-   - frontmatter：`interview_date / round / interviewer: career-wiki`
+   - frontmatter：`interview_date / round / interviewer: career-wiki-skill`
    - 正文按 7 节组织，用户原话用 `>` 引用块，Agent 确认用普通文本
 2. **自动触发 wiki 引擎 compile**（F04）：
    - **有 subagent 能力**：并行触发 compile，不阻塞用户
@@ -183,7 +183,7 @@ interviewer: career-wiki
 ## Verification Checklist
 
 - [ ] `~/.career_wiki/sources/raw/interview-{timestamp}.md` 已创建
-- [ ] frontmatter 含 `interview_date / round / interviewer: career-wiki`
+- [ ] frontmatter 含 `interview_date / round / interviewer: career-wiki-skill`
 - [ ] 正文按 7 节组织，经历的节有循环
 - [ ] 用户原话用 `>` 引用块保留，Agent 确认用普通文本
 - [ ] 续采文件 round 号正确递增

@@ -2,11 +2,11 @@
 name: web-editor
 description: 用途：Career-Wiki 前端 React 应用（简历编辑器 + Wiki 图谱）。用户说"打开编辑器""启动前端""看看简历预览""查看知识图谱"时触发。源码随 skill 包分发，npm install + npm run dev 启动。调 resume-generator 的 API server（默认 localhost:3001）拿数据。支持拖拽排序、实时预览、脱敏切换、模板切换、PDF 导出（window.print）、HTML 导出、JSON 导出。
 version: 1.0.0
-author: career-wiki
+author: career-wiki-skill
 license: MIT
 metadata:
   hermes:
-    tags: [web-editor, career-wiki, frontend, react, resume, graph]
+    tags: [web-editor, career-wiki-skill, frontend, react, resume, graph]
     related_skills: [resume-generator, template-manager, multi-resume, privacy-filter, wiki-engine]
     tickets: [F07]
 ---

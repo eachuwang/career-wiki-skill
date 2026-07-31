@@ -1,0 +1,135 @@
+/* creative-color.css — 创意色块：彩色 section 背景、现代、可放照片 */
+
+.creative-color {
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Arial', sans-serif;
+  font-size: 14px;
+  color: #333;
+  line-height: 1.6;
+  max-width: 800px;
+  margin: 0 auto;
+  background: #fafafa;
+}
+
+/* 头部 — 渐变色块 */
+.creative-color .hero {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: #fff;
+  padding: 40px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.creative-color .hero .photo {
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  border: 4px solid rgba(255, 255, 255, 0.3);
+  object-fit: cover;
+}
+
+.creative-color .hero .info h1 {
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.creative-color .hero .info .title {
+  font-size: 16px;
+  opacity: 0.9;
+  margin-bottom: 8px;
+}
+
+.creative-color .hero .info .contact {
+  font-size: 13px;
+  opacity: 0.85;
+}
+
+.creative-color .hero .info .contact span {
+  margin-right: 14px;
+}
+
+/* section — 交替背景色 */
+.creative-color .section {
+  padding: 28px 40px;
+}
+
+.creative-color .section:nth-child(odd) {
+  background: #fff;
+}
+
+.creative-color .section:nth-child(even) {
+  background: #f0f0f5;
+}
+
+.creative-color .section-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: #667eea;
+  margin-bottom: 16px;
+  position: relative;
+  padding-left: 16px;
+}
+
+.creative-color .section-title::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 4px;
+  bottom: 4px;
+  width: 4px;
+  background: #764ba2;
+  border-radius: 2px;
+}
+
+.creative-color .entry {
+  margin-bottom: 18px;
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 8px;
+}
+
+.creative-color .entry-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.creative-color .entry-title {
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.creative-color .entry-date {
+  color: #999;
+  font-size: 13px;
+}
+
+.creative-color .entry-desc {
+  color: #555;
+  margin-top: 6px;
+}
+
+.creative-color .skill-group {
+  margin-bottom: 14px;
+}
+
+.creative-color .skill-group-title {
+  font-weight: 600;
+  color: #764ba2;
+  margin-bottom: 6px;
+}
+
+.creative-color .skill-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.creative-color .skill-tag {
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 13px;
+}

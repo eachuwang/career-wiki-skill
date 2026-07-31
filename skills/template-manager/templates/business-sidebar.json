@@ -1,0 +1,53 @@
+{
+  "name": "商务侧栏",
+  "id": "business-sidebar",
+  "style": "business-sidebar.css",
+  "layout": "double-column",
+  "has_photo": false,
+  "font": {
+    "family": "'PingFang SC', 'Microsoft YaHei', 'Georgia', serif",
+    "size_base": "14px",
+    "size_h1": "24px",
+    "size_h2": "16px"
+  },
+  "sections": [
+    {
+      "module": "person",
+      "title": "联系方式",
+      "fields": ["name", "title", "email", "phone", "location"],
+      "column": "sidebar"
+    },
+    {
+      "module": "skill",
+      "title": "核心技能",
+      "fields": ["name", "category", "level"],
+      "group_by": "category",
+      "column": "sidebar"
+    },
+    {
+      "module": "education",
+      "title": "教育背景",
+      "fields": ["school", "degree", "major", "start", "end"],
+      "column": "sidebar"
+    },
+    {
+      "module": "experience",
+      "title": "工作经历",
+      "fields": ["company", "role", "start", "end", "description"],
+      "order": "desc",
+      "column": "main"
+    },
+    {
+      "module": "project",
+      "title": "重点项目",
+      "fields": ["name", "role", "start", "end", "description", "url"],
+      "column": "main"
+    },
+    {
+      "module": "summary",
+      "title": "个人优势",
+      "fields": ["content"],
+      "column": "main"
+    }
+  ]
+}

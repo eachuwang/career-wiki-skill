@@ -1,0 +1,42 @@
+{
+  "name": "技术简约",
+  "id": "tech-minimal",
+  "style": "tech-minimal.css",
+  "layout": "single-column",
+  "has_photo": false,
+  "font": {
+    "family": "'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif",
+    "size_base": "14px",
+    "size_h1": "26px",
+    "size_h2": "18px"
+  },
+  "sections": [
+    {
+      "module": "person",
+      "title": "个人信息",
+      "fields": ["name", "title", "email", "phone", "github", "website"]
+    },
+    {
+      "module": "experience",
+      "title": "工作经历",
+      "fields": ["company", "role", "start", "end", "location", "description"],
+      "order": "desc"
+    },
+    {
+      "module": "project",
+      "title": "项目经验",
+      "fields": ["name", "role", "start", "end", "description", "url"]
+    },
+    {
+      "module": "skill",
+      "title": "技能",
+      "fields": ["name", "category", "level"],
+      "group_by": "category"
+    },
+    {
+      "module": "education",
+      "title": "教育背景",
+      "fields": ["school", "degree", "major", "start", "end"]
+    }
+  ]
+}

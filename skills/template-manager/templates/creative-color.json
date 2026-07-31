@@ -1,0 +1,42 @@
+{
+  "name": "创意色块",
+  "id": "creative-color",
+  "style": "creative-color.css",
+  "layout": "single-column",
+  "has_photo": true,
+  "font": {
+    "family": "'PingFang SC', 'Microsoft YaHei', 'Arial', sans-serif",
+    "size_base": "14px",
+    "size_h1": "28px",
+    "size_h2": "20px"
+  },
+  "sections": [
+    {
+      "module": "person",
+      "title": "关于我",
+      "fields": ["name", "title", "photo", "email", "phone", "website", "github"]
+    },
+    {
+      "module": "experience",
+      "title": "经历",
+      "fields": ["company", "role", "start", "end", "description"],
+      "order": "desc"
+    },
+    {
+      "module": "project",
+      "title": "作品",
+      "fields": ["name", "role", "start", "end", "description", "url"]
+    },
+    {
+      "module": "skill",
+      "title": "技能",
+      "fields": ["name", "category", "level"],
+      "group_by": "category"
+    },
+    {
+      "module": "activity",
+      "title": "活动",
+      "fields": ["name", "role", "start", "end", "url", "description"]
+    }
+  ]
+}

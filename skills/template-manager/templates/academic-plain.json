@@ -1,0 +1,48 @@
+{
+  "name": "学术纯文",
+  "id": "academic-plain",
+  "style": "academic-plain.css",
+  "layout": "single-column",
+  "has_photo": false,
+  "font": {
+    "family": "'Times New Roman', 'Georgia', 'SimSun', serif",
+    "size_base": "13px",
+    "size_h1": "22px",
+    "size_h2": "16px"
+  },
+  "sections": [
+    {
+      "module": "person",
+      "title": "",
+      "fields": ["name", "title", "email", "phone", "location"]
+    },
+    {
+      "module": "education",
+      "title": "教育背景",
+      "fields": ["school", "degree", "major", "start", "end", "gpa", "courses"],
+      "order": "desc"
+    },
+    {
+      "module": "experience",
+      "title": "研究经历",
+      "fields": ["company", "role", "start", "end", "description"],
+      "order": "desc"
+    },
+    {
+      "module": "publication",
+      "title": "发表论文",
+      "fields": ["title", "venue", "date", "url"]
+    },
+    {
+      "module": "award",
+      "title": "获奖与荣誉",
+      "fields": ["name", "issuer", "date", "description"]
+    },
+    {
+      "module": "skill",
+      "title": "研究技能",
+      "fields": ["name", "category", "level"],
+      "group_by": "category"
+    }
+  ]
+}

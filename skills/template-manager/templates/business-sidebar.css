@@ -1,0 +1,135 @@
+/* business-sidebar.css — 商务侧栏：双栏、左侧栏深色、正式 */
+
+.business-sidebar {
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Georgia', serif;
+  font-size: 14px;
+  color: #2c3e50;
+  line-height: 1.6;
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 0;
+  max-width: 900px;
+  margin: 0 auto;
+  background: #fff;
+}
+
+/* 侧栏 */
+.business-sidebar .sidebar {
+  background: #2c3e50;
+  color: #ecf0f1;
+  padding: 32px 24px;
+}
+
+.business-sidebar .sidebar h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #fff;
+  margin-bottom: 4px;
+}
+
+.business-sidebar .sidebar .person-title {
+  color: #3498db;
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+
+.business-sidebar .sidebar .contact-item {
+  font-size: 13px;
+  margin-bottom: 6px;
+  color: #bdc3c7;
+}
+
+.business-sidebar .sidebar .section {
+  margin-bottom: 28px;
+}
+
+.business-sidebar .sidebar .section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #3498db;
+  border-bottom: 1px solid #34495e;
+  padding-bottom: 6px;
+  margin-bottom: 10px;
+}
+
+.business-sidebar .sidebar .skill-group {
+  margin-bottom: 12px;
+}
+
+.business-sidebar .sidebar .skill-group-title {
+  font-size: 13px;
+  color: #95a5a6;
+  margin-bottom: 4px;
+}
+
+.business-sidebar .sidebar .skill-tag {
+  display: inline-block;
+  background: #34495e;
+  color: #ecf0f1;
+  padding: 2px 8px;
+  border-radius: 3px;
+  font-size: 12px;
+  margin: 2px;
+}
+
+.business-sidebar .sidebar .edu-entry {
+  margin-bottom: 12px;
+}
+
+.business-sidebar .sidebar .edu-school {
+  font-weight: 600;
+  color: #ecf0f1;
+}
+
+.business-sidebar .sidebar .edu-detail {
+  font-size: 12px;
+  color: #bdc3c7;
+}
+
+/* 主区 */
+.business-sidebar .main {
+  padding: 32px;
+}
+
+.business-sidebar .main .section {
+  margin-bottom: 28px;
+}
+
+.business-sidebar .main .section-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #2c3e50;
+  border-left: 3px solid #3498db;
+  padding-left: 10px;
+  margin-bottom: 14px;
+}
+
+.business-sidebar .main .entry {
+  margin-bottom: 18px;
+}
+
+.business-sidebar .main .entry-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.business-sidebar .main .entry-title {
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.business-sidebar .main .entry-date {
+  color: #95a5a6;
+  font-size: 13px;
+}
+
+.business-sidebar .main .entry-desc {
+  color: #5a6a7a;
+  margin-top: 4px;
+}
+
+.business-sidebar .main .summary-content {
+  color: #34495e;
+  font-style: italic;
+}

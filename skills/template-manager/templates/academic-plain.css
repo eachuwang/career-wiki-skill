@@ -1,0 +1,140 @@
+/* academic-plain.css — 学术纯文：Serif 字体、无装饰、极简 */
+
+.academic-plain {
+  font-family: 'Times New Roman', 'Georgia', 'SimSun', serif;
+  font-size: 13px;
+  color: #000;
+  line-height: 1.7;
+  max-width: 700px;
+  margin: 0 auto;
+  padding: 48px;
+  text-align: left;
+}
+
+/* 头部 — 居中、无装饰 */
+.academic-plain .header {
+  text-align: center;
+  border-bottom: 1px solid #000;
+  padding-bottom: 12px;
+  margin-bottom: 24px;
+}
+
+.academic-plain .header h1 {
+  font-size: 22px;
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.academic-plain .header .title {
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.academic-plain .header .contact {
+  font-size: 12px;
+  color: #333;
+}
+
+.academic-plain .header .contact span {
+  margin: 0 8px;
+}
+
+/* section — 无装饰，仅下划线标题 */
+.academic-plain .section {
+  margin-bottom: 24px;
+}
+
+.academic-plain .section-title {
+  font-size: 16px;
+  font-weight: 700;
+  border-bottom: 1px solid #000;
+  padding-bottom: 3px;
+  margin-bottom: 10px;
+}
+
+.academic-plain .entry {
+  margin-bottom: 14px;
+}
+
+.academic-plain .entry-header {
+  margin-bottom: 2px;
+}
+
+.academic-plain .entry-title {
+  font-weight: 700;
+}
+
+.academic-plain .entry-date {
+  font-style: italic;
+  color: #444;
+}
+
+.academic-plain .entry-desc {
+  margin-top: 4px;
+  text-align: justify;
+}
+
+/* 发表列表 */
+.academic-plain .pub-entry {
+  margin-bottom: 10px;
+  padding-left: 16px;
+  text-indent: -16px;
+}
+
+.academic-plain .pub-title {
+  font-weight: 600;
+}
+
+.academic-plain .pub-venue {
+  font-style: italic;
+}
+
+/* 获奖列表 */
+.academic-plain .award-entry {
+  margin-bottom: 8px;
+  padding-left: 16px;
+  text-indent: -16px;
+}
+
+/* 技能 — 纯文字分组 */
+.academic-plain .skill-group {
+  margin-bottom: 8px;
+}
+
+.academic-plain .skill-group-title {
+  font-weight: 700;
+  display: inline;
+}
+
+.academic-plain .skill-list {
+  display: inline;
+}
+
+.academic-plain .skill-list::before {
+  content: ': ';
+}
+
+/* 教育条目 */
+.academic-plain .edu-entry {
+  margin-bottom: 12px;
+}
+
+.academic-plain .edu-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.academic-plain .edu-school {
+  font-weight: 700;
+}
+
+.academic-plain .edu-detail {
+  color: #333;
+}
+
+.academic-plain .edu-gpa {
+  font-style: italic;
+  color: #555;
+  margin-top: 2px;
+}

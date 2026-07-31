@@ -1,0 +1,91 @@
+/* tech-minimal.css — 技术简约：简洁、蓝色高亮、单栏 */
+
+.tech-minimal {
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+  font-size: 14px;
+  color: #2c3e50;
+  line-height: 1.6;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 40px;
+}
+
+.tech-minimal h1 {
+  font-size: 26px;
+  font-weight: 700;
+  color: #1a1a2e;
+  border-bottom: 2px solid #3498db;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+
+.tech-minimal .person-info {
+  color: #7f8c8d;
+  font-size: 13px;
+  margin-bottom: 24px;
+}
+
+.tech-minimal .person-info span {
+  margin-right: 16px;
+}
+
+.tech-minimal .section {
+  margin-bottom: 28px;
+}
+
+.tech-minimal .section-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #3498db;
+  border-left: 3px solid #3498db;
+  padding-left: 8px;
+  margin-bottom: 12px;
+}
+
+.tech-minimal .entry {
+  margin-bottom: 16px;
+}
+
+.tech-minimal .entry-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.tech-minimal .entry-title {
+  font-weight: 600;
+  color: #2c3e50;
+}
+
+.tech-minimal .entry-date {
+  color: #95a5a6;
+  font-size: 13px;
+}
+
+.tech-minimal .entry-desc {
+  color: #5a6a7a;
+  margin-top: 4px;
+}
+
+.tech-minimal .skill-group {
+  margin-bottom: 12px;
+}
+
+.tech-minimal .skill-group-title {
+  font-weight: 600;
+  color: #34495e;
+  margin-bottom: 4px;
+}
+
+.tech-minimal .skill-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.tech-minimal .skill-tag {
+  background: #ecf0f1;
+  padding: 2px 10px;
+  border-radius: 3px;
+  font-size: 13px;
+}

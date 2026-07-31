@@ -1,0 +1,204 @@
+---
+name: career-wiki-skill
+description: "用 AI Agent 采访采集信息，自动生成结构化 Wiki 知识库，从 Wiki 一键生成多份简历，Web 可视化编辑导出。当用户说'开始采访''录入信息''补充经历''解析简历文件''编译 wiki''检查 wiki''导出 OKF''生成简历''打开编辑器''看看简历预览''创建模板''创建字节版简历''预览脱敏效果'时使用。跨 Agent 兼容，纯本地数据，支持 Claude Code/Codex/Hermes/OpenClaw 等所有支持 Skill 的 Agent。"
+version: 1.0.0
+author: eachuwang
+license: MIT
+---
+
+# career-wiki-skill
+
+一个跨 Agent 兼容的 skill 包，帮助求职者通过采访采集信息、生成 Wiki 知识库、从 Wiki 生成多份简历、Web 可视化编辑导出。
+
+---
+
+## 触发路由表
+
+根据用户意图路由到对应子 skill：
+
+| 用户说 | 子 Skill | 动作 |
+|--------|----------|------|
+| "检查环境" / "初始化" / "环境配置" | env-init | 检查 Node/Python，创建目录，安装依赖 |
+| "开始采访" / "录入信息" / "补充经历" | interview | 多轮对话采集，产出 raw markdown |
+| "解析简历文件" / "读这个文件" / "上传 PDF" | file-parser | Agent Read 提取内容，落到 raw |
+| "编译 wiki" / "compile" / "重建 wiki" | wiki-engine | 全量重建 wiki/，实体识别+合并+去重 |
+| "检查 wiki" / "lint" | wiki-engine | 孤儿/断链/重复/过期检查 |
+| "导出 OKF" / "导入 OKF" | wiki-engine | Node 脚本，OKF JSON 双向转换 |
+| "生成简历" / "导出简历" / "启动 API server" | resume-generator | Node API server，查询 wiki + 组装简历 |
+| "打开编辑器" / "启动前端" / "看看简历预览" | web-editor | React 前端，拖拽编辑 + 实时预览 + 导出 |
+| "创建模板" / "看看有哪些模板" / "复制技术简约" | template-manager | 对话创建/查看/删除模板 |
+| "创建字节版简历" / "生成产品岗简历" / "看看我有几份简历" | multi-resume | 一个 Wiki → 多份不同岗位简历配置 |
+| "预览脱敏效果" / "导出前脱敏" / "隐藏敏感信息" | privacy-filter | Web 预览时实时脱敏 |
+
+---
+
+## 子 Skill 依赖关系
+
+```
+env-init ──→ 所有其他 skill（前置依赖）
+
+interview ──→ wiki-engine（采完自动 compile）
+file-parser ──→ wiki-engine（提取完自动 compile）
+
+wiki-engine ──→ resume-generator（提供 wiki 数据）
+template-manager ──→ resume-generator（提供模板 schema）
+template-manager ──→ web-editor（模板选择 UI）
+
+resume-generator ──→ web-editor（前端调 API）
+multi-resume ──→ resume-generator（多配置）
+multi-resume ──→ web-editor（多简历切换 UI）
+
+privacy-filter ──→ web-editor（预览时脱敏）
+```
+
+---
+
+## 数据目录
+
+默认 `~/.career_wiki/`，用户可自定义。
+
+```
+~/.career_wiki/
+├── sources/
+│   ├── raw/               ← 采访产出 + 文件提取（原始材料）
+│   │   ├── interview-{timestamp}.md
+│   │   └── uploads/
+│   │       └── {filename}_{date}.md
+│   └── uploads/           ← 用户上传的原始文件
+├── wiki/                  ← 编译产出的结构化页面（不允许人工编辑）
+│   ├── persons/
+│   ├── experiences/
+│   ├── projects/
+│   ├── skills/
+│   ├── education/
+│   ├── certificates/
+│   ├── awards/
+│   ├── publications/
+│   ├── activities/
+│   └── summaries/
+├── resumes/               ← 简历配置（每份一个 JSON）
+├── templates/             ← 简历模板（JSON + CSS）
+└── .career-wiki-skill/    ← 运行时状态
+```
+
+---
+
+## 数据规范
+
+### 10 个实体类型
+
+person · experience · project · skill · education · certificate · award · publication · activity · summary
+
+### 13 个关系类型
+
+has_experience · has_skill · has_education · has_certificate · has_award · has_publication · has_activity · has_summary · used_skill · did_project · at_company · took_course · references
+
+### Frontmatter 规范
+
+每个 wiki 页面是 Markdown + YAML frontmatter：
+
+```yaml
+---
+entity: experience           # 实体类型
+confidence: verified         # verified / extracted / inferred
+sources:                     # 来源追溯
+  - sources/raw/interview-001.md
+relations:                  # 骨架关系
+  - type: used_skill
+    target: wiki/skills/react
+---
+```
+
+正文用 wikilink `[[wiki/skills/react|React]]` 做关联（血肉）。
+
+详细 schema 见 `skills/wiki-engine/SKILL.md` 的数据规范章节。
+
+---
+
+## 核心循环
+
+```
+采访采集 ──→ raw markdown ──→ Wiki 编译 ──→ 结构化知识库
+                                              │
+                                    ┌─────────┴─────────┐
+                                    ↓                   ↓
+                              简历生成              Web 可视化
+                              (模板+配置)           (拖拽+预览+导出)
+```
+
+---
+
+## 设计原则
+
+1. **Skill 只编排，不执行** — SKILL.md 指导 Agent 怎么做，LLM 推理让 Agent 做，脚本只做确定性操作
+2. **跨 Agent 兼容** — 只用通用工具链（Bash + Python + Node），不依赖任何特定 Agent 的工具
+3. **纯本地数据** — 用户数据在 `~/.career_wiki/`，自选目录和同步方式
+4. **Wiki 是编译产物** — 全量重建，不允许人工编辑，改信息改 raw 再 recompile
+5. **OKF 标准导出** — 支持谷歌 OKF 格式导入导出，跨系统交换
+
+---
+
+## 安装
+
+```bash
+git clone https://github.com/eachuwang/career-wiki-skill.git
+```
+
+把 `skills/` 下的目录放到你 Agent 的 skill 目录（如 `~/.claude/skills/`）。
+
+首次使用时说"检查环境"或"初始化"，env-init skill 会检查环境并创建数据目录。
+
+---
+
+## Common Pitfalls
+
+1. **跳过 env-init 直接用** — 数据目录不存在，后续 skill 会找不到路径。先跑 env-init。
+
+2. **人工编辑 wiki 页面** — wiki 是编译产物，下次 compile 会被覆盖。改信息改 `sources/raw/` 再 recompile。
+
+3. **增量 compile** — 只编译新增 raw 不扫旧的。必须全量重建，否则旧实体残留。
+
+4. **在不同 Agent 里用特定工具** — 不要用 lark-cli、imsg 等平台特定工具。只用 Bash + Python + Node 通用工具链。
+
+5. **不给用户确认就清空 wiki** — compile 前必须向用户确认，不可逆操作。
+
+6. **test-prompts.json 泄露用户数据** — test-prompts 只用于评估，不要放真实用户信息。
+
+---
+
+## Verification Checklist
+
+- [ ] env-init 已运行，`~/.career_wiki/` 目录结构已创建
+- [ ] interview 产出的 raw markdown 在 `sources/raw/` 下
+- [ ] file-parser 提取的 markdown 在 `sources/raw/uploads/` 下，原始文件在 `sources/uploads/`
+- [ ] wiki-engine compile 后 `wiki/` 各子目录有页面
+- [ ] wiki-engine lint 无 error（warn 可接受）
+- [ ] resume-generator API server 可启动，9 个接口可调
+- [ ] web-editor 前端可打开，拖拽/预览/导出功能正常
+- [ ] template-manager 预设模板 JSON + CSS 都在
+- [ ] multi-resume 简历配置在 `resumes/` 下
+- [ ] privacy-filter 脱敏预览效果正确
+
+---
+
+## 子 Skill 文件清单
+
+| 子 Skill | 文件 |
+|---------|------|
+| env-init | SKILL.md + scripts/env_check.py |
+| interview | SKILL.md |
+| file-parser | SKILL.md |
+| wiki-engine | SKILL.md + scripts/okf_export.mjs + scripts/okf_import.mjs |
+| resume-generator | SKILL.md + scripts/api_server.mjs + package.json |
+| web-editor | SKILL.md + React 项目（18 源文件） |
+| template-manager | SKILL.md + templates/（4 JSON + 4 CSS） |
+| multi-resume | SKILL.md |
+| privacy-filter | SKILL.md + scripts/privacy_filter.py |
+
+---
+
+## 设计灵感
+
+- **OKF（Open Knowledge Format）** — 谷歌的知识格式标准，纯 Markdown + frontmatter，无中心化 schema
+- **LLM Wiki** — Karpathy 的概念：把知识"编译"成互链的 wiki 页面
+- **SkillLens + SkillOpt** — 微软研究院的 Skill 评估和优化框架

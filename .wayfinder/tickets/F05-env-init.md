@@ -26,4 +26,23 @@ title: 环境初始化 skill（检查 Node/Python/依赖/首次引导）
 
 ## Resolution
 
-待用户确认
+已确认。F05 决议：
+
+**检查项：**
+- Node.js ≥ 18（必须）— `node -v`
+- Python ≥ 3.9（必须）— `python3 --version`
+- npm（必须）— `npm -v`
+- gray-matter（自动装）— `npm list gray-matter`
+- ~/.career_wiki/ 目录（不存在则创建）
+- 子目录结构（不存在则创建）
+
+**检查脚本：** A — Python 脚本 `env_check.py`，用 subprocess 调命令，跨平台兼容
+
+**初始化流程：**
+1. 检查 ~/.career_wiki/ 是否存在
+2. 不存在 → 问用户：默认 ~/.career_wiki/ 还是自定义路径
+3. 创建目录结构：sources/raw/, sources/uploads/, sources/raw/uploads/, wiki/{persons,experiences,projects,skills,education,certificates,awards,publications,activities,summaries}/, resumes/, templates/, .career-wiki/
+4. npm install（wiki 引擎的 Node 依赖，如 gray-matter）
+5. 提示用户：环境就绪，可以开始用采访 skill 了
+
+**Skill 形式：** SKILL.md + Python 脚本 × 1

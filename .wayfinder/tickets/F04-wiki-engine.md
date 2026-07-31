@@ -27,4 +27,32 @@ Wiki 引擎 skill 的完整设计——不用 llmwiki CLI，Agent 自己做：
 
 ## Resolution
 
-待用户确认
+已确认。F04 补充 Q-F04.5：OKF 导出/导入合并到 F04，Node 脚本执行。F11 关闭。
+
+**Compile 流程：**
+1. 扫描 sources/raw/ 下所有 .md 文件
+2. 逐个读文件，Agent 用 LLM 理解能力识别实体（纯 SKILL.md 编排，不需要脚本）
+3. 跨源合并：同名实体智能合并——基本信息取最新、描述取最详细、sources 全部记录、confidence 取最高
+4. 去重："LangChain"/"langchain"/"Langchain" → 同一个 skill 页面
+5. 标注 confidence：用户原话=verified、文件提取=extracted、Agent推断=inferred
+6. 生成 wikilink：正文中提到其他实体时用 [[wiki/skills/react|React]] 链接
+7. 写入 wiki/ 对应目录
+
+**重建策略：** A — 全量重建。wiki 是编译产物，不允许人工编辑，每次从所有 raw 重新编译。
+
+**实体识别：** A — 纯 SKILL.md 编排，Agent 靠 LLM 理解能力识别。脚本辅助去重放到 lint 阶段。
+
+**Lint 检查项（从推荐）：**
+- 孤儿页面（warn）— 没有任何 wikilink 指向
+- 断链（error）— wikilink 指向的页面不存在
+- frontmatter 缺失必填字段（error）— entity/confidence/sources
+- confidence 低的页面（warn）— 大量 inferred
+- 没有来源的实体（warn）— sources 为空
+- 重复实体（error）— 同名不同文件（合并没做好）
+- 过期信息（warn）— end 日期很久以前仍标 present
+
+**OKF 导出：** F11 合并到 F04 — 确定性操作，Node 脚本读 wiki markdown → 解析 frontmatter + wikilink → 组装 OKF JSON → 导出。OKF 导入反向：OKF JSON → 按实体拆分 → 写回 wiki markdown。不需要单独 skill，放进 wiki 引擎 skill。
+
+**Skill 形式：** SKILL.md（编排 Agent 做 compile/lint）+ Node 脚本（OKF 导入/导出）
+
+**F11 状态：** 合并到 F04，F11 ticket 关闭

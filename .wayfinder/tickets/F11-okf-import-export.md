@@ -27,4 +27,4 @@ OKF 导入/导出的完整设计：
 
 ## Resolution
 
-待用户确认
+已合并到 F04。OKF 导入/导出作为 wiki 引擎 skill 的 Node 脚本，不单独建 skill。

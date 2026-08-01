@@ -123,10 +123,10 @@ export default function ResumeEditor({
     if (!over) return;
 
     // 从模块库拖入编辑区
-    if (
-      active.data.current?.source === 'library' &&
-      (over.id === 'edit-area' || over.data.current?.source === 'edit-area')
-    ) {
+    // 注意：编辑区非空时，useSortable 让每个模块卡片也成为 droppable，
+    // closestCorners 会把 over 解析成卡片而非 edit-area 容器，
+    // 所以这里必须同时处理两种落点，否则第二个模块永远拖不进来。
+    if (active.data.current?.source === 'library') {
       const moduleType = active.data.current?.moduleType as EntityType;
       const def = MODULE_LIBRARY.find((m) => m.type === moduleType);
       if (!def) return;
@@ -137,12 +137,21 @@ export default function ResumeEditor({
         expanded: false,
         overrides: {},
       };
-      setModules((prev) => [...prev, newModule]);
+      setModules((prev) => {
+        // 落在某个已有模块上 → 插入到它前面；落在空白处 → 追加到末尾
+        const overIndex = prev.findIndex((m) => m.id === over.id);
+        if (overIndex >= 0) {
+          const next = [...prev];
+          next.splice(overIndex, 0, newModule);
+          return next;
+        }
+        return [...prev, newModule];
+      });
       return;
     }
 
     // 编辑区内排序
-    if (active.id !== over.id && active.data.current?.source !== 'library') {
+    if (active.id !== over.id) {
       const oldIndex = modules.findIndex((m) => m.id === active.id);
       const newIndex = modules.findIndex((m) => m.id === over.id);
       if (oldIndex >= 0 && newIndex >= 0) {

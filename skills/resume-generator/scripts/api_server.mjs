@@ -285,7 +285,21 @@ async function handleGetWiki(wikiRoot, res, query) {
     entities = entities.filter((e) => e.entity === query.entity);
   }
 
-  sendJson(res, 200, { entities, total: entities.length });
+  // 扁平化所有关系，供图谱和缺口分析使用。
+  // 归一化到 entity.path 的形式（相对 wiki/，带 .md 后缀），
+  // 并过滤掉指向不存在实体的关系，避免图谱边指向空节点。
+  const entityPaths = new Set(entities.map((e) => e.path));
+  const allRelations = [];
+  for (const e of entities) {
+    for (const r of e.relations) {
+      const to = `${String(r.target).replace(/^wiki\//, '')}.md`;
+      if (entityPaths.has(to)) {
+        allRelations.push({ from: e.path, to, type: r.type });
+      }
+    }
+  }
+
+  sendJson(res, 200, { entities, allRelations, total: entities.length });
 }
 
 /** GET /api/wiki/:entity/:id — 单个实体详情 */
@@ -307,7 +321,7 @@ async function handleGetWikiEntity(wikiRoot, res, entityDir, id) {
   }
 }
 
-/** GET /api/resumes — 所有简历配置 */
+/** GET /api/resumes — 所有简历配置（完整配置，前端编辑器需要 modules/privacy/emphasize 等字段） */
 async function handleGetResumes(wikiRoot, res) {
   const resumesPath = join(wikiRoot, 'resumes');
   const files = await collectJson(resumesPath);
@@ -316,22 +330,14 @@ async function handleGetResumes(wikiRoot, res) {
   for (const f of files) {
     try {
       const raw = await readFile(f, 'utf-8');
-      const cfg = JSON.parse(raw);
-      resumes.push({
-        name: cfg.name,
-        id: cfg.id,
-        template: cfg.template,
-        target: cfg.target || null,
-        modules: cfg.modules || [],
-        updated: cfg.updated || null,
-      });
+      resumes.push(JSON.parse(raw));
     } catch {}
   }
 
   sendJson(res, 200, { resumes, total: resumes.length });
 }
 
-/** GET /api/templates — 所有模板 */
+/** GET /api/templates — 所有模板（完整配置，前端预览渲染需要 sections 定义） */
 async function handleGetTemplates(wikiRoot, res) {
   const templatesPath = join(wikiRoot, 'templates');
   const files = await collectJson(templatesPath);
@@ -340,14 +346,7 @@ async function handleGetTemplates(wikiRoot, res) {
   for (const f of files) {
     try {
       const raw = await readFile(f, 'utf-8');
-      const cfg = JSON.parse(raw);
-      templates.push({
-        name: cfg.name,
-        id: cfg.id,
-        layout: cfg.layout,
-        has_photo: cfg.has_photo || false,
-        sections_count: Array.isArray(cfg.sections) ? cfg.sections.length : 0,
-      });
+      templates.push(JSON.parse(raw));
     } catch {}
   }
 

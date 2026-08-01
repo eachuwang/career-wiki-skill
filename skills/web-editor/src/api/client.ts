@@ -45,7 +45,9 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 /** 获取整个 wiki 快照（所有实体 + 关系） */
 export async function getWiki(): Promise<WikiSnapshot> {
-  return request<WikiSnapshot>('/api/wiki');
+  const data = await request<WikiSnapshot>('/api/wiki');
+  // 兼容旧版 API server（不返回 allRelations）
+  return { ...data, allRelations: data.allRelations ?? [] };
 }
 
 /** 获取单个实体详情 */
@@ -60,7 +62,9 @@ export async function getEntity(
 
 /** 获取所有简历配置 */
 export async function getResumes(): Promise<ResumeConfig[]> {
-  return request<ResumeConfig[]>('/api/resumes');
+  // API 返回 { resumes: [...], total } 信封格式
+  const data = await request<{ resumes: ResumeConfig[] }>('/api/resumes');
+  return data.resumes ?? [];
 }
 
 /** 获取单份简历配置 */
@@ -80,7 +84,9 @@ export async function saveResume(config: ResumeConfig): Promise<void> {
 
 /** 获取所有模板 */
 export async function getTemplates(): Promise<TemplateConfig[]> {
-  return request<TemplateConfig[]>('/api/templates');
+  // API 返回 { templates: [...], total } 信封格式
+  const data = await request<{ templates: TemplateConfig[] }>('/api/templates');
+  return data.templates ?? [];
 }
 
 // ---------- 生成 + 导出 ----------
@@ -154,6 +160,7 @@ export function analyzeGaps(
   });
 
   // 孤立实体：没有任何关系指向或发出
+  // allRelations 的 from/to 已归一化为 entity.path 的形式（带 .md 后缀）
   const connectedPaths = new Set<string>();
   for (const rel of wiki.allRelations) {
     connectedPaths.add(rel.from);
@@ -161,9 +168,7 @@ export function analyzeGaps(
   }
   // person 是根，不算孤立
   const isolatedEntities = wiki.entities.filter(
-    (e) =>
-      e.entity !== 'person' &&
-      !connectedPaths.has(e.path.replace(/\.md$/, '')),
+    (e) => e.entity !== 'person' && !connectedPaths.has(e.path),
   );
 
   return { unusedSkills, unusedProjects, isolatedEntities };

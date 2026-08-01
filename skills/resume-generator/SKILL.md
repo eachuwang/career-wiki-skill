@@ -296,9 +296,14 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
       "content": "正文 markdown..."
     }
   ],
+  "allRelations": [
+    {"from": "persons/王二.md", "to": "experiences/bytedance-backend-2023.md", "type": "has_experience"}
+  ],
   "total": 15
 }
 ```
+
+`allRelations` 是所有实体关系的扁平化列表，供图谱和缺口分析使用。`from`/`to` 已归一化为 `entity.path` 的形式（相对 wiki/，带 `.md` 后缀），且只包含指向存在实体的关系。
 
 **查询参数：**
 - `entity=skill` — 只返回某类实体
@@ -312,7 +317,7 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 
 ### 4. GET /api/resumes
 
-返回所有简历配置。读 `resumes/` 下所有 `.json`。
+返回所有简历配置（完整配置对象，前端编辑器需要 `modules`/`privacy`/`emphasize`/`hide` 等字段）。读 `resumes/` 下所有 `.json`，原样返回文件内容。
 
 **响应 200：**
 ```json
@@ -322,9 +327,13 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
       "name": "字节后端版",
       "id": "bytedance-backend",
       "template": "tech-minimal",
+      "created": "2026-07-30",
+      "updated": "2026-07-31",
       "target": {"company": "字节跳动", "position": "后端开发"},
       "modules": ["person", "experience", "project", "skill", "education"],
-      "updated": "2026-07-31"
+      "emphasize": [{"module": "skill", "items": ["Go", "K8s"]}],
+      "hide": [],
+      "privacy": {"mask_phone": true, "mask_email": true}
     }
   ],
   "total": 2
@@ -333,7 +342,7 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 
 ### 5. GET /api/templates
 
-返回所有模板。读 `templates/` 下所有 `.json`。
+返回所有模板（完整模板配置，前端预览渲染需要 `sections` 定义）。读 `templates/` 下所有 `.json`，原样返回文件内容。
 
 **响应 200：**
 ```json
@@ -342,9 +351,14 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
     {
       "name": "技术简约",
       "id": "tech-minimal",
+      "style": "tech-minimal.css",
       "layout": "single-column",
       "has_photo": false,
-      "sections_count": 5
+      "sections": [
+        {"module": "person", "title": "个人信息", "fields": ["name", "title", "email", "phone"]},
+        {"module": "experience", "title": "工作经历", "fields": ["company", "title", "start", "end", "description"], "order": "desc"},
+        {"module": "skill", "title": "技能", "fields": ["name", "level"], "group_by": "category"}
+      ]
     }
   ],
   "total": 4

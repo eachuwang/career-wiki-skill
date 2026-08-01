@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
-import type { Network } from 'vis-network/standalone';
+import type { Network, Node, Edge } from 'vis-network/standalone';
 import type {
   WikiSnapshot,
   WikiEntity,
@@ -72,7 +72,7 @@ export default function GraphCanvas({
         gapAnalysis.isolatedEntities.forEach((e) => gapPaths.add(e.path));
       }
 
-      const visNodes = new DataSet(
+      const visNodes = new DataSet<Node>(
         graphNodes.map((n) => ({
           ...n,
           color: {
@@ -84,16 +84,16 @@ export default function GraphCanvas({
           font: { color: '#fff', size: 14 },
           shape: gapPaths.has(n.id) ? 'diamond' : 'dot',
           size: gapPaths.has(n.id) ? 20 : 15,
-        })) as any,
+        })),
       );
 
-      const visEdges = new DataSet(
+      const visEdges = new DataSet<Edge>(
         graphEdges.map((e) => ({
           ...e,
           arrows: 'to',
           color: { color: '#bdc3c7', highlight: '#3498db' },
           font: { size: 10, color: '#95a5a6' },
-        })) as any,
+        })),
       );
 
       if (networkRef.current) {
@@ -120,7 +120,7 @@ export default function GraphCanvas({
             dragView: true,
           },
           nodes: { borderWidth: 2 },
-          edges: { smooth: { type: 'continuous' } },
+          edges: { smooth: { enabled: true, type: 'continuous', roundness: 0.5 } },
         },
       );
 

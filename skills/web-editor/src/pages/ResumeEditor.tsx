@@ -97,8 +97,12 @@ export default function ResumeEditor({
     if (resumes.length > 0 && !currentResumeId) {
       setCurrentResumeId(resumes[0].id);
       loadResume(resumes[0]);
+      // 简历配置里已带模板，直接返回；
+      // 否则下面的默认模板逻辑会在同一次 effect 里用闭包中的旧值
+      // 把 loadResume 设置的 templateId 覆盖掉
+      return;
     }
-    // 默认模板
+    // 默认模板（仅在没有简历配置时兜底）
     if (templates.length > 0 && !templateId) {
       setTemplateId(templates[0].id);
     }

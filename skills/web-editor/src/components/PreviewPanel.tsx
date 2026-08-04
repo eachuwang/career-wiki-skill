@@ -6,7 +6,7 @@
  * 导出 PDF 用 window.print()（CSS @media print 已配好）。
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, Fragment } from 'react';
 import type { ReactNode } from 'react';
 import type {
   ModuleInstance,
@@ -47,6 +47,24 @@ function maskValue(field: string, value: unknown, privacy: PrivacyConfig): strin
   return v;
 }
 
+/** 格式化日期：present → 至今，YYYY-MM → YYYY.MM，其他原样返回 */
+function formatDate(value: unknown): string {
+  const s = String(value ?? '').trim();
+  if (!s) return '';
+  if (s.toLowerCase() === 'present' || s === '至今') return '至今';
+  const m = /^(\d{4})-(\d{2})/.exec(s);
+  return m ? `${m[1]}.${m[2]}` : s;
+}
+
+/** 日期排序键：用于按开始时间倒序，缺失的排最后 */
+function dateSortKey(value: unknown): number {
+  const s = String(value ?? '').trim();
+  if (!s) return -1;
+  if (s.toLowerCase() === 'present') return 999999;
+  const m = /^(\d{4})-(\d{2})/.exec(s);
+  return m ? Number(m[1]) * 100 + Number(m[2]) : -1;
+}
+
 /** 按模板 section 渲染一个模块 */
 function renderModule(
   module: ModuleInstance,
@@ -57,26 +75,52 @@ function renderModule(
   // 找模板里这个 module 的 section 配置
   const section = templateSections.find((s) => s.module === module.type);
   const title = section?.title || module.label;
-  const fields = section?.fields || [];
+  // 模板未定义该模块时的兜底字段，避免条目只剩日期
+  const FALLBACK_FIELDS: Record<string, string[]> = {
+    summary: ['content'],
+    experience: ['company', 'role', 'start', 'end', 'description'],
+    project: ['name', 'role', 'start', 'end', 'description'],
+    education: ['school', 'degree', 'major', 'start', 'end'],
+  };
+  const fields = section?.fields?.length
+    ? section.fields
+    : FALLBACK_FIELDS[module.type] || [];
 
   if (wikiData.length === 0) return null;
+
+  // 有开始时间的条目按时间倒序（工作经历、项目经验、教育背景）
+  const sorted =
+    section?.order === 'asc'
+      ? wikiData
+      : [...wikiData].sort(
+          (a, b) => dateSortKey(b.fields.start) - dateSortKey(a.fields.start),
+        );
 
   // group_by 处理（技能按分类分组）
   if (section?.group_by) {
     const groups: Record<string, WikiEntity[]> = {};
-    for (const e of wikiData) {
+    for (const e of sorted) {
       const key = String(e.fields[section.group_by] || '其他');
       (groups[key] = groups[key] || []).push(e);
     }
     return (
       <div className="preview-section" data-module={module.type}>
-        {title && <h2 className="section-title">{title}</h2>}
+        {title && (
+          <h2 className="section-title text-lg font-bold text-ink-900 border-b border-ink-200 pb-1 mb-3 mt-6 first:mt-0">
+            {title}
+          </h2>
+        )}
         {Object.entries(groups).map(([cat, items]) => (
           <div key={cat} className="skill-group">
-            <div className="skill-group-title">{cat}</div>
+            <div className="skill-group-title text-sm font-medium text-ink-700 mt-2">
+              {cat}
+            </div>
             <div className="skill-tags">
               {items.map((e, i) => (
-                <span key={i} className="skill-tag">
+                <span
+                  key={i}
+                  className="skill-tag inline-block bg-ink-100 rounded px-2 py-0.5 text-sm mr-1 mb-1"
+                >
                   {maskValue('name', e.fields.name, privacy)}{' '}
                   <span className="text-ink-400 text-xs">
                     {maskValue('level', e.fields.level, privacy)}
@@ -90,33 +134,76 @@ function renderModule(
     );
   }
 
-  // 普通模块：逐条列出
+  // 单字段模块（如个人优势 content）：没有标题/副标题结构，直接按段落渲染
+  if (fields.length === 1) {
+    return (
+      <div className="preview-section" data-module={module.type}>
+        {title && (
+          <h2 className="section-title text-lg font-bold text-ink-900 border-b border-ink-200 pb-1 mb-3 mt-6 first:mt-0">
+            {title}
+          </h2>
+        )}
+        {sorted.map((e, i) => (
+          <div
+            key={i}
+            className="entry mb-4 text-sm text-ink-600 whitespace-pre-line"
+          >
+            {maskValue(fields[0], e.fields[fields[0]], privacy)}
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // 普通模块：逐条列出。
+  // 版式约定：第一行主标题（公司/项目名/学校），
+  // 第二行左侧副标题（职位/角色/学位），右侧日期区间，
+  // 其余字段作为详细内容逐行展示。
+  const startIdx = fields.indexOf('start');
+  const titleField = fields[0];
+  const subFields =
+    startIdx > 1 ? fields.slice(1, startIdx) : fields.slice(1, 3);
+  const descFields = fields.filter(
+    (f) =>
+      f !== titleField &&
+      !subFields.includes(f) &&
+      f !== 'start' &&
+      f !== 'end',
+  );
+
   return (
     <div className="preview-section" data-module={module.type}>
-      {title && <h2 className="section-title">{title}</h2>}
-      {wikiData.map((e, i) => {
-        const headerFields = fields.slice(0, 3);
-        const descFields = fields.slice(3);
+      {title && (
+        <h2 className="section-title text-lg font-bold text-ink-900 border-b border-ink-200 pb-1 mb-3 mt-6 first:mt-0">
+          {title}
+        </h2>
+      )}
+      {sorted.map((e, i) => {
+        const startText = formatDate(e.fields.start);
+        const endText = formatDate(e.fields.end);
+        const dateRange = startText ? `${startText} - ${endText || '至今'}` : endText;
         return (
-          <div key={i} className="entry">
-            <div className="entry-header">
-              <span className="entry-title">
-                {headerFields
+          <div key={i} className="entry mb-4">
+            <div className="entry-title font-semibold text-[15px] text-ink-900">
+              {maskValue(titleField, e.fields[titleField], privacy)}
+            </div>
+            <div className="entry-sub flex items-baseline justify-between mt-0.5">
+              <span className="text-sm text-ink-700">
+                {subFields
                   .map((f) => maskValue(f, e.fields[f], privacy))
                   .filter(Boolean)
                   .join(' · ')}
               </span>
-              {e.fields.start != null && (
-                <span className="entry-date">
-                  {maskValue('start', e.fields.start, privacy)} —{' '}
-                  {maskValue('end', e.fields.end, privacy)}
+              {dateRange && (
+                <span className="entry-date text-sm text-ink-500 whitespace-nowrap ml-4">
+                  {dateRange}
                 </span>
               )}
             </div>
             {descFields.map(
               (f) =>
                 e.fields[f] != null && (
-                  <div key={f} className="entry-desc">
+                  <div key={f} className="entry-desc text-sm text-ink-600 mt-1 whitespace-pre-line">
                     {maskValue(f, e.fields[f], privacy)}
                   </div>
                 ),
@@ -213,10 +300,14 @@ export default function PreviewPanel({
               />
             )}
 
-            {/* 各模块 */}
-            {previewHTML.map(({ module, data }) =>
-              renderModule(module, data, templateSections, privacy),
-            )}
+            {/* 各模块（person 由 ResumeHeader 渲染，这里跳过避免重复） */}
+            {previewHTML
+              .filter(({ module }) => module.type !== 'person')
+              .map(({ module, data }) => (
+                <Fragment key={module.id}>
+                  {renderModule(module, data, templateSections, privacy)}
+                </Fragment>
+              ))}
           </div>
         </div>
       </div>

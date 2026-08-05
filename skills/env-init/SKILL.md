@@ -45,24 +45,8 @@ category: career-wiki-skill
    > 🛑 不要在用户未确认前直接创建目录。数据目录是后续所有 skill 的根路径，选错了全部要重来。
 
 3. **创建目录结构**（脚本已做，但若用户选了自定义路径，需在自定义路径下建）
-   ```
-   sources/raw/
-   sources/uploads/
-   sources/raw/uploads/
-   wiki/persons/
-   wiki/experiences/
-   wiki/projects/
-   wiki/skills/
-   wiki/education/
-   wiki/certificates/
-   wiki/awards/
-   wiki/publications/
-   wiki/activities/
-   wiki/summaries/
-   resumes/
-   templates/
-   .career-wiki-skill/
-   ```
+
+   目录清单以 `scripts/env_check.py --list-dirs` 为权威来源，不要在此复述（改目录只改脚本 `ALL_DIRS`）。顶层：`sources/raw/`、`sources/uploads/`、`sources/raw/uploads/`、`wiki/{10 类实体}/`、`resumes/`、`templates/`、`.career-wiki-skill/`。
 
 4. **npm install**
    - 在 `skills/wiki-engine/` 目录运行 `npm install`（装 wiki 引擎的 Node 依赖，如 gray-matter；resume-generator 的 API server 复用该目录的共享解析层 wiki-parser.mjs）

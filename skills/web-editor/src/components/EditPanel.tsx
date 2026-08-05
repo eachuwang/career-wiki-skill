@@ -17,8 +17,9 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import { useState } from 'react';
 import { getOrderedEntityFieldEntries } from '../resume/fields';
+import { mergeOverrides } from '../resume/mergeOverrides';
 import type { ModuleInstance, WikiEntity, EntityType } from '../types';
-import { ENTITY_LABELS } from '../types';
+import { ENTITY_LABELS } from '../constants';
 import UiIcon from './UiIcon';
 
 interface EditPanelProps {
@@ -69,16 +70,8 @@ function ModuleEditCard({
     transition,
   };
 
-  // 合并 wiki 数据和用户覆盖
-  const mergedData = wikiData.map((entity) => ({
-    ...entity,
-    fields: { ...entity.fields },
-  }));
-  for (const entity of mergedData) {
-    if (module.overrides && Object.keys(module.overrides).length > 0) {
-      entity.fields = { ...entity.fields, ...module.overrides };
-    }
-  }
+  // 合并 wiki 数据和用户覆盖（与 PreviewPanel 共用 mergeOverrides）
+  const mergedData = mergeOverrides(wikiData, module.overrides);
 
   return (
     <div

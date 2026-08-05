@@ -23,15 +23,15 @@ career-wiki-skill 的简历生成层。提供 **Node HTTP API server**，从 wik
 
 **导出方式：**
 - **JSON** — Node 直接返回组装好的结构化简历 JSON
-- **HTML** — 前端按选中模板渲染出完整 HTML 页面，直接保存为文件
-- **PDF** — 前端渲染的 HTML 用浏览器 `window.print()` 导出 PDF，样式靠 CSS 模板控制，不需要 puppeteer
+- **HTML** — 前端在浏览器端渲染完整 HTML 页面并保存（不经后端 export 接口）
+- **PDF** — 前端在浏览器端用 `html2pdf.js` 直接生成并下载（不经后端 export 接口）
 
 ---
 
 ## 何时触发
 
 - 用户说"生成简历" / "渲染简历" / "组装简历" → 调 `POST /api/resume/generate`
-- 用户说"导出简历" / "下载简历" → 调 `POST /api/resume/export`（JSON 直接返回，HTML/PDF 前端渲染）
+- 用户说"导出简历" / "下载简历" → 调 `POST /api/resume/export`（后端返回结构化 JSON；HTML/PDF 由前端浏览器端生成）
 - 用户说"启动 API server" / "起个服务" → 启动 `scripts/api_server.mjs`
 - 用户说"看 wiki 有什么数据" → 调 `GET /api/wiki`
 - Web 前端启动时自动调 `GET /api/health` 检查服务状态
@@ -43,32 +43,10 @@ career-wiki-skill 的简历生成层。提供 **Node HTTP API server**，从 wik
 
 ## 数据目录约定
 
-```
-~/.career_wiki/
-├── wiki/                  ← 数据源（F06 读这里）
-│   ├── persons/
-│   ├── experiences/
-│   ├── projects/
-│   ├── skills/
-│   ├── education/
-│   ├── certificates/
-│   ├── awards/
-│   ├── publications/
-│   ├── activities/
-│   └── summaries/
-├── resumes/               ← 简历配置（F06 读这里）
-│   ├── bytedance-backend.json
-│   └── ...
-├── templates/             ← 简历模板（F06 读这里）
-│   ├── tech-minimal.json
-│   ├── tech-minimal.css
-│   └── ...
-└── .career-wiki-skill/
-    └── config.json        ← root 字段存数据目录路径
-```
+resume-generator 从 `~/.career_wiki/` 读三个目录：`wiki/`（数据源）、`resumes/`（简历配置 JSON）、`templates/`（模板 JSON + CSS）。完整目录清单以 `skills/env-init/scripts/env_check.py --list-dirs` 为权威来源，此处不复述。
 
 - 数据目录默认 `~/.career_wiki/`，用户可在 env-init 时自定义
-- API server 启动时读 `~/.career_wiki/.career-wiki-skill/config.json` 的 `root` 字段确定数据目录
+- API server 启动时读 `~/.career_wiki/.career-wiki-skill/config.json` 的 `root` 字段确定数据目录，再 fallback 到 `~/.career_wiki/`
 - 所有 wiki/ resumes/ templates/ 路径都基于 root 计算
 
 ---
@@ -107,7 +85,7 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 | 4 | GET | `/api/resumes` | 所有简历配置，读 resumes/ 目录下所有 .json |
 | 5 | GET | `/api/templates` | 所有模板，读 templates/ 目录下所有 .json |
 | 6 | POST | `/api/resume/generate` | 按模板 + 配置生成结构化简历 JSON |
-| 7 | POST | `/api/resume/export` | 导出 PDF/HTML/JSON（JSON 直接返回，HTML/PDF 由前端渲染） |
+| 7 | POST | `/api/resume/export` | 导出结构化简历 JSON（HTML/PDF 由前端浏览器端生成，不经此接口） |
 | 8 | POST | `/api/resume/save` | 保存简历配置到 resumes/ |
 | 9 | PUT | `/api/wiki/refresh` | 触发 wiki 重新 compile（提示用户调 Agent） |
 | 10 | POST | `/api/resume/delete` | 删除简历配置（仅删 JSON，不删 wiki 数据） |
@@ -416,7 +394,9 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 
 ### 7. POST /api/resume/export
 
-导出简历。**JSON 格式**由 Node 直接返回组装好的结构化 JSON（等同 `/api/resume/generate` 的输出）。**HTML/PDF 格式**由前端渲染——这个接口对 HTML/PDF 的角色是返回渲染所需的 JSON 数据，前端拿到后用模板 CSS 渲染成 HTML 页面，再用 `window.print()` 导出 PDF。
+导出简历。返回结构化简历 JSON（等同 `/api/resume/generate` 的输出）。
+
+**HTML/PDF 导出由前端在浏览器端完成**（`html2pdf.js` 生成 `.print-area` PDF、`Blob` 下载 HTML），不经此接口。前端调 export 只发 `format: json`，后端忽略 `format` 字段直接返回 JSON 数据。
 
 **请求体：**
 ```json
@@ -426,23 +406,9 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 }
 ```
 
-| format | 行为 |
-|--------|------|
-| `json` | Node 直接返回结构化简历 JSON（等同 generate） |
-| `html` | 返回 JSON 数据 + 提示前端用模板 CSS 渲染 HTML |
-| `pdf` | 返回 JSON 数据 + 提示前端渲染后用 `window.print()` 导出 |
+`format` 字段保留兼容但后端不再分支处理（历史上有 html/pdf 分支返回 instruction + `window.print()` 指令，前端从未消费，已删）。
 
-**响应 200（json）：** 结构化简历 JSON
-**响应 200（html/pdf）：**
-```json
-{
-  "format": "html",
-  "data": { /* 结构化简历 JSON */ },
-  "template_id": "tech-minimal",
-  "css_path": "templates/tech-minimal.css",
-  "instruction": "前端用模板 CSS 渲染 HTML，PDF 用 window.print()"
-}
-```
+**响应 200：** 结构化简历 JSON
 
 ### 8. POST /api/resume/save
 
@@ -500,7 +466,7 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 
 6. **端口冲突。** 默认 3001，被占时启动失败。应提示用户设 `PORT` 环境变量换端口。
 
-7. **PDF 导出依赖前端。** 不要在 Node 里装 puppeteer——太重。PDF 导出靠前端 `window.print()`，Node 只返回数据。
+7. **PDF/HTML 导出在前端，不在 Node。** 后端 export 接口只返回结构化 JSON。PDF/HTML 由前端 `html2pdf.js` / `Blob` 在浏览器端生成，不要在 Node 装 puppeteer。
 
 8. **PUT /api/wiki/refresh 被误以为是同步编译。** 这个接口不编译 wiki，只返回提示。Wiki compile 是 Agent LLM 操作，必须用户在对话里触发 wiki-engine skill。
 
@@ -521,6 +487,6 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 - [ ] `GET /api/templates` 返回模板列表
 - [ ] `POST /api/resume/generate` 能组装结构化简历 JSON
 - [ ] `hide.items` 在 generate/export 中都能按 Wiki 路径排除实体，且不修改 Wiki 文件
-- [ ] `POST /api/resume/export` 对 json/html/pdf 三种格式正确响应
+- [ ] `POST /api/resume/export` 返回结构化简历 JSON（前端拿数据自行渲染 HTML/PDF）
 - [ ] `POST /api/resume/save` 能保存配置文件
 - [ ] `PUT /api/wiki/refresh` 返回需要 Agent 的提示

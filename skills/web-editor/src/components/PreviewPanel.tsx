@@ -5,11 +5,13 @@
  * 应归属的页码（块级分页，任何文字行都不会被页边界切断），
  * 再按页渲染多个 210×297mm 的 A4 页面，并实时显示总页数。
  * 每页四边为保护区域（上下 15mm、左右 16mm），内容只出现在保护区域内。
+ *
+ * 渲染管线（renderModuleBlocks / ResumeHeader / formatDate）抽至
+ * resume/renderBlocks.tsx，脱敏规则复用后端 resume-rules.mjs。
  */
 
 import { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import type { ReactNode } from 'react';
 import type {
   ModuleInstance,
   WikiEntity,
@@ -17,18 +19,16 @@ import type {
   PrivacyConfig,
 } from '../types';
 
-import { getResumeContactItems } from '../resume/contact';
 import { getVisibleEntities } from '../resume/visibility';
+import { mergeOverrides } from '../resume/mergeOverrides';
 import {
-  maskValue,
-  getSectionFields,
-  sortEntities,
-  groupByItems,
-} from '../../../resume-generator/scripts/resume-rules.mjs';
+  renderModuleBlocks,
+  ResumeHeader,
+  type ResumeBlock,
+} from '../resume/renderBlocks';
 import {
   A4_WIDTH_MM,
   A4_HEIGHT_MM,
-  CONTENT_WIDTH_MM,
   CONTENT_HEIGHT_MM,
   mmToPx,
   computePageIndexes,
@@ -49,173 +49,10 @@ interface PreviewPanelProps {
 /** 单页内容区高度（px），留 1px 余量防止块恰好溢出页面 */
 const PAGE_CONTENT_HEIGHT_PX = Math.floor(mmToPx(CONTENT_HEIGHT_MM) - 1);
 
-/** 一个可独立分页的内容块 */
-interface ResumeBlock {
-  key: string;
-  node: ReactNode;
-}
-
 /** 窄屏首次进入预览时自动适配 A4 宽度，避免页面级横向滚动。 */
 function getInitialZoom(): number {
   if (typeof window === 'undefined' || window.innerWidth >= 900) return 0.72;
   return Math.max(0.4, Math.min(0.72, (window.innerWidth - 40) / (A4_WIDTH_MM * 3.7795)));
-}
-
-/** 格式化日期：present → 至今，YYYY-MM → YYYY.MM，其他原样返回 */
-function formatDate(value: unknown): string {
-  const s = String(value ?? '').trim();
-  if (!s) return '';
-  if (s.toLowerCase() === 'present' || s === '至今') return '至今';
-  const m = /^(\d{4})-(\d{2})/.exec(s);
-  return m ? `${m[1]}.${m[2]}` : s;
-}
-
-/** 按模板 section 把一个模块渲染成可分页的内容块列表 */
-function renderModuleBlocks(
-  module: ModuleInstance,
-  wikiData: WikiEntity[],
-  templateSections: TemplateConfig['sections'],
-  privacy: PrivacyConfig,
-): ResumeBlock[] {
-  // 找模板里这个 module 的 section 配置
-  const section = templateSections.find((s) => s.module === module.type);
-  const title = section?.title || module.label;
-  // 按共享规则解析展示字段（project 强制补 responsibilities/tech_stack）
-  const fields = getSectionFields(section, module.type);
-
-  if (wikiData.length === 0) return [];
-
-  // 按共享规则排序（start→end→date 回退，缺失恒排最后）
-  const sorted = sortEntities(wikiData, section?.order || 'desc');
-
-  const blocks: ResumeBlock[] = [];
-
-  /**
-   * 把「标题 + 首条内容」合并为一个头部块，保证标题不会孤立在页尾；
-   * 其余内容条各自成块，供分页算法按块移动。
-   */
-  const pushSection = (first: ResumeBlock, rest: ResumeBlock[]): void => {
-    blocks.push(
-      title
-        ? {
-            key: `${module.id}-head`,
-            node: (
-              <div className="section-head">
-                <h2 className="section-title">{title}</h2>
-                {first.node}
-              </div>
-            ),
-          }
-        : first,
-    );
-    blocks.push(...rest);
-  };
-
-  // group_by 处理（技能按分类分组，共享规则）
-  if (section?.group_by) {
-    const items = groupByItems(sorted, section.group_by).map(
-      ({ key: cat, items: entities }) => ({
-        key: `${module.id}-group-${cat}`,
-        node: (
-          <div className="skill-group resume-skill-row">
-            <div className="skill-group-title resume-skill-category">
-              {cat}
-            </div>
-            <div className="skill-tags resume-skill-list">
-              {entities
-                .map((entity) => {
-                  const name = maskValue(entity.fields.name, 'name', privacy);
-                  const level = maskValue(entity.fields.level, 'level', privacy);
-                  return level ? `${name}（${level}）` : name;
-                })
-                .filter(Boolean)
-                .join(' · ')}
-            </div>
-          </div>
-        ),
-      }),
-    );
-    pushSection(items[0], items.slice(1));
-    return blocks;
-  }
-
-  // 单字段模块（如个人优势 content）：没有标题/副标题结构，直接按段落渲染
-  if (fields.length === 1) {
-    const items = sorted.map((e, i) => ({
-      key: `${module.id}-summary-${e.path || i}`,
-      node: (
-        <div className="entry resume-summary">
-          {maskValue(e.fields[fields[0]], fields[0], privacy)}
-        </div>
-      ),
-    }));
-    pushSection(items[0], items.slice(1));
-    return blocks;
-  }
-
-  // 普通模块：逐条列出。
-  // 版式约定：第一行主标题（公司/项目名/学校），
-  // 第二行左侧副标题（职位/角色/学位），右侧日期区间，
-  // 其余字段作为详细内容逐行展示。
-  const startIdx = fields.indexOf('start');
-  const titleField = fields[0];
-  const subFields =
-    startIdx > 1 ? fields.slice(1, startIdx) : fields.slice(1, 3);
-  const descFields = fields.filter(
-    (f) =>
-      f !== titleField &&
-      !subFields.includes(f) &&
-      f !== 'start' &&
-      f !== 'end',
-  );
-
-  const items = sorted.map((e, i) => {
-    const startText = formatDate(e.fields.start);
-    const endText = formatDate(e.fields.end);
-    const dateRange = startText ? `${startText} - ${endText || '至今'}` : endText;
-    return {
-      key: `${module.id}-entry-${e.path || i}`,
-      node: (
-        <div className="entry">
-          <div className="entry-title">
-            {maskValue(e.fields[titleField], titleField, privacy)}
-          </div>
-          <div className="entry-sub">
-            <span className="entry-role">
-              {subFields
-                .map((f) => maskValue(e.fields[f], f, privacy))
-                .filter(Boolean)
-                .join(' · ')}
-            </span>
-            {dateRange && (
-              <span className="entry-date">
-                {dateRange}
-              </span>
-            )}
-          </div>
-          {descFields.map(
-            (f) =>
-              e.fields[f] != null && (
-                <div key={f} className="entry-desc">
-                  {module.type === 'project' && f === 'description' && (
-                    <span className="entry-desc-label">项目描述：</span>
-                  )}
-                  {f === 'responsibilities' && (
-                    <span className="entry-desc-label">岗位职责：</span>
-                  )}
-                  {f === 'tech_stack' && (
-                    <span className="entry-desc-label">技术栈：</span>
-                  )}
-                  {maskValue(e.fields[f], f, privacy)}
-                </div>
-              ),
-          )}
-        </div>
-      ),
-    };
-  });
-  pushSection(items[0], items.slice(1));
-  return blocks;
 }
 
 export default function PreviewPanel({
@@ -248,11 +85,8 @@ export default function PreviewPanel({
         wikiEntities.filter((e) => e.entity === m.type),
         m.hiddenItemIds,
       );
-      // 应用用户覆盖
-      const merged = data.map((e) => ({
-        ...e,
-        fields: { ...e.fields, ...m.overrides },
-      }));
+      // 应用用户覆盖（与 EditPanel 共用 mergeOverrides）
+      const merged = mergeOverrides(data, m.overrides);
       return { module: m, data: merged };
     });
   }, [modules, wikiEntities]);
@@ -294,7 +128,6 @@ export default function PreviewPanel({
       .filter((el): el is HTMLDivElement => el != null)
       .map((el) => ({ top: el.offsetTop, height: el.offsetHeight }));
     if (rects.length === 0) {
-      // 保持相同引用，避免 setState 触发无谓重渲染
       setPageIndexes((prev) => (prev && prev.length === 0 ? prev : []));
       return;
     }
@@ -452,42 +285,5 @@ export default function PreviewPanel({
         </div>
       </div>
     </div>
-  );
-}
-
-/** 简历头部（个人信息） */
-function ResumeHeader({
-  personData,
-  privacy,
-  resumeName,
-}: {
-  personData?: WikiEntity;
-  privacy: PrivacyConfig;
-  resumeName: string;
-}) {
-  if (!personData) {
-    return <h1>{resumeName}</h1>;
-  }
-  const f = personData.fields;
-  const contacts = getResumeContactItems(f);
-  return (
-    <header className="person-info resume-header">
-      <h1>{maskValue(f.name, 'name', privacy)}</h1>
-      <div className="resume-headline">
-        {maskValue(f.title, 'title', privacy)}
-      </div>
-      <div className="resume-contact">
-        {contacts.map((contact) => (
-          <span key={contact.field} className="resume-contact-item">
-            <UiIcon
-              name={contact.icon}
-              size={13}
-              className="resume-contact-icon"
-            />
-            {maskValue(contact.value, contact.field, privacy)}
-          </span>
-        ))}
-      </div>
-    </header>
   );
 }

@@ -45,31 +45,15 @@ resume-generator ──→ web-editor（前端调 API，含模板/多简历/脱�
 
 ## 数据目录
 
-默认 `~/.career_wiki/`，用户可自定义。
+默认 `~/.career_wiki/`，用户可自定义（env-init 时选，写入 `config.json` 的 `root`）。
 
+目录结构以 `skills/env-init/scripts/env_check.py --list-dirs` 为权威来源，跑该命令获取当前清单：
+
+```bash
+python3 skills/env-init/scripts/env_check.py --list-dirs
 ```
-~/.career_wiki/
-├── sources/
-│   ├── raw/               ← 采访产出 + 文件提取（原始材料）
-│   │   ├── interview-{timestamp}.md
-│   │   └── uploads/
-│   │       └── {filename}_{date}.md
-│   └── uploads/           ← 用户上传的原始文件
-├── wiki/                  ← 编译产出的结构化页面（不允许人工编辑）
-│   ├── persons/
-│   ├── experiences/
-│   ├── projects/
-│   ├── skills/
-│   ├── education/
-│   ├── certificates/
-│   ├── awards/
-│   ├── publications/
-│   ├── activities/
-│   └── summaries/
-├── resumes/               ← 简历配置（每份一个 JSON）
-├── templates/             ← 简历模板（JSON + CSS）
-└── .career-wiki-skill/    ← 运行时状态
-```
+
+顶层三块：`sources/`（原始材料）、`wiki/`（编译产物，不允许人工编辑）、`resumes/` + `templates/`（简历配置与模板）。子目录清单不要在别处复述 —— 改目录加一项，只改 `env_check.py` 的 `ALL_DIRS`。
 
 ---
 
@@ -85,23 +69,9 @@ has_experience · has_skill · has_education · has_certificate · has_award · 
 
 ### Frontmatter 规范
 
-每个 wiki 页面是 Markdown + YAML frontmatter：
+每个 wiki 页面是 Markdown + YAML frontmatter（`entity / confidence / sources / relations` + 各实体可选字段）。正文用 wikilink `[[wiki/skills/react|React]]` 做关联。
 
-```yaml
----
-entity: experience           # 实体类型
-confidence: verified         # verified / extracted / inferred
-sources:                     # 来源追溯
-  - sources/raw/interview-001.md
-relations:                  # 骨架关系
-  - type: used_skill
-    target: wiki/skills/react
----
-```
-
-正文用 wikilink `[[wiki/skills/react|React]]` 做关联（血肉）。
-
-详细 schema 见 `skills/wiki-engine/SKILL.md` 的数据规范章节。
+**完整 schema 见 `skills/wiki-engine/SKILL.md` 的数据规范章节 —— 该文件是唯一事实源，本 SKILL.md 不复述，避免改一处漏两处。**
 
 ---
 
@@ -148,7 +118,7 @@ git clone https://github.com/eachuwang/career-wiki-skill.git
 
 env-init skill 会：
 1. 检查 Node.js ≥ 18 / Python ≥ 3.9 / npm
-2. 创建 `~/.career_wiki/` 目录结构（sources/raw、wiki/、resumes/、templates/ 等 16 个子目录）
+2. 创建 `~/.career_wiki/` 目录结构（sources/raw、wiki/ 各实体子目录、resumes/、templates/ 等；子目录清单以 `env_check.py --list-dirs` 为准）
 3. 安装 Node 依赖（gray-matter 等）
 4. 写入配置文件
 
@@ -181,7 +151,7 @@ env-init skill 会：
 - [ ] file-parser 提取的 markdown 在 `sources/raw/uploads/` 下，原始文件在 `sources/uploads/`
 - [ ] wiki-engine compile 后 `wiki/` 各子目录有页面
 - [ ] wiki-engine lint 无 error（warn 可接受）
-- [ ] resume-generator API server 可启动，9 个接口可调
+- [ ] resume-generator API server 可启动，接口数以 `api_server.mjs` 路由表为准（当前 13 个，跑 `node skills/resume-generator/scripts/api_server.mjs` 看启动 banner）
 - [ ] web-editor 前端可打开，拖拽/预览/导出功能正常
 - [ ] web-editor 多简历切换/新建/复制/删除正常，配置在 `resumes/` 下
 - [ ] web-editor 模板复制/删除正常，模板在 `templates/` 下

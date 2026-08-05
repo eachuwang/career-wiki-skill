@@ -60,7 +60,7 @@ export function normalizeRelationTarget(target) {
 }
 
 /** 解析单个 wiki markdown 文件 → 实体对象 */
-export async function parseWikiFile(filePath, wikiRoot, { projectResponsibilities } = {}) {
+export async function parseWikiFile(filePath, wikiRoot) {
   const raw = await readFile(filePath, 'utf-8');
   const parsed = matter(raw);
   const fm = parsed.data || {};
@@ -77,11 +77,9 @@ export async function parseWikiFile(filePath, wikiRoot, { projectResponsibilitie
   for (const [k, v] of Object.entries(fm)) {
     if (!META_KEYS.includes(k)) fields[k] = v;
   }
-  // 旧版项目正文兼容：调用方提供 responsibilities 提取函数时启用
-  if (projectResponsibilities && fm.entity === 'project' && !fields.responsibilities) {
-    const responsibilities = projectResponsibilities(content);
-    if (responsibilities) fields.responsibilities = responsibilities;
-  }
+  // responsibilities 等字段在 wiki 全量重建后由 compile 写进 frontmatter，
+  // 旧版正文兼容提取已删（候选 G）：旧 wiki 若仍在正文用「**岗位职责：**」段落，
+  // 需重跑 compile 落进 frontmatter 才能被解析。
 
   return {
     path: relPath,

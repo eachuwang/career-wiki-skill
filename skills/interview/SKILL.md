@@ -186,16 +186,12 @@ interviewer: career-wiki-skill
 > 🔴 **CHECKPOINT** — 触发 compile 前必须完成以下确认
 >
 > 1. 向用户确认：采访已结束，即将写入 raw 文件并触发 wiki 引擎 compile
-> 2. 告知用户 compile 可能需要时间（有 subagent 则并行，无则同步阻塞）
-> 3. 用户确认后，执行以下步骤：
+> 2. 用户确认后，执行以下步骤：
 >
 > 1. 用 `write_file` 写 `~/.career_wiki/sources/raw/interview-{timestamp}.md`
 >    - frontmatter：`interview_date / round / interviewer: career-wiki-skill`
 >    - 正文按 7 节组织，用户原话用 `>` 引用块，Agent 确认用普通文本
-> 2. **自动触发 wiki 引擎 compile**（F04）：
->    - **有 subagent 能力**：并行触发 compile，不阻塞用户
->    - **无 subagent 能力**：同步执行 compile，跑完告诉用户"已编译进 wiki"
-> 3. 告诉用户文件路径 + compile 状态
+> 2. **触发 wiki 引擎 compile**（F04）—— 执行协议见 `skills/wiki-engine/SKILL.md` 的「采集 skill 触发 compile 的协议」章节（subagent 并行 / 同步、全量重建语义、反馈要求）。本 SKILL.md 不复述，避免协议漂移。
 
 ## 续采支持
 
@@ -209,7 +205,7 @@ interviewer: career-wiki-skill
 ## 跨 Agent 一致性
 
 - 假设所有支持 skill 的 Agent 有基本对话能力（能问问题、记回答、写文件）
-- **不做降级**——如果 Agent 不支持 subagent 并行，就同步跑 compile
+- compile 执行方式（subagent 并行 / 无则同步）遵循 wiki-engine 的触发协议，不做降级
 - 问题树和产出格式是硬约束，对话风格可适配
 
 ## Common Pitfalls
@@ -222,7 +218,7 @@ interviewer: career-wiki-skill
 
 4. **空问没经历的节。** 阶段 6 四个子节，用户没证书就跳过，别每个都问"有没有"。
 
-5. **忘记触发 compile。** 阶段 8 写完文件必须调 wiki 引擎。有 subagent 就并行，没有就同步，不能跳过。
+5. **忘记触发 compile。** 阶段 8 写完文件必须调 wiki 引擎，按其触发协议执行，不能跳过。
 
 6. **主动问薪资。** 薪资是可选字段，除非用户主动提，不要追问。
 

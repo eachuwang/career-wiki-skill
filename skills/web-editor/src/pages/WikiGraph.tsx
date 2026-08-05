@@ -10,7 +10,7 @@ import { useState, useMemo } from 'react';
 import GraphCanvas from '../components/GraphCanvas';
 import UiIcon from '../components/UiIcon';
 import type { WikiSnapshot, WikiEntity, ResumeConfig, GapAnalysis } from '../types';
-import * as api from '../api/client';
+import { analyzeGaps } from '../wiki/analyzeGaps';
 
 interface WikiGraphProps {
   wiki: WikiSnapshot | null;
@@ -24,7 +24,7 @@ export default function WikiGraph({ wiki, resumes, onRefreshWiki }: WikiGraphPro
   // 缺口分析
   const gapAnalysis: GapAnalysis | null = useMemo(() => {
     if (!wiki) return null;
-    return api.analyzeGaps(wiki, resumes);
+    return analyzeGaps(wiki, resumes);
   }, [wiki, resumes]);
 
   // 缺口统计

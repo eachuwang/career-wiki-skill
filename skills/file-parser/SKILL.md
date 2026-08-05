@@ -102,11 +102,7 @@ interviewer: career-wiki-skill
 
 ### 步骤 4：触发 wiki 引擎 compile
 
-跟 interview skill 一致：
-
-1. **有 subagent 能力** → 并行触发 compile，不阻塞用户
-2. **无 subagent 能力** → 同步执行 compile，跑完告诉用户
-3. 告诉用户：原始文件路径 + 提取的 markdown 路径 + compile 状态
+写完 raw 后触发 wiki 引擎 compile，执行协议见 `skills/wiki-engine/SKILL.md` 的「采集 skill 触发 compile 的协议」章节（subagent 并行 / 同步、全量重建语义、反馈要求）。本 SKILL.md 不复述，避免协议漂移。
 
 ## 续解析支持
 
@@ -131,7 +127,7 @@ interviewer: career-wiki-skill
 
 4. **把提取的 markdown 和原始文件放同一目录。** 原始文件在 `sources/uploads/`，提取产出在 `sources/raw/uploads/`，分开存。
 
-5. **忘记触发 compile。** 步骤 4 必须调 wiki 引擎。有 subagent 并行，没有同步，不能跳过。
+5. **忘记触发 compile。** 步骤 4 必须调 wiki 引擎，按其触发协议执行，不能跳过。
 
 6. **vision 识别不确认就写。** 图片/扫描件 vision 提取的内容，如果置信度低（文字模糊、布局复杂），告诉用户"识别可能有误，原始文件在 X，请核对"。
 

@@ -82,18 +82,7 @@ export async function collectJson(dir) {
   return results;
 }
 
-/** 从旧版项目正文中提取岗位职责，兼容尚未结构化该字段的 Wiki。 */
-export function extractResponsibilities(content) {
-  const heading = /\*\*岗位职责[:：]?\*\*/.exec(content);
-  if (!heading) return '';
-
-  const remainder = content.slice(heading.index + heading[0].length);
-  const nextHeadingIndex = remainder.search(/\n\s*\*\*[^*\n]+[:：]?\*\*/);
-  const section = nextHeadingIndex >= 0
-    ? remainder.slice(0, nextHeadingIndex)
-    : remainder;
-  return section.replace(/\s*\n+\s*/g, ' ').trim();
-}
+// responsibilities 等字段由 compile 写进 frontmatter，旧版正文兼容提取已删（候选 G）。
 
 // ── wiki 读取 handler ─────────────────────────────────
 
@@ -149,7 +138,7 @@ export async function handleGetWiki(wikiRoot, res, query, sendJson) {
   let entities = [];
   for (const f of files) {
     try {
-      const ent = await parseWikiFile(f, wikiPath, { projectResponsibilities: extractResponsibilities });
+      const ent = await parseWikiFile(f, wikiPath);
       entities.push(ent);
     } catch {
       // 跳过解析失败的文件
@@ -190,7 +179,7 @@ export async function handleGetWikiEntity(wikiRoot, res, entityDir, id, sendJson
   }
 
   try {
-    const ent = await parseWikiFile(filePath, join(wikiRoot, 'wiki'), { projectResponsibilities: extractResponsibilities });
+    const ent = await parseWikiFile(filePath, join(wikiRoot, 'wiki'));
     sendJson(res, 200, ent);
   } catch (e) {
     sendJson(res, 500, { error: '解析失败', message: e.message });

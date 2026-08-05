@@ -4,9 +4,12 @@
 用法:
     python3 skills/env-init/scripts/env_check.py
     python3 skills/env-init/scripts/env_check.py --root /custom/path
+    python3 skills/env-init/scripts/env_check.py --list-dirs
+
+`--list-dirs` 打印数据目录结构（SKILL.md 文档层引用此输出作为单一事实源）。
 
 退出码:
-    0 — 全部通过
+    0 — 全部通过 / 仅打印目录清单
     1 — 有失败项
 """
 
@@ -17,6 +20,7 @@ import os
 import shutil
 import subprocess
 import sys
+from datetime import date
 from pathlib import Path
 
 
@@ -152,30 +156,57 @@ def ensure_dirs(root: Path) -> list[str]:
 
 
 def write_config(root: Path) -> bool:
-    """写 ~/.career_wiki/.career-wiki-skill/config.json。返回是否新建。"""
+    """写 ~/.career_wiki/.career-wiki-skill/config.json，脚本全权填字段（含 created 时间戳）。
+
+    消灭旧版「脚本写一半 + SKILL.md 让 LLM 补另一半（created 留空）」的洞——
+    脚本是 config.json 的单一写入方，时间戳由脚本自填。
+    返回是否新建。
+    """
     cfg_path = root / ".career-wiki-skill" / "config.json"
     if cfg_path.exists():
         return False
     cfg = {
         "version": "1.0",
         "root": str(root),
-        "created": None,  # Agent 会填实际时间
+        "created": date.today().isoformat(),
     }
     cfg_path.parent.mkdir(parents=True, exist_ok=True)
     cfg_path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
     return True
 
 
+def list_dirs() -> int:
+    """打印数据目录结构清单。SKILL.md 文档层引用此输出，避免目录清单多处复述漂移。"""
+    print("# career-wiki-skill 数据目录结构（env_check.py --list-dirs 为权威来源）")
+    print("# 根: ~/.career_wiki/（可由 --root 覆盖）")
+    for rel in ALL_DIRS:
+        print(f"  {rel}/")
+    return 0
+
+
 # ---------- 主流程 ----------
 
-def main() -> int:
-    # 支持自定义 root
+def parse_args(argv: list[str]) -> tuple[str | None, bool]:
+    """解析 --root <path> 与 --list-dirs。返回 (root_arg, list_only)。"""
     root_arg = None
-    args = sys.argv[1:]
+    list_only = False
+    args = argv[1:]
+    if "--list-dirs" in args:
+        list_only = True
     if "--root" in args:
         i = args.index("--root")
         if i + 1 < len(args):
             root_arg = args[i + 1]
+    return root_arg, list_only
+
+
+def main() -> int:
+    root_arg, list_only = parse_args(sys.argv)
+
+    if list_only:
+        return list_dirs()
+
+    # 支持自定义 root
 
     print("=" * 50)
     print("career-wiki-skill 环境检查")

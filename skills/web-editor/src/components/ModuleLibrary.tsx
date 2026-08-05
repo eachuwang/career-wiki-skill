@@ -4,7 +4,7 @@
  * 列出 10 个可拖拽的简历模块。用户拖拽到中间编辑区添加。
  */
 
-import { MODULE_LIBRARY } from '../types';
+import { MODULE_LIBRARY } from '../constants';
 import type { ModuleDef } from '../types';
 import { useDraggable } from '@dnd-kit/core';
 import UiIcon from './UiIcon';

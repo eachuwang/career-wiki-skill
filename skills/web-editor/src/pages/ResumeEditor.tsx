@@ -1,23 +1,21 @@
 /**
- * ResumeEditor — 简历编辑器页面
+ * ResumeEditor — 简历编辑器页面（编排 + 渲染壳）
  *
  * 布局：顶栏 + 左侧模块库 + 中间编辑区 + 右侧预览
  *
- * 顶栏：简历名称 | 模板选择 | 脱敏设置 | 导出PDF | 导出HTML | 导出JSON | 保存
+ * 职责域已拆分到 hooks：
+ * - useResumes：多简历 CRUD（选择 / 新建 / 复制 / 删除）
+ * - useTemplates：模板 CRUD（复制 / 删除 / 切换）
+ * - useModules：模块操作 + dnd-kit 拖拽
+ * 本组件只负责跨域协调（loadResume / save / export）与布局渲染。
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import {
   DndContext,
-  type DragEndEvent,
-  type DragStartEvent,
   DragOverlay,
-  PointerSensor,
-  useSensor,
-  useSensors,
   closestCorners,
 } from '@dnd-kit/core';
-import { arrayMove } from '@dnd-kit/sortable';
 
 import ModuleLibrary from '../components/ModuleLibrary';
 import EditPanel from '../components/EditPanel';
@@ -33,24 +31,21 @@ import type {
   TemplateConfig,
   ResumeConfig,
   PrivacyConfig,
-  EntityType,
 } from '../types';
-import { MODULE_LIBRARY } from '../types';
+import { MODULE_LIBRARY } from '../constants';
 
 import * as api from '../api/client';
 import { createResumeConfig, getHiddenItemIds } from '../resume/config';
-import { toggleHiddenItem } from '../resume/visibility';
+import { DEFAULT_EDITOR_PRIVACY } from '../resume/privacy';
 import {
   buildStandaloneResumeHtml,
   collectDocumentCss,
   downloadResumePdf,
 } from '../resume/export';
 
-let moduleIdCounter = 0;
-function genId(): string {
-  moduleIdCounter++;
-  return `module-${moduleIdCounter}`;
-}
+import { useResumes, genId } from '../hooks/useResumes';
+import { useTemplates } from '../hooks/useTemplates';
+import { useModules } from '../hooks/useModules';
 
 interface ResumeEditorProps {
   wikiEntities: WikiEntity[];
@@ -65,41 +60,50 @@ export default function ResumeEditor({
   resumes,
   onRefreshWiki,
 }: ResumeEditorProps) {
-  // 当前简历配置（resumeList 为本地管理的简历列表，支持新建/复制/删除后即时刷新）
-  const [currentResumeId, setCurrentResumeId] = useState<string>('');
-  const [resumeList, setResumeList] = useState<ResumeConfig[]>(resumes);
-  const [templateList, setTemplateList] = useState<TemplateConfig[]>(templates);
   const [resumeName, setResumeName] = useState('新建简历');
-  const [templateId, setTemplateId] = useState<string>('');
-  const [privacy, setPrivacy] = useState<PrivacyConfig>({
-    mask_name: false,
-    mask_phone: true,
-    mask_email: true,
-    mask_salary: true,
-    mask_company: false,
-    mask_github: false,
-  });
-  const [modules, setModules] = useState<ModuleInstance[]>([]);
-  const [activeDrag, setActiveDrag] = useState<{ id: string; type: string } | null>(null);
+  const [privacy, setPrivacy] = useState<PrivacyConfig>(DEFAULT_EDITOR_PRIVACY);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
   const [workspaceView, setWorkspaceView] = useState<'edit' | 'preview'>('edit');
 
-  // 加载简历配置
+  // 模板管理
+  const {
+    templateList,
+    templateId,
+    setTemplateId,
+    currentTemplate,
+    handleDuplicateTemplate,
+    handleDeleteTemplate,
+  } = useTemplates({ initialTemplates: templates });
+
+  // handleSave 需要穿过多层 hook，用 ref 打破循环依赖
+  const saveRef = useRef<(modulesOverride?: ModuleInstance[]) => Promise<void>>(
+    async () => {},
+  );
+
+  // 模块操作 + dnd
+  const {
+    modules,
+    setModules,
+    activeDrag,
+    sensors,
+    handleDragStart,
+    handleDragEnd,
+    handleToggleExpand,
+    handleOverrideField,
+    handleRemoveModule,
+    handleReorderModule,
+    handleToggleItemVisibility,
+  } = useModules({
+    onRemoveSave: async (mods) => saveRef.current(mods),
+  });
+
+  // 将简历配置加载到编辑器状态（跨域协调）
   const loadResume = useCallback(
     (config: ResumeConfig) => {
       setResumeName(config.name);
       setTemplateId(config.template);
-      setPrivacy(
-        config.privacy || {
-          mask_name: false,
-          mask_phone: true,
-          mask_email: true,
-          mask_salary: true,
-          mask_company: false,
-          mask_github: false,
-        },
-      );
+      setPrivacy(config.privacy || DEFAULT_EDITOR_PRIVACY);
       setModules(
         (config.modules || []).map((type) => {
           const def = MODULE_LIBRARY.find((m) => m.type === type);
@@ -114,323 +118,72 @@ export default function ResumeEditor({
         }),
       );
     },
-    [],
+    [setTemplateId, setModules],
   );
 
-  // App 刷新数据时同步本地简历/模板列表
-  useEffect(() => {
-    setResumeList(resumes);
-  }, [resumes]);
-  useEffect(() => {
-    setTemplateList(templates);
-  }, [templates]);
+  const onResetEmpty = useCallback(() => {
+    setResumeName('新建简历');
+    setPrivacy(DEFAULT_EDITOR_PRIVACY);
+    setModules([]);
+  }, [setModules]);
 
-  // 加载第一份简历
-  useEffect(() => {
-    if (resumeList.length > 0 && !currentResumeId) {
-      setCurrentResumeId(resumeList[0].id);
-      loadResume(resumeList[0]);
-      // 简历配置里已带模板，直接返回；
-      // 否则下面的默认模板逻辑会在同一次 effect 里用闭包中的旧值
-      // 把 loadResume 设置的 templateId 覆盖掉
-      return;
-    }
-    // 默认模板（仅在没有简历配置时兜底）
-    if (templates.length > 0 && !templateId) {
-      setTemplateId(templates[0].id);
-    }
-  }, [resumeList, templates, currentResumeId, templateId, loadResume]);
+  // 多简历管理
+  const {
+    currentResumeId,
+    resumeList,
+    handleSelectResume,
+    handleNewResume,
+    handleDuplicateResume,
+    handleDeleteResume,
+  } = useResumes({
+    initialResumes: resumes,
+    templates,
+    templateId,
+    onLoadResume: loadResume,
+    onResetEmpty,
+  });
 
-  // ---------- 多简历管理（原 multi-resume 能力） ----------
+  // ---------- 导出与保存 ----------
 
-  /** 重新拉取简历列表并同步本地状态，返回最新列表 */
-  const refreshResumeList = async (): Promise<ResumeConfig[]> => {
-    const fresh = await api.getResumes();
-    setResumeList(fresh);
-    return fresh;
-  };
-
-  /** 切换简历：按 id 加载对应配置 */
-  const handleSelectResume = (id: string) => {
-    const config = resumeList.find((r) => r.id === id);
-    if (!config || id === currentResumeId) return;
-    setCurrentResumeId(id);
-    loadResume(config);
-  };
-
-  /** 新建简历：默认模板 + 常用模块，保存后立即加载 */
-  const handleNewResume = async () => {
-    const newId = `resume-${Date.now()}`;
-    // 常用模块按模块库定义构造 ModuleInstance 列表
-    const defaultTypes: EntityType[] = [
-      'person',
-      'experience',
-      'project',
-      'skill',
-      'education',
-    ];
-    const newModules: ModuleInstance[] = defaultTypes.map((type) => {
-      const def = MODULE_LIBRARY.find((m) => m.type === type);
-      return {
-        id: genId(),
-        type,
-        label: def?.label || type,
-        expanded: false,
-        overrides: {},
-        hiddenItemIds: [],
-      };
-    });
-    const config = createResumeConfig({
-      resumeName: `新简历 ${resumeList.length + 1}`,
-      resumeId: newId,
-      templateId: templateId || templates[0]?.id || '',
-      privacy: {
-        mask_name: false,
-        mask_phone: true,
-        mask_email: true,
-        mask_salary: true,
-        mask_company: false,
-        mask_github: false,
-      },
-      modules: newModules,
-    });
-    try {
-      await api.saveResume(config);
-      const fresh = await refreshResumeList();
-      const created = fresh.find((r) => r.id === newId);
-      if (created) {
-        setCurrentResumeId(created.id);
-        loadResume(created);
-      }
-    } catch (e) {
-      alert(`新建简历失败: ${e instanceof Error ? e.message : e}`);
-    }
-  };
-
-  /** 复制当前简历：生成新 id/name，保留模板/模块/脱敏配置 */
-  const handleDuplicateResume = async () => {
-    const source = resumeList.find((r) => r.id === currentResumeId);
-    if (!source) return;
-    const newId = `${source.id}-copy`;
-    const copy: ResumeConfig = {
-      ...source,
-      id: newId,
-      name: `${source.name} 副本`,
-      created: new Date().toISOString().slice(0, 10),
-      updated: new Date().toISOString().slice(0, 10),
-    };
-    try {
-      await api.saveResume(copy);
-      const fresh = await refreshResumeList();
-      const created = fresh.find((r) => r.id === newId);
-      if (created) {
-        setCurrentResumeId(created.id);
-        loadResume(created);
-      }
-    } catch (e) {
-      alert(`复制简历失败: ${e instanceof Error ? e.message : e}`);
-    }
-  };
-
-  /** 删除当前简历：确认后删除配置并切到剩余第一份 */
-  const handleDeleteResume = async () => {
-    const target = resumeList.find((r) => r.id === currentResumeId);
-    if (!target || resumeList.length <= 1) return;
-    if (!window.confirm(`确定删除简历「${target.name}」？仅删除配置，wiki 数据不受影响。`)) return;
-    try {
-      await api.deleteResume(target.id);
-      const fresh = await refreshResumeList();
-      if (fresh.length > 0) {
-        setCurrentResumeId(fresh[0].id);
-        loadResume(fresh[0]);
-      } else {
-        // 无简历：重置为空状态
-        setCurrentResumeId('');
-        setResumeName('新建简历');
-        setModules([]);
-      }
-    } catch (e) {
-      alert(`删除简历失败: ${e instanceof Error ? e.message : e}`);
-    }
-  };
-
-  // 当前模板对象
-  const currentTemplate = templateList.find((t) => t.id === templateId) || null;
-
-  // ---------- 模板管理（原 template-manager 能力） ----------
-
-  /** 复制当前模板：生成新 id/name，携带源模板 CSS */
-  const handleDuplicateTemplate = async () => {
-    const source = templateList.find((t) => t.id === templateId);
-    if (!source) return;
-    const newId = `${source.id}-copy`;
-    const copy: TemplateConfig = {
-      ...source,
-      id: newId,
-      name: `${source.name} 副本`,
-    };
-    try {
-      const css = await api.getTemplateCss(source.id);
-      await api.saveTemplate(copy, css);
-      const fresh = await api.getTemplates();
-      setTemplateList(fresh);
-      setTemplateId(newId);
-    } catch (e) {
-      alert(`复制模板失败: ${e instanceof Error ? e.message : e}`);
-    }
-  };
-
-  /** 删除当前模板：确认后删除 JSON + CSS，切到剩余第一个模板 */
-  const handleDeleteTemplate = async () => {
-    if (!templateId || templateList.length <= 1) return;
-    const target = templateList.find((t) => t.id === templateId);
-    if (!target) return;
-    if (!window.confirm(`确定删除模板「${target.name}」？`)) return;
-    try {
-      await api.deleteTemplate(target.id);
-      const fresh = await api.getTemplates();
-      setTemplateList(fresh);
-      const next = fresh[0]?.id || '';
-      setTemplateId(next);
-    } catch (e) {
-      alert(`删除模板失败: ${e instanceof Error ? e.message : e}`);
-    }
-  };
-
-  // ---------- dnd-kit handlers ----------
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
-  );
-
-  const handleDragStart = (e: DragStartEvent) => {
-    setActiveDrag({ id: String(e.active.id), type: String(e.active.data.current?.source) });
-  };
-
-  const handleDragEnd = (e: DragEndEvent) => {
-    setActiveDrag(null);
-    const { active, over } = e;
-    if (!over) return;
-
-    // 从模块库拖入编辑区
-    // 注意：编辑区非空时，useSortable 让每个模块卡片也成为 droppable，
-    // closestCorners 会把 over 解析成卡片而非 edit-area 容器，
-    // 所以这里必须同时处理两种落点，否则第二个模块永远拖不进来。
-    if (active.data.current?.source === 'library') {
-      const moduleType = active.data.current?.moduleType as EntityType;
-      const def = MODULE_LIBRARY.find((m) => m.type === moduleType);
-      if (!def) return;
-      const newModule: ModuleInstance = {
-        id: genId(),
-        type: moduleType,
-        label: def.label,
-        expanded: false,
-        overrides: {},
-        hiddenItemIds: [],
-      };
-      setModules((prev) => {
-        // 落在某个已有模块上 → 插入到它前面；落在空白处 → 追加到末尾
-        const overIndex = prev.findIndex((m) => m.id === over.id);
-        if (overIndex >= 0) {
-          const next = [...prev];
-          next.splice(overIndex, 0, newModule);
-          return next;
-        }
-        return [...prev, newModule];
+  const buildResumeConfig = useCallback(
+    (modulesOverride?: ModuleInstance[]): ResumeConfig => {
+      const baseConfig = resumes.find((resume) => resume.id === currentResumeId);
+      return createResumeConfig({
+        resumeName,
+        resumeId: currentResumeId,
+        templateId,
+        privacy,
+        modules: modulesOverride ?? modules,
+        baseConfig,
       });
-      return;
-    }
+    },
+    [resumes, currentResumeId, resumeName, templateId, privacy, modules],
+  );
 
-    // 编辑区内排序
-    if (active.id !== over.id) {
-      const oldIndex = modules.findIndex((m) => m.id === active.id);
-      const newIndex = modules.findIndex((m) => m.id === over.id);
-      if (oldIndex >= 0 && newIndex >= 0) {
-        setModules((prev) => arrayMove(prev, oldIndex, newIndex));
+  const handleSave = useCallback(
+    async (modulesOverride?: ModuleInstance[]) => {
+      setSaving(true);
+      setSaveMsg('');
+      try {
+        const config = buildResumeConfig(modulesOverride);
+        await api.saveResume(config);
+        setSaveMsg(modulesOverride ? '已删除并保存' : '已保存');
+        setTimeout(() => setSaveMsg(''), 3000);
+      } catch (e) {
+        setSaveMsg(`保存失败：${e instanceof Error ? e.message : e}`);
+      } finally {
+        setSaving(false);
       }
-    }
-  };
+    },
+    [buildResumeConfig],
+  );
 
-  // ---------- 模块操作 ----------
+  // 刷新 ref，供 useModules.onRemoveSave 调用
+  saveRef.current = handleSave;
 
-  const handleToggleExpand = (id: string) => {
-    setModules((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, expanded: !m.expanded } : m)),
-    );
-  };
-
-  const handleOverrideField = (moduleId: string, field: string, value: unknown) => {
-    setModules((prev) =>
-      prev.map((m) =>
-        m.id === moduleId
-          ? { ...m, overrides: { ...m.overrides, [field]: value } }
-          : m,
-      ),
-    );
-  };
-
-  const handleRemoveModule = async (id: string) => {
-    // 用删除后的模块列表更新界面，并立即保存，
-    // 保证刷新后被删组件不会重新出现。
-    const nextModules = modules.filter((m) => m.id !== id);
-    setModules(nextModules);
-    await handleSave(nextModules);
-  };
-
-  /** 为键盘用户提供确定性的模块排序入口，并限制索引不越界。 */
-  const handleReorderModule = (oldIndex: number, newIndex: number) => {
-    if (newIndex < 0 || newIndex >= modules.length || oldIndex === newIndex) return;
-    setModules((prev) => arrayMove(prev, oldIndex, newIndex));
-  };
-
-  /** 切换子项在当前简历中的可见性，不触碰 Wiki 数据。 */
-  const handleToggleItemVisibility = (moduleId: string, itemId: string) => {
-    setModules((prev) =>
-      prev.map((module) =>
-        module.id === moduleId
-          ? {
-              ...module,
-              hiddenItemIds: toggleHiddenItem(module.hiddenItemIds, itemId),
-            }
-          : module,
-      ),
-    );
-  };
-
-  // ---------- 导出 ----------
-
-  const buildResumeConfig = (modulesOverride?: ModuleInstance[]): ResumeConfig => {
-    const baseConfig = resumes.find((resume) => resume.id === currentResumeId);
-    return createResumeConfig({
-      resumeName,
-      resumeId: currentResumeId,
-      templateId,
-      privacy,
-      modules: modulesOverride ?? modules,
-      baseConfig,
-    });
-  };
-
-  const handleSave = async (modulesOverride?: ModuleInstance[]) => {
-    setSaving(true);
-    setSaveMsg('');
-    try {
-      const config = buildResumeConfig(modulesOverride);
-      await api.saveResume(config);
-      setSaveMsg(modulesOverride ? '已删除并保存' : '已保存');
-      setTimeout(() => setSaveMsg(''), 3000);
-    } catch (e) {
-      setSaveMsg(`保存失败：${e instanceof Error ? e.message : e}`);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  /** 复用当前预览 DOM 生成 PDF，确保下载内容与用户所见一致。 */
-  const handleExportPDF = async () => {
+  const handleExportPDF = useCallback(async () => {
     const resumeElement = document.querySelector<HTMLElement>('.print-area');
     if (!resumeElement) return;
-
     try {
       await downloadResumePdf({
         element: resumeElement,
@@ -439,9 +192,9 @@ export default function ResumeEditor({
     } catch (e) {
       alert(`导出 PDF 失败: ${e instanceof Error ? e.message : e}`);
     }
-  };
+  }, [resumeName]);
 
-  const handleExportHTML = () => {
+  const handleExportHTML = useCallback(() => {
     const resumeMarkup = document.querySelector('.print-area')?.outerHTML;
     if (!resumeMarkup) return;
     const fullHTML = buildStandaloneResumeHtml({
@@ -456,9 +209,9 @@ export default function ResumeEditor({
     a.download = `${resumeName}.html`;
     a.click();
     URL.revokeObjectURL(url);
-  };
+  }, [resumeName]);
 
-  const handleExportJSON = async () => {
+  const handleExportJSON = useCallback(async () => {
     try {
       const config = buildResumeConfig();
       const blob = await api.exportResumeJson(config);
@@ -471,7 +224,7 @@ export default function ResumeEditor({
     } catch (e) {
       alert(`导出 JSON 失败: ${e instanceof Error ? e.message : e}`);
     }
-  };
+  }, [buildResumeConfig, resumeName]);
 
   // ---------- 渲染 ----------
 

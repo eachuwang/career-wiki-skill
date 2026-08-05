@@ -16,14 +16,14 @@
  *   - crud.mjs         简历/模板 CRUD + generate/export 共用的 config+template 加载逻辑
  *   - http.mjs         HTTP 壳：请求/响应原语、路由分发、generate/export 处理器、服务启动
  *
- * 13 个接口:
+ * 13 个接口（路由表在 http.mjs，是接口数的事实源；SKILL.md 同步此处）:
  *   GET    /api/health              — 健康检查
  *   GET    /api/wiki                — 所有 wiki 实体
  *   GET    /api/wiki/:entity/:id    — 单个实体详情
  *   GET    /api/resumes             — 所有简历配置
  *   GET    /api/templates           — 所有模板
  *   POST   /api/resume/generate     — 按模板+配置生成结构化简历 JSON
- *   POST   /api/resume/export       — 导出 PDF/HTML/JSON
+ *   POST   /api/resume/export       — 导出结构化简历 JSON（HTML/PDF 前端浏览器端生成，不经此接口）
  *   POST   /api/resume/save         — 保存简历配置
  *   POST   /api/resume/delete       — 删除简历配置
  *   POST   /api/template/save       — 创建/更新模板

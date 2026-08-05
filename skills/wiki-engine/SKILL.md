@@ -393,6 +393,22 @@ relations:
 
 ---
 
+## 采集 skill 触发 compile 的协议（F04）
+
+> 本节是**采集 skill（interview / file-parser）触发 compile 的单一事实源**。采集 skill 的 SKILL.md 只引用本节，不复述触发逻辑。
+
+采访 / 文件解析写完 raw 后，**必须**触发 wiki 引擎 compile。协议：
+
+1. **触发前确认** — 向用户确认即将写 raw 并触发 compile，告知 compile 可能耗时。
+2. **按 Agent 能力选执行方式**（不降级）：
+   - **有 subagent 能力** → 并行触发 compile，不阻塞用户。
+   - **无 subagent 能力** → 同步执行 compile，跑完告诉用户"已编译进 wiki"。
+3. **compile 后反馈** — 告诉用户 raw 文件路径 + compile 状态。
+
+全量重建语义：compile 扫 `sources/raw/` 下**所有** markdown（含 `uploads/`），不是只扫新增。续采 / 续解析只写新文件不改旧文件，compile 时全量合并。
+
+---
+
 ## Lint 检查
 
 compile 后运行 lint 脚本检查 wiki/ 完整性。检查项是确定性判定，由 `skills/wiki-engine/scripts/lint.mjs` 完成；Agent 只负责按报告定位问题、修 raw 或重跑 compile。

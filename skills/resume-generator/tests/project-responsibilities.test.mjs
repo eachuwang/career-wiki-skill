@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-/** 构造正文存岗位职责、frontmatter 存技术栈的兼容 Wiki 数据。 */
+/** 构造 frontmatter 含技术栈与岗位职责的结构化 Wiki 数据。 */
 async function createFixture() {
   const root = await mkdtemp(join(tmpdir(), 'career-wiki-responsibilities-'));
   await mkdir(join(root, 'wiki', 'projects'), { recursive: true });
@@ -19,14 +19,11 @@ role: 大模型应用工程师
 start: 2024-01
 end: present
 description: 自动生成数据接入脚本。
+responsibilities: 解析数据字典；生成 DDL 与 ETL 脚本；推荐数仓模型。
 tech_stack: Node.js、PostgreSQL、LangChain
 ---
 
 项目背景说明。
-
-**岗位职责：**
-
-解析数据字典；生成 DDL 与 ETL 脚本；推荐数仓模型。
 `,
   );
   await writeFile(

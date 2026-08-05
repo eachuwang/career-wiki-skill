@@ -14,7 +14,7 @@ import type {
   GraphEdge,
   GapAnalysis,
 } from '../types';
-import { ENTITY_COLORS, ENTITY_LABELS } from '../types';
+import { ENTITY_COLORS, ENTITY_LABELS } from '../constants';
 import { getReadableGraphTextColor } from '../graph/colors';
 import UiIcon from './UiIcon';
 

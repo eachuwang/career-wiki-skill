@@ -1,8 +1,10 @@
 /**
- * Career-Wiki-Skill API client — 封装对 resume-generator API server 的调用。
+ * Career-Wiki-Skill API client — 纯 HTTP 封装，对接 resume-generator API server。
  *
  * 开发时 Vite proxy 把 /api 代理到 http://localhost:3001。
  * 生产环境通过 VITE_API_URL 环境变量配置。
+ *
+ * 业务分析逻辑（缺口分析等）不在此文件 —— 见 src/wiki/analyzeGaps.ts。
  */
 
 import type {
@@ -10,7 +12,6 @@ import type {
   WikiEntity,
   TemplateConfig,
   ResumeConfig,
-  GapAnalysis,
 } from '../types';
 
 const BASE_URL = import.meta.env.VITE_API_URL || '';
@@ -156,59 +157,6 @@ export async function exportResumeJson(
 /** 触发 wiki 重新 compile */
 export async function refreshWiki(): Promise<void> {
   await request<void>('/api/wiki/refresh', { method: 'PUT' });
-}
-
-// ---------- 缺口分析（前端计算） ----------
-
-/**
- * 缺口分析：标记未出现在任何简历中的技能/项目 + 孤立实体。
- * 前端自己算，不需要后端接口。
- */
-export function analyzeGaps(
-  wiki: WikiSnapshot,
-  resumes: ResumeConfig[],
-): GapAnalysis {
-  // 收集所有简历中出现的技能名和项目名
-  const usedSkillNames = new Set<string>();
-  const usedProjectNames = new Set<string>();
-
-  for (const resume of resumes) {
-    for (const emp of resume.emphasize || []) {
-      if (emp.module === 'skill') {
-        emp.items.forEach((i) => usedSkillNames.add(i));
-      }
-      if (emp.module === 'project') {
-        emp.items.forEach((i) => usedProjectNames.add(i));
-      }
-    }
-  }
-
-  const allSkills = wiki.entities.filter((e) => e.entity === 'skill');
-  const allProjects = wiki.entities.filter((e) => e.entity === 'project');
-
-  const unusedSkills = allSkills.filter((e) => {
-    const name = String(e.fields.name || '');
-    return !usedSkillNames.has(name);
-  });
-
-  const unusedProjects = allProjects.filter((e) => {
-    const name = String(e.fields.name || '');
-    return !usedProjectNames.has(name);
-  });
-
-  // 孤立实体：没有任何关系指向或发出
-  // allRelations 的 from/to 已归一化为 entity.path 的形式（带 .md 后缀）
-  const connectedPaths = new Set<string>();
-  for (const rel of wiki.allRelations) {
-    connectedPaths.add(rel.from);
-    connectedPaths.add(rel.to);
-  }
-  // person 是根，不算孤立
-  const isolatedEntities = wiki.entities.filter(
-    (e) => e.entity !== 'person' && !connectedPaths.has(e.path),
-  );
-
-  return { unusedSkills, unusedProjects, isolatedEntities };
 }
 
 // ---------- 健康检查 ----------

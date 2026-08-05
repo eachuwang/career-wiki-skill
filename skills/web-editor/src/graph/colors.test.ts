@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { ENTITY_COLORS } from '../types/index.ts';
+import { ENTITY_COLORS } from '../constants.ts';
 import { getContrastRatio, getReadableGraphTextColor } from './colors.ts';
 
 test('每种实体徽章文字都满足 WCAG AA 对比度', () => {

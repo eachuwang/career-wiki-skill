@@ -73,35 +73,18 @@ export async function handleGenerate(wikiRoot, res, body) {
   }
 }
 
-/** POST /api/resume/export — 导出 PDF/HTML/JSON（JSON 直接返回，HTML/PDF 前端渲染） */
+/** POST /api/resume/export — 导出结构化简历 JSON（HTML/PDF 由前端在浏览器端生成，不经此接口） */
 export async function handleExport(wikiRoot, res, body) {
-  const format = body.format || 'json';
-
-  // 先生成简历 JSON（复用 generate 的加载逻辑）
+  // 生成简历 JSON（复用 generate 的加载逻辑）
   const { config, error: cfgErr } = await loadResumeConfig(wikiRoot, body);
   if (cfgErr) return sendJson(res, cfgErr.status, cfgErr.body);
 
-  const { template, templateId, error: tplErr } = await loadTemplate(wikiRoot, config);
+  const { template, error: tplErr } = await loadTemplate(wikiRoot, config);
   if (tplErr) return sendJson(res, tplErr.status, tplErr.body);
 
   try {
     const data = await assembleResume(config, template, wikiRoot);
-
-    if (format === 'json') {
-      return sendJson(res, 200, data);
-    }
-
-    // html / pdf — 返回数据 + 指令，前端负责渲染
-    return sendJson(res, 200, {
-      format,
-      data,
-      template_id: templateId,
-      css_path: `templates/${templateId}.css`,
-      instruction:
-        format === 'pdf'
-          ? '前端用模板 CSS 渲染 HTML 页面，用 window.print() 导出 PDF'
-          : '前端用模板 CSS 渲染 HTML 页面，保存为 .html 文件',
-    });
+    return sendJson(res, 200, data);
   } catch (e) {
     sendJson(res, 500, { error: '导出失败', message: e.message });
   }

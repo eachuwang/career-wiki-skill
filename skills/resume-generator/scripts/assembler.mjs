@@ -18,7 +18,7 @@ import {
   DEFAULT_PRIVACY,
   maskItemFields,
 } from './resume-rules.mjs';
-import { ENTITY_DIRS, extractResponsibilities } from './wiki-reader.mjs';
+import { ENTITY_DIRS } from './wiki-reader.mjs';
 
 /**
  * 数据组装核心函数
@@ -54,7 +54,7 @@ export async function assembleResume(config, template, wikiRoot) {
     let items = [];
     for (const f of mdFiles) {
       try {
-        const ent = await parseWikiFile(f, wikiPath, { projectResponsibilities: extractResponsibilities });
+        const ent = await parseWikiFile(f, wikiPath);
         // 按共享规则解析展示字段（project 强制补 responsibilities/tech_stack）
         const sectionFields = getSectionFields(section, module);
         const item = {};
@@ -121,7 +121,7 @@ export async function assembleResume(config, template, wikiRoot) {
   const personFiles = await collectMarkdown(personDir, { tolerateMissing: true });
   if (personFiles.length > 0) {
     try {
-      const ent = await parseWikiFile(personFiles[0], wikiPath, { projectResponsibilities: extractResponsibilities });
+      const ent = await parseWikiFile(personFiles[0], wikiPath);
       personData = { ...ent.fields };
       personData._links = ent.links;
       personData._path = ent.path;

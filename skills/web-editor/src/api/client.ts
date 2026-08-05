@@ -108,7 +108,7 @@ export async function exportResumeJson(
   const resp = await fetch(BASE_URL + '/api/resume/export', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...config, format: 'json' }),
+    body: JSON.stringify({ config, format: 'json' }),
   });
   if (!resp.ok) throw new Error('导出 JSON 失败');
   return resp.blob();

@@ -15,6 +15,7 @@ import type {
   GapAnalysis,
 } from '../types';
 import { ENTITY_COLORS, ENTITY_LABELS } from '../types';
+import { getReadableGraphTextColor } from '../graph/colors';
 
 interface GraphCanvasProps {
   wiki: WikiSnapshot | null;
@@ -81,7 +82,14 @@ export default function GraphCanvas({
               : ENTITY_COLORS[n.group as keyof typeof ENTITY_COLORS],
             border: gapPaths.has(n.id) ? '#c0392b' : '#2c3e50',
           },
-          font: { color: '#fff', size: 14 },
+          font: {
+            color: '#302a25',
+            size: 14,
+            face: 'system-ui, PingFang SC, Microsoft YaHei, sans-serif',
+            background: 'rgba(255, 253, 249, 0.9)',
+            strokeWidth: 2,
+            strokeColor: '#fffdf9',
+          },
           shape: gapPaths.has(n.id) ? 'diamond' : 'dot',
           size: gapPaths.has(n.id) ? 20 : 15,
         })),
@@ -91,8 +99,14 @@ export default function GraphCanvas({
         graphEdges.map((e) => ({
           ...e,
           arrows: 'to',
-          color: { color: '#bdc3c7', highlight: '#3498db' },
-          font: { size: 10, color: '#95a5a6' },
+          color: { color: '#b8aa99', highlight: '#7f5035' },
+          font: {
+            size: 11,
+            color: '#50473f',
+            background: 'rgba(255, 253, 249, 0.82)',
+            strokeWidth: 2,
+            strokeColor: '#fffdf9',
+          },
         })),
       );
 
@@ -149,7 +163,7 @@ export default function GraphCanvas({
     <div className="h-full flex flex-col">
       {/* 工具栏 */}
       <div className="flex items-center gap-3 px-4 py-2 border-b border-ink-200 bg-white no-print">
-        <span className="text-sm font-medium text-ink-800">Wiki 图谱</span>
+        <span className="text-sm font-semibold text-ink-900">Wiki 图谱</span>
         <div className="flex-1" />
         <label className="flex items-center gap-1 text-xs text-ink-600 cursor-pointer">
           <input
@@ -167,11 +181,11 @@ export default function GraphCanvas({
         <div className="flex-1 relative bg-ink-50">
           <div ref={containerRef} className="w-full h-full" />
           {/* 图例 */}
-          <div className="absolute bottom-4 left-4 bg-white/90 rounded-lg shadow p-3 no-print">
-            <div className="text-xs font-medium text-ink-600 mb-2">实体类型</div>
+          <div className="absolute bottom-4 left-4 bg-white/95 rounded-lg shadow p-3 text-ink-800 no-print">
+            <div className="text-xs font-semibold text-ink-800 mb-2">实体类型</div>
             <div className="space-y-1">
               {legend.map(([type, color]) => (
-                <div key={type} className="flex items-center gap-2 text-xs">
+                <div key={type} className="flex items-center gap-2 text-xs text-ink-800">
                   <span
                     className="w-3 h-3 rounded-full"
                     style={{ background: color }}
@@ -180,7 +194,7 @@ export default function GraphCanvas({
                 </div>
               ))}
               {showGaps && (
-                <div className="flex items-center gap-2 text-xs pt-1 border-t border-ink-100 mt-1">
+                <div className="flex items-center gap-2 text-xs text-ink-800 pt-1 border-t border-ink-200 mt-1">
                   <span className="w-3 h-3 rotate-45 bg-red-400" />
                   缺口/孤立
                 </div>
@@ -194,14 +208,17 @@ export default function GraphCanvas({
           <div className="w-80 border-l border-ink-200 bg-white overflow-y-auto p-4 no-print">
             <div className="flex items-center justify-between mb-3">
               <span
-                className="px-2 py-0.5 rounded text-xs text-white"
-                style={{ background: ENTITY_COLORS[selectedNode.entity] }}
+                className="px-2 py-0.5 rounded text-xs font-semibold"
+                style={{
+                  background: ENTITY_COLORS[selectedNode.entity],
+                  color: getReadableGraphTextColor(ENTITY_COLORS[selectedNode.entity]),
+                }}
               >
                 {ENTITY_LABELS[selectedNode.entity]}
               </span>
               <button
                 onClick={() => onSelectNode(null)}
-                className="text-ink-400 hover:text-ink-600"
+                className="text-ink-600 hover:text-ink-900"
               >
                 ✕
               </button>
@@ -219,12 +236,12 @@ function NodeDetail({ entity }: { entity: WikiEntity }) {
   return (
     <div className="space-y-3">
       <div>
-        <div className="text-xs text-ink-400 mb-1">字段</div>
+        <div className="text-xs font-semibold text-ink-700 mb-1">字段</div>
         <div className="space-y-1">
           {Object.entries(entity.fields).map(([k, v]) => (
             <div key={k} className="text-sm flex gap-2">
-              <span className="text-ink-400 w-20 shrink-0">{k}:</span>
-              <span className="text-ink-700">{String(v || '')}</span>
+              <span className="text-ink-600 w-20 shrink-0">{k}:</span>
+              <span className="text-ink-900">{String(v || '')}</span>
             </div>
           ))}
         </div>
@@ -232,11 +249,11 @@ function NodeDetail({ entity }: { entity: WikiEntity }) {
 
       {entity.relations.length > 0 && (
         <div>
-          <div className="text-xs text-ink-400 mb-1">关系</div>
+          <div className="text-xs font-semibold text-ink-700 mb-1">关系</div>
           <div className="space-y-1">
             {entity.relations.map((r, i) => (
-              <div key={i} className="text-xs text-ink-600">
-                <span className="text-brand-500">{r.type}</span> →{' '}
+              <div key={i} className="text-xs text-ink-700">
+                <span className="text-brand-700 font-medium">{r.type}</span> →{' '}
                 {r.target}
               </div>
             ))}
@@ -245,7 +262,7 @@ function NodeDetail({ entity }: { entity: WikiEntity }) {
       )}
 
       <div>
-        <div className="text-xs text-ink-400 mb-1">置信度</div>
+        <div className="text-xs font-semibold text-ink-700 mb-1">置信度</div>
         <span
           className={`text-xs px-2 py-0.5 rounded ${
             entity.confidence === 'verified'
@@ -260,10 +277,10 @@ function NodeDetail({ entity }: { entity: WikiEntity }) {
       </div>
 
       <div>
-        <div className="text-xs text-ink-400 mb-1">来源</div>
+        <div className="text-xs font-semibold text-ink-700 mb-1">来源</div>
         <div className="space-y-1">
           {entity.sources.map((s, i) => (
-            <div key={i} className="text-xs text-ink-500 truncate">
+            <div key={i} className="text-xs text-ink-700 truncate">
               {s}
             </div>
           ))}

@@ -25,7 +25,7 @@
     {
       "module": "project",
       "title": "项目经验",
-      "fields": ["name", "role", "start", "end", "description", "url"]
+      "fields": ["name", "role", "start", "end", "description", "responsibilities", "tech_stack", "url"]
     },
     {
       "module": "skill",

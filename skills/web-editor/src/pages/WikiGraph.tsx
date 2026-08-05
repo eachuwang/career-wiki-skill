@@ -40,29 +40,29 @@ export default function WikiGraph({ wiki, resumes, onRefreshWiki }: WikiGraphPro
     <div className="h-full flex flex-col">
       {/* 顶栏 */}
       <div className="flex items-center gap-3 px-4 py-2 border-b border-ink-200 bg-white no-print">
-        <span className="text-sm font-medium text-ink-800">Wiki 知识图谱</span>
+        <span className="text-sm font-semibold text-ink-900">Wiki 知识图谱</span>
         {wiki && (
-          <span className="text-xs text-ink-400">
+          <span className="text-xs text-ink-600">
             {wiki.entities.length} 个实体 · {wiki.allRelations.length} 条关系
           </span>
         )}
         <div className="flex-1" />
         {gapStats && (
           <div className="flex items-center gap-3 text-xs">
-            <span className="text-orange-500">
+            <span className="text-orange-800 font-medium">
               未用技能: {gapStats.unusedSkills}
             </span>
-            <span className="text-orange-500">
+            <span className="text-orange-800 font-medium">
               未用项目: {gapStats.unusedProjects}
             </span>
-            <span className="text-red-500">
+            <span className="text-red-700 font-medium">
               孤立实体: {gapStats.isolated}
             </span>
           </div>
         )}
         <button
           onClick={onRefreshWiki}
-          className="text-xs px-2 py-1 rounded text-ink-500 hover:bg-ink-100"
+          className="text-xs px-2 py-1 rounded text-ink-700 hover:text-ink-900 hover:bg-ink-100"
           title="重新编译 wiki"
         >
           ↻ 刷新
@@ -79,7 +79,7 @@ export default function WikiGraph({ wiki, resumes, onRefreshWiki }: WikiGraphPro
             onSelectNode={setSelectedNode}
           />
         ) : (
-          <div className="h-full flex items-center justify-center text-ink-300">
+          <div className="h-full flex items-center justify-center text-ink-600">
             <div className="text-center">
               <div className="text-4xl mb-2">🕸️</div>
               <div className="text-sm">加载 wiki 数据中...</div>

@@ -95,7 +95,15 @@ sources:                    # 来源列表，指向 sources/raw/ 下的文件路
 | start | 是 | string | 开始时间 YYYY-MM |
 | end | 是 | string | 结束时间 YYYY-MM 或 `present` |
 | description | 否 | string | 项目描述 |
+| responsibilities | 否 | string | 岗位职责，保留用户输入的具体工作内容 |
+| tech_stack | 否 | string | 项目使用的技术栈，多个技术用顿号或逗号分隔 |
+| challenges | 否 | string | 项目遇到的困难、限制条件或关键风险 |
+| solutions | 否 | string | 对困难的分析、解决方案及方案选择依据 |
+| outcomes | 否 | string | 项目结果、量化指标、用户反馈或业务影响 |
+| learnings | 否 | string | 项目复盘、经验教训及可改进之处 |
 | at_company | 否 | string | 所属公司（空=个人项目，通过 relation `at_company` 关联 experience） |
+
+`challenges`、`solutions`、`outcomes`、`learnings` 用于知识库完整存档，预设简历模板默认不引用；生成定向简历时再按岗位需要选择。
 
 #### skill
 
@@ -266,7 +274,7 @@ find ~/.career_wiki/sources/raw/ -name '*.md' -type f
 **识别规则：**
 - person — 姓名、职位、联系方式
 - experience — 公司+职位+起止时间的组合
-- project — 项目名+角色+起止时间
+- project — 项目名+角色+起止时间+项目描述+岗位职责+技术栈+困难+解决方案+结果+复盘
 - skill — 技能名+分类+熟练度
 - education — 学校+学历+专业+起止
 - certificate — 证书名+机构+日期
@@ -284,7 +292,7 @@ find ~/.career_wiki/sources/raw/ -name '*.md' -type f
 | 字段类型 | 合并策略 |
 |----------|----------|
 | 基本信息（name/company/title 等） | 取最新（按 source 文件日期排序） |
-| 描述类（description/content） | 取最详细的版本 |
+| 描述类（description/responsibilities/tech_stack/challenges/solutions/outcomes/learnings/content） | 分字段保留最详细的版本，不得压缩成单一简历摘要 |
 | sources | 全部记录，合并为数组 |
 | confidence | 取最高（verified > extracted > inferred） |
 | 可选字段 | 有就记，不覆盖已有更详细的 |

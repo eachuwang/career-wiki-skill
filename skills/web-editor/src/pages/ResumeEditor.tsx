@@ -24,6 +24,7 @@ import EditPanel from '../components/EditPanel';
 import PreviewPanel from '../components/PreviewPanel';
 import TemplateSelector from '../components/TemplateSelector';
 import PrivacyControls from '../components/PrivacyControls';
+import UiIcon from '../components/UiIcon';
 
 import type {
   ModuleInstance,
@@ -36,6 +37,13 @@ import type {
 import { MODULE_LIBRARY } from '../types';
 
 import * as api from '../api/client';
+import { createResumeConfig, getHiddenItemIds } from '../resume/config';
+import { toggleHiddenItem } from '../resume/visibility';
+import {
+  buildStandaloneResumeHtml,
+  collectDocumentCss,
+  downloadResumePdf,
+} from '../resume/export';
 
 let moduleIdCounter = 0;
 function genId(): string {
@@ -69,6 +77,7 @@ export default function ResumeEditor({
   const [activeDrag, setActiveDrag] = useState<{ id: string; type: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
+  const [workspaceView, setWorkspaceView] = useState<'edit' | 'preview'>('edit');
 
   // 加载简历配置
   const loadResume = useCallback(
@@ -85,6 +94,7 @@ export default function ResumeEditor({
             label: def?.label || type,
             expanded: false,
             overrides: {},
+            hiddenItemIds: getHiddenItemIds(config.hide, type),
           };
         }),
       );
@@ -97,8 +107,12 @@ export default function ResumeEditor({
     if (resumes.length > 0 && !currentResumeId) {
       setCurrentResumeId(resumes[0].id);
       loadResume(resumes[0]);
+      // 简历配置里已带模板，直接返回；
+      // 否则下面的默认模板逻辑会在同一次 effect 里用闭包中的旧值
+      // 把 loadResume 设置的 templateId 覆盖掉
+      return;
     }
-    // 默认模板
+    // 默认模板（仅在没有简历配置时兜底）
     if (templates.length > 0 && !templateId) {
       setTemplateId(templates[0].id);
     }
@@ -136,6 +150,7 @@ export default function ResumeEditor({
         label: def.label,
         expanded: false,
         overrides: {},
+        hiddenItemIds: [],
       };
       setModules((prev) => {
         // 落在某个已有模块上 → 插入到它前面；落在空白处 → 追加到末尾
@@ -182,19 +197,38 @@ export default function ResumeEditor({
     setModules((prev) => prev.filter((m) => m.id !== id));
   };
 
+  /** 为键盘用户提供确定性的模块排序入口，并限制索引不越界。 */
+  const handleReorderModule = (oldIndex: number, newIndex: number) => {
+    if (newIndex < 0 || newIndex >= modules.length || oldIndex === newIndex) return;
+    setModules((prev) => arrayMove(prev, oldIndex, newIndex));
+  };
+
+  /** 切换子项在当前简历中的可见性，不触碰 Wiki 数据。 */
+  const handleToggleItemVisibility = (moduleId: string, itemId: string) => {
+    setModules((prev) =>
+      prev.map((module) =>
+        module.id === moduleId
+          ? {
+              ...module,
+              hiddenItemIds: toggleHiddenItem(module.hiddenItemIds, itemId),
+            }
+          : module,
+      ),
+    );
+  };
+
   // ---------- 导出 ----------
 
   const buildResumeConfig = (): ResumeConfig => {
-    const now = new Date().toISOString().slice(0, 10);
-    return {
-      name: resumeName,
-      id: currentResumeId || resumeName.toLowerCase().replace(/\s+/g, '-'),
-      template: templateId,
-      created: now,
-      updated: now,
-      modules: modules.map((m) => m.type),
+    const baseConfig = resumes.find((resume) => resume.id === currentResumeId);
+    return createResumeConfig({
+      resumeName,
+      resumeId: currentResumeId,
+      templateId,
       privacy,
-    };
+      modules,
+      baseConfig,
+    });
   };
 
   const handleSave = async () => {
@@ -203,25 +237,38 @@ export default function ResumeEditor({
     try {
       const config = buildResumeConfig();
       await api.saveResume(config);
-      setSaveMsg('✅ 已保存');
+      setSaveMsg('已保存');
       setTimeout(() => setSaveMsg(''), 3000);
     } catch (e) {
-      setSaveMsg(`❌ 保存失败: ${e instanceof Error ? e.message : e}`);
+      setSaveMsg(`保存失败：${e instanceof Error ? e.message : e}`);
     } finally {
       setSaving(false);
     }
   };
 
-  const handleExportPDF = () => {
-    // 前端按模板渲染 HTML → window.print()
-    // CSS @media print 已在 index.css 配好 .print-area
-    window.print();
+  /** 复用当前预览 DOM 生成 PDF，确保下载内容与用户所见一致。 */
+  const handleExportPDF = async () => {
+    const resumeElement = document.querySelector<HTMLElement>('.print-area');
+    if (!resumeElement) return;
+
+    try {
+      await downloadResumePdf({
+        element: resumeElement,
+        filename: `${resumeName}.pdf`,
+      });
+    } catch (e) {
+      alert(`导出 PDF 失败: ${e instanceof Error ? e.message : e}`);
+    }
   };
 
   const handleExportHTML = () => {
-    const html = document.querySelector('.print-area')?.outerHTML;
-    if (!html) return;
-    const fullHTML = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${resumeName}</title></head><body>${html}</body></html>`;
+    const resumeMarkup = document.querySelector('.print-area')?.outerHTML;
+    if (!resumeMarkup) return;
+    const fullHTML = buildStandaloneResumeHtml({
+      title: resumeName,
+      resumeMarkup,
+      cssText: collectDocumentCss(),
+    });
     const blob = new Blob([fullHTML], { type: 'text/html' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -257,78 +304,84 @@ export default function ResumeEditor({
     >
       <div className="h-full flex flex-col">
         {/* 顶栏 */}
-        <div className="flex items-center gap-3 px-4 py-2 border-b border-ink-200 bg-white no-print">
-          <input
-            type="text"
-            value={resumeName}
-            onChange={(e) => setResumeName(e.target.value)}
-            className="text-sm font-medium px-2 py-1 border border-transparent hover:border-ink-200 rounded focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-300 w-40"
-          />
-          <span className="text-ink-300">|</span>
-          <TemplateSelector
-            templates={templates}
-            currentId={templateId}
-            onChange={setTemplateId}
-          />
-          <span className="text-ink-300">|</span>
-          <PrivacyControls config={privacy} onChange={setPrivacy} />
-          <div className="flex-1" />
-          {saveMsg && <span className="text-xs text-ink-500">{saveMsg}</span>}
-          <button
-            onClick={handleExportJSON}
-            className="text-xs px-2 py-1 rounded text-ink-500 hover:bg-ink-100"
-          >
-            JSON
-          </button>
-          <button
-            onClick={handleExportHTML}
-            className="text-xs px-2 py-1 rounded text-ink-500 hover:bg-ink-100"
-          >
-            HTML
-          </button>
-          <button
-            onClick={handleExportPDF}
-            className="text-xs px-2 py-1 rounded bg-brand-500 text-white hover:bg-brand-600"
-          >
-            导出PDF
-          </button>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="text-xs px-3 py-1 rounded bg-ink-800 text-white hover:bg-ink-900 disabled:opacity-50"
-          >
-            {saving ? '保存中...' : '保存'}
-          </button>
-          <button
-            onClick={onRefreshWiki}
-            className="text-xs px-2 py-1 rounded text-ink-400 hover:bg-ink-100"
-            title="重新编译 wiki"
-          >
-            ↻
-          </button>
+        <div className="editor-toolbar no-print">
+          <div className="toolbar-primary">
+            <label className="toolbar-field">
+              <span>简历名称</span>
+              <input
+                type="text"
+                value={resumeName}
+                onChange={(e) => setResumeName(e.target.value)}
+                className="resume-name-input"
+              />
+            </label>
+            <TemplateSelector
+              templates={templates}
+              currentId={templateId}
+              onChange={setTemplateId}
+            />
+          </div>
+          <div className="toolbar-privacy">
+            <PrivacyControls config={privacy} onChange={setPrivacy} />
+          </div>
+          <div className="toolbar-actions">
+            {saveMsg && <span className="save-status" role="status">{saveMsg}</span>}
+            <div className="editor-view-switch" role="group" aria-label="编辑器视图">
+              <button
+                type="button"
+                aria-pressed={workspaceView === 'edit'}
+                onClick={() => setWorkspaceView('edit')}
+              >
+                编辑
+              </button>
+              <button
+                type="button"
+                aria-pressed={workspaceView === 'preview'}
+                onClick={() => setWorkspaceView('preview')}
+              >
+                预览
+              </button>
+            </div>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="toolbar-button strong"
+            >
+              <UiIcon name="save" size={16} /> {saving ? '保存中...' : '保存配置'}
+            </button>
+            <button
+              onClick={onRefreshWiki}
+              className="toolbar-icon-button"
+              title="重新编译 Wiki"
+              aria-label="重新编译 Wiki"
+            >
+              <UiIcon name="refresh" size={18} />
+            </button>
+          </div>
         </div>
 
         {/* 三栏布局 */}
-        <div className="flex-1 flex overflow-hidden">
+        <div className={`editor-workspace workspace-view-${workspaceView}`}>
           {/* 左侧模块库 */}
-          <div className="w-60 border-r border-ink-200 overflow-hidden no-print">
+          <div className="library-pane no-print">
             <ModuleLibrary />
           </div>
 
           {/* 中间编辑区 */}
-          <div className="flex-1 border-r border-ink-200 overflow-hidden no-print">
+          <div className="edit-pane no-print">
             <EditPanel
               modules={modules}
               wikiEntities={wikiEntities}
-              onReorder={() => {}}
+              onReorder={handleReorderModule}
               onToggleExpand={handleToggleExpand}
               onOverrideField={handleOverrideField}
+              onToggleItemVisibility={handleToggleItemVisibility}
               onRemoveModule={handleRemoveModule}
             />
           </div>
 
           {/* 右侧预览 */}
-          <div className="flex-1 overflow-hidden">
+          <div className="preview-pane">
             <PreviewPanel
               modules={modules}
               wikiEntities={wikiEntities}
@@ -337,6 +390,7 @@ export default function ResumeEditor({
               resumeName={resumeName}
               onExportPDF={handleExportPDF}
               onExportHTML={handleExportHTML}
+              onExportJSON={handleExportJSON}
             />
           </div>
         </div>
@@ -345,8 +399,8 @@ export default function ResumeEditor({
       {/* 拖拽 overlay */}
       <DragOverlay>
         {activeDrag ? (
-          <div className="px-3 py-2 bg-brand-100 text-brand-700 text-sm rounded shadow-lg">
-            拖拽中: {activeDrag.type}
+          <div className="drag-overlay-card">
+            <UiIcon name="grip" size={18} /> 拖拽中：{activeDrag.type}
           </div>
         ) : null}
       </DragOverlay>

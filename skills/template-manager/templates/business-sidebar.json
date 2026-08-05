@@ -40,7 +40,7 @@
     {
       "module": "project",
       "title": "重点项目",
-      "fields": ["name", "role", "start", "end", "description", "url"],
+      "fields": ["name", "role", "start", "end", "description", "responsibilities", "tech_stack", "url"],
       "column": "main"
     },
     {

@@ -28,17 +28,18 @@ export default function PrivacyControls({
   config,
   onChange,
 }: PrivacyControlsProps) {
+  /** 仅更新当前简历的脱敏配置，保持其他选项不变。 */
   const toggle = (key: keyof PrivacyConfig) => {
     onChange({ ...config, [key]: !config[key] });
   };
 
   return (
     <div className="flex items-center gap-3 no-print">
-      <span className="text-xs text-ink-400">脱敏:</span>
+      <span className="text-xs font-medium text-ink-500">隐私预览</span>
       {TOGGLES.map((t) => (
         <label
           key={t.key}
-          className="flex items-center gap-1 text-xs text-ink-600 cursor-pointer"
+          className="privacy-toggle"
           title={`脱敏效果: ${t.description}`}
         >
           <input

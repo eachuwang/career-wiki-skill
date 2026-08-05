@@ -125,7 +125,7 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 - 用哪个模板（`template` 字段 → 读模板 JSON 的 sections 定义）
 - 包含哪些模块（`modules` 数组，覆盖模板 sections 的顺序）
 - 强调什么（`emphasize` 数组 → 某些技能/项目置顶或高亮）
-- 隐藏什么（`hide` 数组 → 某些字段不显示）
+- 隐藏什么（`hide.fields` → 字段不显示；`hide.items` → 整个 Wiki 实体不进入当前简历）
 - 排序（`order` 对象 → 模块内时间排序）
 - 脱敏（`privacy` 对象 → phone/email/name 打码）
 
@@ -160,7 +160,7 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 
 对每个 markdown 文件用 `gray-matter` 解析：
 - frontmatter（YAML metadata）→ 提取实体字段（company/role/start/end/...）
-- 正文 content → 保留作为 `description` 或 `content` 字段
+- 正文 content → 保留为 `content`；project frontmatter 的 `tech_stack` 作为独立字段透传，旧版正文中的“岗位职责”兼容提取为 `responsibilities`
 
 用正则提取正文中的 wikilink：
 ```
@@ -173,12 +173,12 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 按模板 sections 顺序组装。对每个 section：
 
 1. 取该 module 对应的所有 wiki 实体数据
-2. 按 `fields` 配置抽取字段（只保留模板要的字段）
+2. 按 `fields` 配置抽取字段；project 固定补充 `responsibilities` 和 `tech_stack` 以兼容旧模板
 3. 应用简历配置的覆盖：
    - `modules` 过滤 — 只保留简历配置要的模块
    - `order` 排序 — 按时间 asc/desc 排序
    - `emphasize` — 强调的项排前面
-   - `hide` — 删掉隐藏的字段
+   - `hide` — 按 Wiki 路径排除隐藏实体，再删掉隐藏字段
    - `privacy` — 对 phone/email/name 做打码
 4. 按 `group_by` 分组（如 skill 按 category 分组）
 5. 组装成 section 对象
@@ -473,7 +473,7 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 
 2. **简历配置的 template 指向不存在的模板。** `/api/resume/generate` 会返回 404。生成前应检查模板文件存在。
 
-3. **emphasize/hide 的 items 跟 wiki 实体 name 对不上。** F06 按 name 字段做匹配，wiki 里的 name 可能跟用户原话不同（如"Go" vs "Golang"）。配置应由 multi-resume skill 从 wiki 拉真实 name 填入。
+3. **强调名称或隐藏路径跟 Wiki 对不上。** `emphasize.items` 按实体名称匹配；`hide.items` 按 API 返回的 `_path`/`path` 精确匹配，配置应由 multi-resume 或 Web 编辑器从真实 Wiki 数据生成。
 
 4. **数据目录找不到。** `WIKI_ROOT` 环境变量没设、config.json 不存在、目录路径写错——API server 启动时应该 fallback 到 `~/.career_wiki/`，并在 `/api/health` 里返回实际用的路径让用户确认。
 
@@ -501,6 +501,7 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 - [ ] `GET /api/resumes` 返回简历配置列表
 - [ ] `GET /api/templates` 返回模板列表
 - [ ] `POST /api/resume/generate` 能组装结构化简历 JSON
+- [ ] `hide.items` 在 generate/export 中都能按 Wiki 路径排除实体，且不修改 Wiki 文件
 - [ ] `POST /api/resume/export` 对 json/html/pdf 三种格式正确响应
 - [ ] `POST /api/resume/save` 能保存配置文件
 - [ ] `PUT /api/wiki/refresh` 返回需要 Agent 的提示

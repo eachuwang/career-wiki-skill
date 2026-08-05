@@ -141,6 +141,19 @@ function extractWikilinks(content) {
   return links;
 }
 
+/** 从旧版项目正文中提取岗位职责，兼容尚未结构化该字段的 Wiki。 */
+function extractResponsibilities(content) {
+  const heading = /\*\*岗位职责[:：]?\*\*/.exec(content);
+  if (!heading) return '';
+
+  const remainder = content.slice(heading.index + heading[0].length);
+  const nextHeadingIndex = remainder.search(/\n\s*\*\*[^*\n]+[:：]?\*\*/);
+  const section = nextHeadingIndex >= 0
+    ? remainder.slice(0, nextHeadingIndex)
+    : remainder;
+  return section.replace(/\s*\n+\s*/g, ' ').trim();
+}
+
 /** 解析单个 wiki markdown 文件 → 实体对象 */
 async function parseWikiFile(filePath, wikiRoot) {
   const raw = await readFile(filePath, 'utf-8');
@@ -167,6 +180,10 @@ async function parseWikiFile(filePath, wikiRoot) {
   const fields = {};
   for (const [k, v] of Object.entries(fm)) {
     if (!META_KEYS.includes(k)) fields[k] = v;
+  }
+  if (fm.entity === 'project' && !fields.responsibilities) {
+    const responsibilities = extractResponsibilities(content);
+    if (responsibilities) fields.responsibilities = responsibilities;
   }
 
   return {
@@ -391,7 +408,12 @@ async function assembleResume(config, template, wikiRoot) {
       try {
         const ent = await parseWikiFile(f, wikiPath);
         // 按 fields 配置抽取字段
-        const sectionFields = section.fields || [];
+        const sectionFields = [...(section.fields || [])];
+        if (module === 'project') {
+          for (const field of ['responsibilities', 'tech_stack']) {
+            if (!sectionFields.includes(field)) sectionFields.push(field);
+          }
+        }
         const item = {};
         for (const field of sectionFields) {
           if (ent.fields[field] !== undefined) {
@@ -438,13 +460,24 @@ async function assembleResume(config, template, wikiRoot) {
       }
     }
 
-    // hide — 删除隐藏字段
+    // hide.items — 仅从当前简历排除实体，Wiki 文件保持不变
     if (Array.isArray(config.hide)) {
-      const hideEntry = config.hide.find((h) => h.module === module);
-      if (hideEntry && Array.isArray(hideEntry.fields)) {
-        for (const f of hideEntry.fields) {
-          items.forEach((item) => delete item[f]);
-        }
+      const hideEntries = config.hide.filter((entry) => entry.module === module);
+      const hiddenItems = new Set(
+        hideEntries.flatMap((entry) =>
+          Array.isArray(entry.items) ? entry.items.map(String) : [],
+        ),
+      );
+      items = items.filter((item) => !hiddenItems.has(String(item._path)));
+
+      // hide.fields — 保留既有字段级隐藏能力
+      const hiddenFields = new Set(
+        hideEntries.flatMap((entry) =>
+          Array.isArray(entry.fields) ? entry.fields.map(String) : [],
+        ),
+      );
+      for (const field of hiddenFields) {
+        items.forEach((item) => delete item[field]);
       }
     }
 

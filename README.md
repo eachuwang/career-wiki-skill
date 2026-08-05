@@ -38,6 +38,15 @@ career-wiki-skill 把这些问题一次性解决：**采访采集 → Wiki 知�
                               (模板+配置)           (拖拽+预览+导出)
 ```
 
+### 主要能力
+
+- **深度串行采访** — 项目采访一次只问一个问题；当前回答不明确时持续追问，明确后才进入下一项。
+- **完整项目知识归档** — 分别保存项目描述、本人职责、技术栈、困难、解决方案、结果和复盘；原话保存在 raw，结构化字段进入 Wiki。
+- **多简历视角** — 同一份 Wiki 可生成多份岗位简历，并按简历隐藏不相关的项目或字段，不修改知识库原始数据。
+- **可视化编辑与实时预览** — 米白极简编辑器支持模块排序、字段覆盖、条目显隐、模板切换和 A4 实时预览。
+- **直接下载 PDF** — 在预览区直接生成并下载渲染好的 PDF，无需选择打印机；同时支持 HTML、JSON 和 OKF。
+- **可读 Wiki 图谱** — 实体节点、关系、图例和详情信息使用高对比度配色，便于浏览项目与技能关系。
+
 ---
 
 ## 9 个 Skill 组成
@@ -45,11 +54,11 @@ career-wiki-skill 把这些问题一次性解决：**采访采集 → Wiki 知�
 | # | Skill | 形式 | 职责 |
 |---|-------|------|------|
 | 1 | **env-init** | SKILL.md + Python 脚本 | 环境检查、目录初始化、依赖安装 |
-| 2 | **interview** | 纯 SKILL.md | 多轮对话采访，混合模式采集，产出 raw markdown |
+| 2 | **interview** | 纯 SKILL.md | 单题串行采访，深挖项目上下文，完整产出 raw markdown |
 | 3 | **file-parser** | 纯 SKILL.md | 上传 PDF/图片/文档，Agent 提取内容落到 raw |
 | 4 | **wiki-engine** | SKILL.md + Node 脚本 | 数据 schema 定义、compile/lint/OKF 导入导出 |
 | 5 | **resume-generator** | SKILL.md + Node API server | 从 Wiki 查询数据，按模板组装简历 JSON |
-| 6 | **web-editor** | SKILL.md + React 项目 | 拖拽编辑简历、实时预览、Wiki 图谱、导出 |
+| 6 | **web-editor** | SKILL.md + React 项目 | 可视化编辑、条目显隐、实时预览、Wiki 图谱、直接导出 PDF |
 | 7 | **template-manager** | SKILL.md + 模板文件 | 预设/自定义简历模板（JSON + CSS） |
 | 8 | **multi-resume** | 纯 SKILL.md | 一个 Wiki → 多份不同岗位简历配置 |
 | 9 | **privacy-filter** | SKILL.md + Python 脚本 | 导出前实时脱敏，字段可见性控制 |
@@ -72,6 +81,22 @@ has_experience · has_skill · has_education · has_certificate ·
 has_award · has_publication · has_activity · has_summary ·
 used_skill · did_project · at_company · took_course · references
 ```
+
+### 项目信息
+
+项目实体将简历展示字段与知识归档字段分开保存：
+
+| 字段 | 用途 | 预设简历默认展示 |
+|------|------|------------------|
+| `description` | 项目背景、目标与主要功能 | 是 |
+| `responsibilities` | 本人具体职责 | 是 |
+| `tech_stack` | 项目使用的技术栈 | 是 |
+| `challenges` | 遇到的困难、限制与风险 | 否 |
+| `solutions` | 分析过程、解决方案与选择依据 | 否 |
+| `outcomes` | 量化结果、用户反馈或业务影响 | 否 |
+| `learnings` | 复盘、经验教训与改进方向 | 否 |
+
+未默认展示的字段仍会完整存入 Wiki，生成定向简历时可按岗位需要选用。
 
 ### 存储
 
@@ -141,7 +166,7 @@ env-init skill 会：
 开始采访 / 帮我录入信息
 ```
 
-interview skill 启动多轮对话采集，基本信息填表快过，经历和项目自由讲再提取确认。
+interview skill 启动多轮对话采集。项目部分一次只问一个问题，依次确认项目描述、本人职责、技术栈、困难、解决方案、结果与复盘；回答不明确时会先追问当前项，不会同时抛出多个问题。
 
 ### 4. 查看和编辑简历
 
@@ -149,7 +174,7 @@ interview skill 启动多轮对话采集，基本信息填表快过，经历和�
 打开编辑器 / 看看简历预览
 ```
 
-web-editor skill 启动 React 前端，拖拽模块、实时预览、导出 PDF/HTML/JSON。
+web-editor skill 启动 React 前端，支持模块排序、字段编辑、项目显隐、实时预览，以及 PDF/HTML/JSON 导出。PDF 会按当前 A4 预览直接生成并下载，不会打开打印机选择窗口。
 
 ---
 
@@ -187,9 +212,9 @@ career-wiki-skill 在以下 Agent 工具中均可使用：
 |------|------|
 | Wiki 数据 | Markdown + YAML frontmatter + wikilink |
 | API Server | Node.js + gray-matter（纯 `node:http`，无框架） |
-| Web 前端 | React 18 + Vite + dnd-kit + Tailwind CSS + vis-network |
+| Web 前端 | React 18 + Vite + dnd-kit + Tailwind CSS + vis-network + html2pdf.js |
 | Python 脚本 | 环境检查、隐私脱敏（标准库） |
-| 导出格式 | PDF（浏览器 print）/ HTML / JSON / OKF |
+| 导出格式 | PDF（按 A4 预览直接下载）/ HTML / JSON / OKF |
 | 模板系统 | JSON 配置 + CSS 样式 |
 
 ---

@@ -18,19 +18,22 @@ export default function TemplateSelector({
   onChange,
 }: TemplateSelectorProps) {
   return (
-    <select
-      value={currentId || ''}
-      onChange={(e) => onChange(e.target.value)}
-      className="text-sm border border-ink-200 rounded px-2 py-1 bg-white text-ink-700 focus:border-brand-400 focus:outline-none focus:ring-1 focus:ring-brand-300"
-    >
-      <option value="" disabled>
-        选择模板...
-      </option>
-      {templates.map((t) => (
-        <option key={t.id} value={t.id}>
-          {t.name} ({t.layout === 'single-column' ? '单栏' : '双栏'})
+    <label className="toolbar-field">
+      <span>排版模板</span>
+      <select
+        value={currentId || ''}
+        onChange={(e) => onChange(e.target.value)}
+        className="toolbar-select"
+      >
+        <option value="" disabled>
+          选择模板...
         </option>
-      ))}
-    </select>
+        {templates.map((t) => (
+          <option key={t.id} value={t.id}>
+            {t.name}（{t.layout === 'single-column' ? '单栏' : '双栏'}）
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }

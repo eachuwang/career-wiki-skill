@@ -110,7 +110,10 @@ export interface ResumeEmphasize {
 
 export interface ResumeHide {
   module: EntityType;
-  fields: string[];
+  /** 隐藏整个实体时保存 Wiki 相对路径；不删除源数据。 */
+  items?: string[];
+  /** 兼容原有字段级隐藏配置。 */
+  fields?: string[];
   reason?: string;
 }
 
@@ -146,7 +149,6 @@ export interface ResumeConfig {
 export interface ModuleDef {
   type: EntityType;
   label: string; // 中文名 "个人信息"
-  icon: string; // emoji 图标
   description: string;
 }
 
@@ -160,6 +162,8 @@ export interface ModuleInstance {
   overrides: Record<string, unknown>;
   /** 该模块从 wiki 拉取的实体数据 */
   wikiData?: WikiEntity[];
+  /** 当前简历中隐藏的 Wiki 子项路径 */
+  hiddenItemIds: string[];
 }
 
 // ---------- 图谱相关 ----------
@@ -200,16 +204,16 @@ export interface ApiError {
 // ---------- 可拖拽模块库（10 个模块） ----------
 
 export const MODULE_LIBRARY: ModuleDef[] = [
-  { type: 'person', label: '个人信息', icon: '👤', description: '姓名、职位、联系方式' },
-  { type: 'experience', label: '工作经历', icon: '💼', description: '公司、职位、起止时间' },
-  { type: 'project', label: '项目经验', icon: '📁', description: '项目名、角色、描述' },
-  { type: 'skill', label: '技能', icon: '⚡', description: '技能名、分类、熟练度' },
-  { type: 'education', label: '教育背景', icon: '🎓', description: '学校、学历、专业' },
-  { type: 'certificate', label: '证书', icon: '📜', description: '证书名、机构、日期' },
-  { type: 'award', label: '获奖', icon: '🏆', description: '奖项名、机构、日期' },
-  { type: 'publication', label: '发表', icon: '📝', description: '文章标题、刊物、日期' },
-  { type: 'activity', label: '活动', icon: '🌟', description: '开源/社区活动' },
-  { type: 'summary', label: '个人优势', icon: '✨', description: '个人优势总结' },
+  { type: 'person', label: '个人信息', description: '姓名、职位、联系方式' },
+  { type: 'experience', label: '工作经历', description: '公司、职位、起止时间' },
+  { type: 'project', label: '项目经验', description: '项目名、角色、描述、岗位职责' },
+  { type: 'skill', label: '技能', description: '技能名、分类、熟练度' },
+  { type: 'education', label: '教育背景', description: '学校、学历、专业' },
+  { type: 'certificate', label: '证书', description: '证书名、机构、日期' },
+  { type: 'award', label: '获奖', description: '奖项名、机构、日期' },
+  { type: 'publication', label: '发表', description: '文章标题、刊物、日期' },
+  { type: 'activity', label: '活动', description: '开源/社区活动' },
+  { type: 'summary', label: '个人优势', description: '个人优势总结' },
 ];
 
 /** 实体类型 → 中文名 */
@@ -236,6 +240,6 @@ export const ENTITY_COLORS: Record<EntityType, string> = {
   certificate: '#1abc9c',
   award: '#e67e22',
   publication: '#34495e',
-  activity: '#e91e63',
-  summary: '#607d8b',
+  activity: '#c2185b',
+  summary: '#526875',
 };

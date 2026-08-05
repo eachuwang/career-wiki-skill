@@ -7,6 +7,7 @@
 import { MODULE_LIBRARY } from '../types';
 import type { ModuleDef } from '../types';
 import { useDraggable } from '@dnd-kit/core';
+import UiIcon from './UiIcon';
 
 /** 单个可拖拽的模块卡片 */
 function ModuleCard({ module }: { module: ModuleDef }) {
@@ -20,18 +21,24 @@ function ModuleCard({ module }: { module: ModuleDef }) {
       ref={setNodeRef}
       {...listeners}
       {...attributes}
-      className={`flex items-start gap-2 rounded-lg border bg-white p-3 cursor-grab hover:border-brand-400 hover:shadow-sm transition-all ${
+      className={`module-library-card group flex min-h-16 items-center gap-3 rounded-xl border bg-white p-3 cursor-grab hover:border-brand-300 hover:shadow-sm transition-all ${
         isDragging ? 'opacity-40' : 'border-ink-200'
       }`}
     >
-      <span className="text-xl">{module.icon}</span>
+      <span className="module-library-icon">
+        <UiIcon name={module.type} size={19} />
+      </span>
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium text-ink-800">{module.label}</div>
         <div className="text-xs text-ink-400 mt-0.5 truncate">
           {module.description}
         </div>
       </div>
-      <span className="text-ink-300 text-sm">⋮⋮</span>
+      <UiIcon
+        name="grip"
+        size={18}
+        className="shrink-0 text-ink-300 transition-colors group-hover:text-brand-500"
+      />
     </div>
   );
 }
@@ -39,11 +46,12 @@ function ModuleCard({ module }: { module: ModuleDef }) {
 export default function ModuleLibrary() {
   return (
     <div className="h-full flex flex-col">
-      <div className="px-4 py-3 border-b border-ink-200 bg-white">
-        <h2 className="text-sm font-semibold text-ink-800">模块库</h2>
-        <p className="text-xs text-ink-400 mt-1">拖拽模块到编辑区添加</p>
+      <div className="pane-heading">
+        <div className="pane-heading-kicker">构建简历</div>
+        <h2 className="pane-heading-title">模块库</h2>
+        <p className="pane-heading-description">拖拽模块到编辑区添加</p>
       </div>
-      <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-ink-50">
+      <div className="module-library-list flex-1 overflow-y-auto p-3 space-y-2 bg-ink-50">
         {MODULE_LIBRARY.map((m) => (
           <ModuleCard key={m.type} module={m} />
         ))}

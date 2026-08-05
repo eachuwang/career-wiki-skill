@@ -79,6 +79,11 @@ metadata:
       "module": "person",
       "fields": ["phone"],
       "reason": "投递阶段不暴露电话"
+    },
+    {
+      "module": "project",
+      "items": ["projects/legacy-console.md"],
+      "reason": "当前岗位不展示该项目"
     }
   ],
   "order": {
@@ -111,9 +116,10 @@ metadata:
 | `emphasize[].module` | enum | 是 | 要强调的模块（skill/project/experience） |
 | `emphasize[].items` | array | 是 | 要强调的具体项名称 |
 | `emphasize[].reason` | string | 否 | 为什么要强调（Agent 参考，用户可不填） |
-| `hide` | array | 否 | 隐藏某些字段——投递策略性隐藏 |
-| `hide[].module` | enum | 是 | 要隐藏字段的模块 |
-| `hide[].fields` | array | 是 | 要隐藏的字段名 |
+| `hide` | array | 否 | 隐藏某些字段或实体——只影响当前简历视角 |
+| `hide[].module` | enum | 是 | 要隐藏字段/实体的模块 |
+| `hide[].fields` | array | 否 | 要隐藏的字段名 |
+| `hide[].items` | array | 否 | 要隐藏实体的 Wiki 相对路径（如 `projects/foo.md`） |
 | `hide[].reason` | string | 否 | 隐藏原因 |
 | `order` | object | 否 | 模块内排序，key=模块名，value=asc/desc |
 | `privacy` | object | 否 | 脱敏设置，Web 预览时实时生效 |
@@ -188,10 +194,10 @@ metadata:
    - 问"有需要脱敏的信息吗？电话/邮箱/姓名？"
    - 默认不脱敏；用户选哪些要脱敏
    - 详细脱敏逻辑见 F10 privacy-filter skill
-2. **隐藏字段**（hide）：
-   - 问"有要隐藏的字段吗？比如薪资、某些不想暴露的经历？"
+2. **隐藏字段或条目**（hide）：
+   - 问"有要隐藏的字段或整段经历/项目吗？比如薪资、某些不想展示的项目？"
    - 跟脱敏区别：脱敏是打码（显示 138****1234），隐藏是完全不显示
-   - 列出各模块的字段让用户选
+   - 字段写入 `fields`；完整条目写入 `items`，值使用该实体的 Wiki 相对路径
 
 ### 步骤 7：排序设置
 
@@ -284,11 +290,11 @@ F07 Web 前端会读 `~/.career_wiki/resumes/` 下所有配置：
 - 假设所有支持 skill 的 Agent 有对话能力 + `write_file` 工具
 - **不做降级**——没有 `write_file` 的 Agent 用不了这个 skill
 - 配置 JSON 格式是硬约束，对话引导风格可适配
-- emphasize/hide 里的 items 必须跟 wiki 里的实体 name 对应，Agent 创建时应从 wiki 拉真实 name 填入
+- `emphasize.items` 使用实体名称；`hide.items` 使用稳定的 Wiki 相对路径，避免同名条目冲突
 
 ## Common Pitfalls
 
-1. **emphasize/hide 的 items 跟 wiki 对不上。** 用户说"强调 Go 技能"，但 wiki 里的技能 name 可能是 "Golang" 或 "Go 语言"。必须从 wiki 拉真实 name 填入，不能凭用户原话。F06 按 name 匹配，对不上就强调不了。
+1. **强调名称或隐藏路径跟 Wiki 对不上。** `emphasize.items` 必须使用真实实体名称；`hide.items` 必须使用 API 返回的实体 `path`，不能用显示名称代替。
 
 2. **选了 wiki 里没有数据的模块。** 用户选了"证书"模块但 wiki/certificates/ 是空的，简历渲染出来就是空 section。创建时应检查 wiki 是否有对应数据，没有要提示用户。
 
@@ -312,6 +318,7 @@ F07 Web 前端会读 `~/.career_wiki/resumes/` 下所有配置：
 - [ ] `modules` 数组里的模块在 wiki 里有对应数据
 - [ ] `emphasize[].items` 跟 wiki 实体的 name 对得上
 - [ ] `hide[].fields` 是该模块的合法 frontmatter 字段
+- [ ] `hide[].items` 是该模块中真实存在的 Wiki 相对路径
 - [ ] 简历 id 不跟已有简历重复
 - [ ] 文件名 = `{id}.json`
 - [ ] 已告知用户配置路径 + 模板 + 模块概要

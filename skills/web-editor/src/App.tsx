@@ -15,6 +15,7 @@ import type {
   TemplateConfig,
   ResumeConfig,
 } from './types';
+import UiIcon from './components/UiIcon';
 
 type Page = 'editor' | 'graph';
 
@@ -69,7 +70,9 @@ export default function App() {
     return (
       <div className="h-full flex items-center justify-center bg-ink-100">
         <div className="text-center">
-          <div className="text-4xl mb-3 animate-pulse">📚</div>
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-brand-700 shadow-sm animate-pulse">
+            <UiIcon name="book" size={24} />
+          </div>
           <div className="text-sm text-ink-400">加载 Career-Wiki-Skill 数据...</div>
         </div>
       </div>
@@ -79,33 +82,37 @@ export default function App() {
   return (
     <div className="h-full flex flex-col bg-ink-100">
       {/* 全局导航栏 */}
-      <nav className="flex items-center gap-4 px-4 py-2 bg-ink-800 text-white no-print">
-        <span className="text-sm font-bold">Career-Wiki-Skill</span>
-        <div className="flex gap-1 ml-4">
+      <nav className="app-nav no-print" aria-label="主导航">
+        <span className="app-brand"><UiIcon name="book" size={18} /> Career-Wiki-Skill</span>
+        <div className="app-nav-tabs" role="tablist" aria-label="工作区">
           <button
             onClick={() => setPage('editor')}
-            className={`text-xs px-3 py-1 rounded ${
+            role="tab"
+            aria-selected={page === 'editor'}
+            className={`app-nav-tab ${
               page === 'editor'
-                ? 'bg-brand-500 text-white'
-                : 'text-ink-200 hover:bg-ink-700'
+                ? 'active'
+                : ''
             }`}
           >
             简历编辑器
           </button>
           <button
             onClick={() => setPage('graph')}
-            className={`text-xs px-3 py-1 rounded ${
+            role="tab"
+            aria-selected={page === 'graph'}
+            className={`app-nav-tab ${
               page === 'graph'
-                ? 'bg-brand-500 text-white'
-                : 'text-ink-200 hover:bg-ink-700'
+                ? 'active'
+                : ''
             }`}
           >
             Wiki 图谱
           </button>
         </div>
         {error && (
-          <div className="text-xs text-red-300 ml-auto">
-            ⚠ {error}
+          <div className="app-error ml-auto" role="alert">
+            {error}
             <button
               onClick={loadAll}
               className="ml-2 underline hover:text-white"

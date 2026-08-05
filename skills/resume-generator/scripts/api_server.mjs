@@ -29,6 +29,7 @@ import { join, extname, basename, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { collectMarkdown, parseWikiFile } from '../../wiki-engine/scripts/wiki-parser.mjs';
+import { sortEntities, getSectionFields, applyHide, groupByItems, DEFAULT_PRIVACY, maskItemFields } from './resume-rules.mjs';
 
 // ── 常量 ──────────────────────────────────────────────
 
@@ -324,13 +325,8 @@ async function assembleResume(config, template, wikiRoot) {
     for (const f of mdFiles) {
       try {
         const ent = await parseWikiFile(f, wikiPath, { projectResponsibilities: extractResponsibilities });
-        // 按 fields 配置抽取字段
-        const sectionFields = [...(section.fields || [])];
-        if (module === 'project') {
-          for (const field of ['responsibilities', 'tech_stack']) {
-            if (!sectionFields.includes(field)) sectionFields.push(field);
-          }
-        }
+        // 按共享规则解析展示字段（project 强制补 responsibilities/tech_stack）
+        const sectionFields = getSectionFields(section, module);
         const item = {};
         for (const field of sectionFields) {
           if (ent.fields[field] !== undefined) {
@@ -344,22 +340,8 @@ async function assembleResume(config, template, wikiRoot) {
       } catch {}
     }
 
-    // 排序
-    const orderDir = (config.order && config.order[module]) || section.order || 'desc';
-    const timeFields = ['start', 'end', 'date'];
-    items.sort((a, b) => {
-      let aTime = null;
-      let bTime = null;
-      for (const tf of timeFields) {
-        if (a[tf]) aTime = a[tf];
-        if (b[tf]) bTime = b[tf];
-      }
-      if (!aTime && !bTime) return 0;
-      if (!aTime) return 1;
-      if (!bTime) return -1;
-      const cmp = String(aTime).localeCompare(String(bTime));
-      return orderDir === 'asc' ? cmp : -cmp;
-    });
+    // 排序（共享规则：start→end→date 回退，缺失恒排最后）
+    items = sortEntities(items, (config.order && config.order[module]) || section.order || 'desc');
 
     // emphasize — 强调项排前面
     if (Array.isArray(config.emphasize)) {
@@ -377,59 +359,21 @@ async function assembleResume(config, template, wikiRoot) {
       }
     }
 
-    // hide.items — 仅从当前简历排除实体，Wiki 文件保持不变
-    if (Array.isArray(config.hide)) {
-      const hideEntries = config.hide.filter((entry) => entry.module === module);
-      const hiddenItems = new Set(
-        hideEntries.flatMap((entry) =>
-          Array.isArray(entry.items) ? entry.items.map(String) : [],
-        ),
-      );
-      items = items.filter((item) => !hiddenItems.has(String(item._path)));
+    // hide — 仅从当前简历排除实体，Wiki 文件保持不变（共享规则）
+    items = applyHide(items, config.hide, module);
 
-      // hide.fields — 保留既有字段级隐藏能力
-      const hiddenFields = new Set(
-        hideEntries.flatMap((entry) =>
-          Array.isArray(entry.fields) ? entry.fields.map(String) : [],
-        ),
-      );
-      for (const field of hiddenFields) {
-        items.forEach((item) => delete item[field]);
-      }
-    }
-
-    // privacy — 脱敏
-    const privacy = config.privacy || {};
-    if (privacy.mask_phone || privacy.mask_email || privacy.mask_name) {
-      items = items.map((item) => {
-        const masked = { ...item };
-        if (privacy.mask_name && masked.name) {
-          masked.name = maskValue(masked.name, 'name');
-        }
-        if (privacy.mask_phone && masked.phone) {
-          masked.phone = maskValue(masked.phone, 'phone');
-        }
-        if (privacy.mask_email && masked.email) {
-          masked.email = maskValue(masked.email, 'email');
-        }
-        return masked;
-      });
-    }
+    // privacy — 脱敏（共享规则：6 字段统一语义，mask_salary/company/github 也生效）
+    const privacy = config.privacy || DEFAULT_PRIVACY;
+    items = items.map((item) => maskItemFields(item, privacy));
 
     // group_by 分组
     if (section.group_by) {
-      const groups = {};
-      for (const item of items) {
-        const key = item[section.group_by] || '其他';
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(item);
-      }
       sections.push({
         module,
         title: section.title,
         grouped: true,
         group_by: section.group_by,
-        groups: Object.entries(groups).map(([key, groupItems]) => ({ key, items: groupItems })),
+        groups: groupByItems(items, section.group_by),
       });
     } else {
       sections.push({
@@ -452,17 +396,9 @@ async function assembleResume(config, template, wikiRoot) {
       personData._links = ent.links;
       personData._path = ent.path;
 
-      // person 也应用脱敏
-      const privacy = config.privacy || {};
-      if (privacy.mask_name && personData.name) {
-        personData.name = maskValue(personData.name, 'name');
-      }
-      if (privacy.mask_phone && personData.phone) {
-        personData.phone = maskValue(personData.phone, 'phone');
-      }
-      if (privacy.mask_email && personData.email) {
-        personData.email = maskValue(personData.email, 'email');
-      }
+      // person 也应用脱敏（共享规则，_ 开头元字段跳过）
+      const privacy = config.privacy || DEFAULT_PRIVACY;
+      personData = maskItemFields(personData, privacy);
 
       // person 隐藏字段
       if (Array.isArray(config.hide)) {
@@ -501,24 +437,7 @@ async function assembleResume(config, template, wikiRoot) {
   };
 }
 
-/** 脱敏函数 */
-function maskValue(value, type) {
-  const str = String(value);
-  switch (type) {
-    case 'name':
-      if (str.length <= 1) return str[0] + '*';
-      return str[0] + '*'.repeat(str.length - 1);
-    case 'phone':
-      if (str.length < 4) return '****';
-      return str.slice(0, 3) + '****' + str.slice(-4);
-    case 'email':
-      const [name, domain] = str.split('@');
-      if (!domain) return '***';
-      return name[0] + '***@' + domain;
-    default:
-      return '***';
-  }
-}
+// 脱敏与渲染规则已收敛到 resume-rules.mjs（共享实现）
 
 /** POST /api/resume/generate */
 async function handleGenerate(wikiRoot, res, body) {

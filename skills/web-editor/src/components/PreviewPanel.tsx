@@ -20,6 +20,12 @@ import type {
 import { getResumeContactItems } from '../resume/contact';
 import { getVisibleEntities } from '../resume/visibility';
 import {
+  maskValue,
+  getSectionFields,
+  sortEntities,
+  groupByItems,
+} from '../../../resume-generator/scripts/resume-rules.mjs';
+import {
   A4_WIDTH_MM,
   A4_HEIGHT_MM,
   CONTENT_WIDTH_MM,
@@ -55,39 +61,6 @@ function getInitialZoom(): number {
   return Math.max(0.4, Math.min(0.72, (window.innerWidth - 40) / (A4_WIDTH_MM * 3.7795)));
 }
 
-/** 脱敏单个值 */
-function maskValue(field: string, value: unknown, privacy: PrivacyConfig): string {
-  const v = String(value || '');
-  if (!v) return '';
-
-  // phone
-  if (privacy.mask_phone && (field === 'phone' || /^\d{11}$/.test(v))) {
-    return v.length >= 7 ? `${v.slice(0, 3)}****${v.slice(-4)}` : v;
-  }
-  // email
-  if (privacy.mask_email && field === 'email') {
-    const at = v.indexOf('@');
-    return at > 0 ? `${v[0]}***${v.slice(at)}` : v;
-  }
-  // name
-  if (privacy.mask_name && field === 'name') {
-    return v.length > 1 ? `${v[0]}${'*'.repeat(v.length - 1)}` : v;
-  }
-  // company（与 name 独立开关）
-  if (privacy.mask_company && field === 'company') {
-    return '[公司已隐藏]';
-  }
-  // salary
-  if (privacy.mask_salary && field === 'salary') {
-    return '[薪资已隐藏]';
-  }
-  // github
-  if (privacy.mask_github && field === 'github') {
-    return '[GitHub已隐藏]';
-  }
-  return v;
-}
-
 /** 格式化日期：present → 至今，YYYY-MM → YYYY.MM，其他原样返回 */
 function formatDate(value: unknown): string {
   const s = String(value ?? '').trim();
@@ -95,15 +68,6 @@ function formatDate(value: unknown): string {
   if (s.toLowerCase() === 'present' || s === '至今') return '至今';
   const m = /^(\d{4})-(\d{2})/.exec(s);
   return m ? `${m[1]}.${m[2]}` : s;
-}
-
-/** 日期排序键：用于按开始时间倒序，缺失的排最后 */
-function dateSortKey(value: unknown): number {
-  const s = String(value ?? '').trim();
-  if (!s) return -1;
-  if (s.toLowerCase() === 'present') return 999999;
-  const m = /^(\d{4})-(\d{2})/.exec(s);
-  return m ? Number(m[1]) * 100 + Number(m[2]) : -1;
 }
 
 /** 按模板 section 把一个模块渲染成可分页的内容块列表 */
@@ -116,34 +80,13 @@ function renderModuleBlocks(
   // 找模板里这个 module 的 section 配置
   const section = templateSections.find((s) => s.module === module.type);
   const title = section?.title || module.label;
-  // 模板未定义该模块时的兜底字段，避免条目只剩日期
-  const FALLBACK_FIELDS: Record<string, string[]> = {
-    summary: ['content'],
-    experience: ['company', 'role', 'start', 'end', 'description'],
-    project: ['name', 'role', 'start', 'end', 'description', 'responsibilities', 'tech_stack'],
-    education: ['school', 'degree', 'major', 'start', 'end'],
-  };
-  const fields = section?.fields?.length
-    ? [...section.fields]
-    : FALLBACK_FIELDS[module.type] || [];
-  if (module.type === 'project' && !fields.includes('responsibilities')) {
-    const descriptionIndex = fields.indexOf('description');
-    fields.splice(descriptionIndex >= 0 ? descriptionIndex + 1 : fields.length, 0, 'responsibilities');
-  }
-  if (module.type === 'project' && !fields.includes('tech_stack')) {
-    const responsibilitiesIndex = fields.indexOf('responsibilities');
-    fields.splice(responsibilitiesIndex >= 0 ? responsibilitiesIndex + 1 : fields.length, 0, 'tech_stack');
-  }
+  // 按共享规则解析展示字段（project 强制补 responsibilities/tech_stack）
+  const fields = getSectionFields(section, module.type);
 
   if (wikiData.length === 0) return [];
 
-  // 有开始时间的条目按时间倒序（工作经历、项目经验、教育背景）
-  const sorted =
-    section?.order === 'asc'
-      ? wikiData
-      : [...wikiData].sort(
-          (a, b) => dateSortKey(b.fields.start) - dateSortKey(a.fields.start),
-        );
+  // 按共享规则排序（start→end→date 回退，缺失恒排最后）
+  const sorted = sortEntities(wikiData, section?.order || 'desc');
 
   const blocks: ResumeBlock[] = [];
 
@@ -168,33 +111,30 @@ function renderModuleBlocks(
     blocks.push(...rest);
   };
 
-  // group_by 处理（技能按分类分组）
+  // group_by 处理（技能按分类分组，共享规则）
   if (section?.group_by) {
-    const groups: Record<string, WikiEntity[]> = {};
-    for (const e of sorted) {
-      const key = String(e.fields[section.group_by] || '其他');
-      (groups[key] = groups[key] || []).push(e);
-    }
-    const items = Object.entries(groups).map(([cat, entities]) => ({
-      key: `${module.id}-group-${cat}`,
-      node: (
-        <div className="skill-group resume-skill-row">
-          <div className="skill-group-title resume-skill-category">
-            {cat}
+    const items = groupByItems(sorted, section.group_by).map(
+      ({ key: cat, items: entities }) => ({
+        key: `${module.id}-group-${cat}`,
+        node: (
+          <div className="skill-group resume-skill-row">
+            <div className="skill-group-title resume-skill-category">
+              {cat}
+            </div>
+            <div className="skill-tags resume-skill-list">
+              {entities
+                .map((entity) => {
+                  const name = maskValue(entity.fields.name, 'name', privacy);
+                  const level = maskValue(entity.fields.level, 'level', privacy);
+                  return level ? `${name}（${level}）` : name;
+                })
+                .filter(Boolean)
+                .join(' · ')}
+            </div>
           </div>
-          <div className="skill-tags resume-skill-list">
-            {entities
-              .map((entity) => {
-                const name = maskValue('name', entity.fields.name, privacy);
-                const level = maskValue('level', entity.fields.level, privacy);
-                return level ? `${name}（${level}）` : name;
-              })
-              .filter(Boolean)
-              .join(' · ')}
-          </div>
-        </div>
-      ),
-    }));
+        ),
+      }),
+    );
     pushSection(items[0], items.slice(1));
     return blocks;
   }
@@ -205,7 +145,7 @@ function renderModuleBlocks(
       key: `${module.id}-summary-${e.path || i}`,
       node: (
         <div className="entry resume-summary">
-          {maskValue(fields[0], e.fields[fields[0]], privacy)}
+          {maskValue(e.fields[fields[0]], fields[0], privacy)}
         </div>
       ),
     }));
@@ -238,12 +178,12 @@ function renderModuleBlocks(
       node: (
         <div className="entry">
           <div className="entry-title">
-            {maskValue(titleField, e.fields[titleField], privacy)}
+            {maskValue(e.fields[titleField], titleField, privacy)}
           </div>
           <div className="entry-sub">
             <span className="entry-role">
               {subFields
-                .map((f) => maskValue(f, e.fields[f], privacy))
+                .map((f) => maskValue(e.fields[f], f, privacy))
                 .filter(Boolean)
                 .join(' · ')}
             </span>
@@ -266,7 +206,7 @@ function renderModuleBlocks(
                   {f === 'tech_stack' && (
                     <span className="entry-desc-label">技术栈：</span>
                   )}
-                  {maskValue(f, e.fields[f], privacy)}
+                  {maskValue(e.fields[f], f, privacy)}
                 </div>
               ),
           )}
@@ -532,9 +472,9 @@ function ResumeHeader({
   const contacts = getResumeContactItems(f);
   return (
     <header className="person-info resume-header">
-      <h1>{maskValue('name', f.name, privacy)}</h1>
+      <h1>{maskValue(f.name, 'name', privacy)}</h1>
       <div className="resume-headline">
-        {maskValue('title', f.title, privacy)}
+        {maskValue(f.title, 'title', privacy)}
       </div>
       <div className="resume-contact">
         {contacts.map((contact) => (
@@ -544,7 +484,7 @@ function ResumeHeader({
               size={13}
               className="resume-contact-icon"
             />
-            {maskValue(contact.field, contact.value, privacy)}
+            {maskValue(contact.value, contact.field, privacy)}
           </span>
         ))}
       </div>

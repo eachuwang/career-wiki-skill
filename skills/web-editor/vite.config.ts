@@ -8,6 +8,10 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    fs: {
+      // 允许访问共享规则模块（skills/resume-generator/scripts/resume-rules.mjs）
+      allow: ['..'],
+    },
     proxy: {
       // 将 /api 请求代理到 resume-generator 的 API server
       // 开发时前端跑在 5173，API server 跑在 3001

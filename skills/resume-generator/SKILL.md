@@ -17,7 +17,7 @@ metadata:
 
 career-wiki-skill 的简历生成层。提供 **Node HTTP API server**，从 wiki markdown 读数据、解析 frontmatter、按模板+简历配置组装结构化简历 JSON。Web 前端（F07）调用这些接口完成简历渲染和导出。
 
-**核心理念：** 简历生成是**纯确定性操作**（Node 做，不需要 LLM）。读 wiki → 解析 → 按模板 schema 组装 → 返回 JSON。数据组装、字段映射、排序、过滤全在 Node 脚本完成。简历润色是 LLM 操作（用户需要时在 Web 前端触发 Agent）。
+**核心理念：** 简历生成是**纯确定性操作**（Node 做，不需要 LLM）。读 wiki → 解析 → 按模板 schema 组装 → 返回 JSON。字段映射、排序、过滤、脱敏等确定性规则收敛在 `scripts/resume-rules.mjs`（web-editor 前端预览与后端生成共用，避免双实现分叉），组装在 Node 脚本完成。简历润色是 LLM 操作（用户需要时在 Web 前端触发 Agent）。
 
 **模板格式：** JSON 配置（字段映射 + 布局参数）+ CSS 样式文件。预设 4 个模板（技术简约/商务侧栏/创意色块/学术纯文），由 web-editor 前端管理（复制/删除）。
 
@@ -130,8 +130,8 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 - 包含哪些模块（`modules` 数组，覆盖模板 sections 的顺序）
 - 强调什么（`emphasize` 数组 → 某些技能/项目置顶或高亮）
 - 隐藏什么（`hide.fields` → 字段不显示；`hide.items` → 整个 Wiki 实体不进入当前简历）
-- 排序（`order` 对象 → 模块内时间排序）
-- 脱敏（`privacy` 对象 → phone/email/name 打码）
+- 排序（`order` 对象 → 模块内时间排序，规则见 `scripts/resume-rules.mjs`）
+- 脱敏（`privacy` 对象 → 6 字段打码：name/phone/email/company/salary/github，规则见 `scripts/resume-rules.mjs`，与前端预览共用）
 
 ### 步骤 2：读模板 schema
 

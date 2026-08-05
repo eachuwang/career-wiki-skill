@@ -8,6 +8,7 @@
 
 import { useState, useMemo } from 'react';
 import GraphCanvas from '../components/GraphCanvas';
+import UiIcon from '../components/UiIcon';
 import type { WikiSnapshot, WikiEntity, ResumeConfig, GapAnalysis } from '../types';
 import * as api from '../api/client';
 
@@ -37,35 +38,30 @@ export default function WikiGraph({ wiki, resumes, onRefreshWiki }: WikiGraphPro
   }, [gapAnalysis]);
 
   return (
-    <div className="h-full flex flex-col">
-      {/* 顶栏 */}
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-ink-200 bg-white no-print">
-        <span className="text-sm font-semibold text-ink-900">Wiki 知识图谱</span>
+    <div className="h-full flex flex-col bg-ink-50">
+      {/* 图谱页工具栏，与编辑器保持同一视觉层级 */}
+      <div className="graph-toolbar no-print">
+        <span className="graph-title">Wiki 知识图谱</span>
         {wiki && (
-          <span className="text-xs text-ink-600">
+          <span className="graph-meta">
             {wiki.entities.length} 个实体 · {wiki.allRelations.length} 条关系
           </span>
         )}
-        <div className="flex-1" />
+        <div className="graph-toolbar-spacer" />
         {gapStats && (
-          <div className="flex items-center gap-3 text-xs">
-            <span className="text-orange-800 font-medium">
-              未用技能: {gapStats.unusedSkills}
-            </span>
-            <span className="text-orange-800 font-medium">
-              未用项目: {gapStats.unusedProjects}
-            </span>
-            <span className="text-red-700 font-medium">
-              孤立实体: {gapStats.isolated}
-            </span>
+          <div className="flex items-center gap-2">
+            <span className="graph-badge warn">未用技能 {gapStats.unusedSkills}</span>
+            <span className="graph-badge warn">未用项目 {gapStats.unusedProjects}</span>
+            <span className="graph-badge danger">孤立实体 {gapStats.isolated}</span>
           </div>
         )}
         <button
           onClick={onRefreshWiki}
-          className="text-xs px-2 py-1 rounded text-ink-700 hover:text-ink-900 hover:bg-ink-100"
-          title="重新编译 wiki"
+          className="toolbar-icon-button"
+          title="重新编译 Wiki"
+          aria-label="重新编译 Wiki"
         >
-          ↻ 刷新
+          <UiIcon name="refresh" size={17} />
         </button>
       </div>
 
@@ -79,10 +75,12 @@ export default function WikiGraph({ wiki, resumes, onRefreshWiki }: WikiGraphPro
             onSelectNode={setSelectedNode}
           />
         ) : (
-          <div className="h-full flex items-center justify-center text-ink-600">
+          <div className="h-full flex items-center justify-center text-ink-500">
             <div className="text-center">
-              <div className="text-4xl mb-2">🕸️</div>
-              <div className="text-sm">加载 wiki 数据中...</div>
+              <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-white text-brand-600 shadow-sm">
+                <UiIcon name="graph" size={24} />
+              </div>
+              <div className="text-sm">正在加载图谱数据...</div>
             </div>
           </div>
         )}

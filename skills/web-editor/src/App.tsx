@@ -70,10 +70,10 @@ export default function App() {
     return (
       <div className="h-full flex items-center justify-center bg-ink-100">
         <div className="text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-brand-700 shadow-sm animate-pulse">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-white text-brand-700 shadow-sm animate-pulse">
             <UiIcon name="book" size={24} />
           </div>
-          <div className="text-sm text-ink-400">加载 Career-Wiki-Skill 数据...</div>
+          <div className="text-sm text-ink-500">正在加载工作区数据...</div>
         </div>
       </div>
     );

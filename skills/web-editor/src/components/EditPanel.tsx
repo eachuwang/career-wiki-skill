@@ -85,7 +85,7 @@ function ModuleEditCard({
       ref={setNodeRef}
       style={style}
       data-module-type={module.type}
-      className={`module-edit-card rounded-xl border bg-white shadow-sm transition-shadow hover:shadow ${
+      className={`module-edit-card rounded-lg border bg-white shadow-sm transition-shadow hover:shadow ${
         isDragging ? 'opacity-50 border-brand-400' : 'border-ink-200'
       }`}
     >
@@ -200,7 +200,7 @@ function ModuleEditForm({
           <div
             key={entity.path}
             data-resume-item={entity.path}
-            className={`resume-item-card rounded-xl border transition-colors ${
+            className={`resume-item-card rounded-lg border transition-colors ${
               isHidden
                 ? 'border-ink-200 bg-ink-50'
                 : 'border-ink-100 bg-white'
@@ -324,7 +324,6 @@ export default function EditPanel({
   return (
     <div className="h-full flex flex-col">
       <div className="pane-heading">
-        <div className="pane-heading-kicker">当前版本</div>
         <h2 className="pane-heading-title">内容编排</h2>
         <p className="pane-heading-description">
           拖拽排序 · 点击展开编辑 · 覆盖不回写 wiki
@@ -337,10 +336,13 @@ export default function EditPanel({
         }`}
       >
         {modules.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-ink-300">
+          <div className="edit-drop-empty" data-over={isOver}>
             <div className="empty-state-icon"><UiIcon name="file" size={24} /></div>
             <div className="text-sm">
-              从左侧拖拽模块到此处开始编辑
+              将左侧模块拖到这里开始编排
+            </div>
+            <div className="text-xs opacity-70">
+              可添加工作经历、项目经验、技能等模块
             </div>
           </div>
         ) : (

@@ -65,8 +65,8 @@ category: career-wiki-skill
    ```
 
 4. **npm install**
-   - 在 career-wiki-skill 仓库根目录运行 `npm install`（装 wiki 引擎用的 Node 依赖，如 gray-matter）
-   - 如果 `package.json` 不存在，跳过这一步并提示用户
+   - 在 `skills/wiki-engine/` 目录运行 `npm install`（装 wiki 引擎的 Node 依赖，如 gray-matter；resume-generator 的 API server 复用该目录的共享解析层 wiki-parser.mjs）
+   - `resume-generator` 的依赖声明在其目录下的 `package.json`，若缺失同样需在其目录运行 `npm install`
 
 5. **提示用户**
    - 环境就绪

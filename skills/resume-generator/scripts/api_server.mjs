@@ -28,7 +28,7 @@ import { existsSync } from 'node:fs';
 import { join, extname, basename, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import matter from 'gray-matter';
+import { collectMarkdown, parseWikiFile } from '../../wiki-engine/scripts/wiki-parser.mjs';
 
 // ── 常量 ──────────────────────────────────────────────
 
@@ -49,8 +49,6 @@ const ENTITY_DIRS = {
   summary: 'summaries',
 };
 
-// wikilink 正则：[[path|name]] 或 [[path]]
-const WIKILINK_RE = /\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]/g;
 
 // ── 路径解析 ──────────────────────────────────────────
 
@@ -74,32 +72,6 @@ async function resolveWikiRoot() {
 
 // ── 文件系统辅助 ──────────────────────────────────────
 
-/** 递归收集目录下所有 .md 文件，返回绝对路径数组 */
-async function collectMarkdown(dir) {
-  const results = [];
-  let entries;
-  try {
-    entries = await readdir(dir);
-  } catch (e) {
-    if (e.code === 'ENOENT') return [];
-    throw e;
-  }
-  for (const entry of entries) {
-    const full = join(dir, entry);
-    let s;
-    try {
-      s = await stat(full);
-    } catch {
-      continue;
-    }
-    if (s.isDirectory()) {
-      results.push(...(await collectMarkdown(full)));
-    } else if (s.isFile() && extname(entry) === '.md') {
-      results.push(full);
-    }
-  }
-  return results;
-}
 
 /** 递归收集目录下所有 .json 文件 */
 async function collectJson(dir) {
@@ -128,18 +100,6 @@ async function collectJson(dir) {
   return results;
 }
 
-/** 从正文中提取 wikilink，返回 {target, name}[] */
-function extractWikilinks(content) {
-  const links = [];
-  const re = new RegExp(WIKILINK_RE.source, 'g');
-  let m;
-  while ((m = re.exec(content)) !== null) {
-    const target = m[1].trim();
-    const name = (m[2] || '').trim() || target;
-    links.push({ target, name });
-  }
-  return links;
-}
 
 /** 从旧版项目正文中提取岗位职责，兼容尚未结构化该字段的 Wiki。 */
 function extractResponsibilities(content) {
@@ -154,49 +114,6 @@ function extractResponsibilities(content) {
   return section.replace(/\s*\n+\s*/g, ' ').trim();
 }
 
-/** 解析单个 wiki markdown 文件 → 实体对象 */
-async function parseWikiFile(filePath, wikiRoot) {
-  const raw = await readFile(filePath, 'utf-8');
-  const parsed = matter(raw);
-  const fm = parsed.data || {};
-  const content = parsed.content || '';
-
-  // 相对路径（相对于 wiki/）
-  const relPath = filePath.slice(wikiRoot.length + 1).replace(/\\/g, '/');
-
-  // 提取 wikilink
-  const links = extractWikilinks(content);
-
-  // 处理 relations
-  const relations = Array.isArray(fm.relations)
-    ? fm.relations.map((r) => ({
-        type: r.type,
-        target: String(r.target || '').replace(/\.md$/i, ''),
-      }))
-    : [];
-
-  // fields = frontmatter 除 meta 键以外的字段
-  const META_KEYS = ['entity', 'confidence', 'sources', 'relations'];
-  const fields = {};
-  for (const [k, v] of Object.entries(fm)) {
-    if (!META_KEYS.includes(k)) fields[k] = v;
-  }
-  if (fm.entity === 'project' && !fields.responsibilities) {
-    const responsibilities = extractResponsibilities(content);
-    if (responsibilities) fields.responsibilities = responsibilities;
-  }
-
-  return {
-    path: relPath,
-    entity: fm.entity || null,
-    confidence: fm.confidence || null,
-    sources: Array.isArray(fm.sources) ? fm.sources : fm.sources ? [fm.sources] : [],
-    fields,
-    relations,
-    links,
-    content,
-  };
-}
 
 // ── 请求处理辅助 ──────────────────────────────────────
 
@@ -285,12 +202,12 @@ async function handleHealth(wikiRoot, res) {
 /** GET /api/wiki — 所有 wiki 实体 */
 async function handleGetWiki(wikiRoot, res, query) {
   const wikiPath = join(wikiRoot, 'wiki');
-  const files = await collectMarkdown(wikiPath);
+  const files = await collectMarkdown(wikiPath, { tolerateMissing: true });
 
   let entities = [];
   for (const f of files) {
     try {
-      const ent = await parseWikiFile(f, wikiPath);
+      const ent = await parseWikiFile(f, wikiPath, { projectResponsibilities: extractResponsibilities });
       entities.push(ent);
     } catch {
       // 跳过解析失败的文件
@@ -331,7 +248,7 @@ async function handleGetWikiEntity(wikiRoot, res, entityDir, id) {
   }
 
   try {
-    const ent = await parseWikiFile(filePath, join(wikiRoot, 'wiki'));
+    const ent = await parseWikiFile(filePath, join(wikiRoot, 'wiki'), { projectResponsibilities: extractResponsibilities });
     sendJson(res, 200, ent);
   } catch (e) {
     sendJson(res, 500, { error: '解析失败', message: e.message });
@@ -400,13 +317,13 @@ async function assembleResume(config, template, wikiRoot) {
     if (!dirName) continue; // 未知 module，跳过
 
     const entityDir = join(wikiPath, dirName);
-    const mdFiles = await collectMarkdown(entityDir);
+    const mdFiles = await collectMarkdown(entityDir, { tolerateMissing: true });
 
     // 解析所有该类实体
     let items = [];
     for (const f of mdFiles) {
       try {
-        const ent = await parseWikiFile(f, wikiPath);
+        const ent = await parseWikiFile(f, wikiPath, { projectResponsibilities: extractResponsibilities });
         // 按 fields 配置抽取字段
         const sectionFields = [...(section.fields || [])];
         if (module === 'project') {
@@ -527,10 +444,10 @@ async function assembleResume(config, template, wikiRoot) {
   // person 单独处理（取第一个 person 实体）
   let personData = null;
   const personDir = join(wikiPath, 'persons');
-  const personFiles = await collectMarkdown(personDir);
+  const personFiles = await collectMarkdown(personDir, { tolerateMissing: true });
   if (personFiles.length > 0) {
     try {
-      const ent = await parseWikiFile(personFiles[0], wikiPath);
+      const ent = await parseWikiFile(personFiles[0], wikiPath, { projectResponsibilities: extractResponsibilities });
       personData = { ...ent.fields };
       personData._links = ent.links;
       personData._path = ent.path;

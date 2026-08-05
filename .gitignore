@@ -4,3 +4,4 @@ node_modules/
 dist/
 .wayfinder/
 docs/
+dev_log/

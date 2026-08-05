@@ -395,7 +395,7 @@ relations:
 
 ## Lint 检查
 
-compile 后运行 lint 检查 wiki/ 完整性。Agent 自己做检查，不依赖脚本。
+compile 后运行 lint 脚本检查 wiki/ 完整性。检查项是确定性判定，由 `skills/wiki-engine/scripts/lint.mjs` 完成；Agent 只负责按报告定位问题、修 raw 或重跑 compile。
 
 ### 检查项
 
@@ -411,11 +411,14 @@ compile 后运行 lint 检查 wiki/ 完整性。Agent 自己做检查，不依�
 
 ### 执行方法
 
-1. 用 `search_files` 列出 wiki/ 下所有 .md 文件
-2. 逐个读文件，解析 frontmatter（用 `gray-matter` 或手写解析）
-3. 提取所有 wikilink，建双向索引
-4. 对照检查项逐条检查
-5. 输出报告：
+```bash
+# 运行 lint 脚本（默认扫描 ~/.career_wiki/wiki/，可传 wiki 目录参数）
+node skills/wiki-engine/scripts/lint.mjs
+```
+
+- 退出码：`0` = 无 error（仅 warn 或无问题）；`1` = 有 error
+- 脚本复用共享解析层 `wiki-parser.mjs`；「语义重复实体」（如 go/golang）脚本无法判定，由 Agent 结合报告兜底
+- 输出报告格式：
 
 ```
 === Wiki Lint Report ===
@@ -436,6 +439,18 @@ compile 后运行 lint 检查 wiki/ 完整性。Agent 自己做检查，不依�
 
 ---
 
+## 共享解析层
+
+`skills/wiki-engine/scripts/wiki-parser.mjs` 是 wiki markdown → 实体对象的唯一实现，被以下脚本复用：
+
+- `okf_export.mjs` — OKF 导出
+- `lint.mjs` — lint 检查
+- `resume-generator/scripts/api_server.mjs` — API 读取
+
+修改 wikilink 正则、frontmatter 解析、relations 归一化等解析行为时，只改这一个文件。
+
+---
+
 ## OKF 导出/导入
 
 OKF（Open Knowledge Format）是 wiki 的 JSON 序列化格式，用于跨系统交换。**纯确定性操作，不需要 LLM**，用 Node 脚本执行。
@@ -445,7 +460,7 @@ OKF（Open Knowledge Format）是 wiki 的 JSON 序列化格式，用于跨系�
 - `skills/wiki-engine/scripts/okf_export.mjs` — wiki markdown → OKF JSON
 - `skills/wiki-engine/scripts/okf_import.mjs` — OKF JSON → wiki markdown
 
-依赖：`gray-matter`（package.json 声明）
+依赖：`gray-matter`（声明在 `skills/wiki-engine/package.json`；首次使用前在 `skills/wiki-engine/` 下运行 `npm install`）
 
 ### OKF JSON 格式
 
@@ -499,13 +514,13 @@ node skills/wiki-engine/scripts/okf_import.mjs okf-export.json -o ~/.career_wiki
 
 ### 依赖安装
 
-在 career-wiki-skill 仓库根目录运行：
+在 `skills/wiki-engine/` 目录运行：
 
 ```bash
-npm install
+cd skills/wiki-engine && npm install
 ```
 
-`package.json` 在仓库根目录，声明 `gray-matter` 依赖。
+`gray-matter` 依赖声明在 `skills/wiki-engine/package.json`。resume-generator 的 API server 复用本目录的共享解析层（`wiki-parser.mjs`），运行前同样需要先安装此依赖。
 
 ---
 

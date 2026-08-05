@@ -196,8 +196,8 @@ env-init skill 会：
 | env-init | SKILL.md + scripts/env_check.py |
 | interview | SKILL.md |
 | file-parser | SKILL.md |
-| wiki-engine | SKILL.md + scripts/okf_export.mjs + scripts/okf_import.mjs |
-| resume-generator | SKILL.md + scripts/api_server.mjs + package.json |
+| wiki-engine | SKILL.md + package.json + scripts/okf_export.mjs + scripts/okf_import.mjs + scripts/lint.mjs + scripts/wiki-parser.mjs（共享解析层，api_server 复用） |
+| resume-generator | SKILL.md + scripts/api_server.mjs + package.json（复用 wiki-engine 的共享解析层） |
 | web-editor | SKILL.md + React 项目 + templates/（4 JSON + 4 CSS） |
 
 ---

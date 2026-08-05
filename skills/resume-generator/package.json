@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node scripts/api_server.mjs",
     "dev": "PORT=3001 node scripts/api_server.mjs",
-    "test": "node --test tests/**/*.test.mjs"
+    "test": "node --test tests/**/*.test.mjs scripts/**/*.test.mjs"
   },
   "dependencies": {
     "gray-matter": "^4.0.3"

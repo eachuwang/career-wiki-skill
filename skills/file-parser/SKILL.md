@@ -12,6 +12,19 @@ metadata:
 
 # 文件解析 Skill（Career-Wiki-Skill）
 
+## 能力自检（前置准入，必读）
+
+> 🔴 **启动本 skill 前先自检：我能读图片吗？**
+
+本 skill 处理的文件含**图片 / 扫描件**（PDF 扫描页、JPG/PNG 截图、照片）。解析这些必须靠 vision 能力，纯文本 Agent 无法胜任。启动时先问自己：
+
+- **能读图片** → 继续，按下方流程解析。
+- **不能读图片**（文本 Agent，无 vision）→ **立即停下，告诉用户**：
+
+  > 我是文本 Agent，无法解析扫描件 / 图片 / 带扫描页的 PDF。请换一个有 vision 能力的 Agent（如 Claude、GPT-4o 等），或直接提供文字版材料（文本文件、可复制的 PDF、粘贴的文本）。
+
+这是**前置准入**，不是降级路径 —— 本 skill 不做降级（见「跨 Agent 一致性」），没有 vision 就用不了，早说早换。不要硬解析出乱码再让用户核对。
+
 ## 概述
 
 用户上传的文件（PDF / 图片 / Word / Excel / 纯文本）提取为纯文字 markdown，存入 `sources/raw/uploads/`。**不预结构化提取**——那是 wiki 引擎 compile 的活。文件解析产出跟采访产出平权，统一进 `sources/raw/`。

@@ -16,6 +16,7 @@ import type {
 } from '../types';
 import { ENTITY_COLORS, ENTITY_LABELS } from '../types';
 import { getReadableGraphTextColor } from '../graph/colors';
+import UiIcon from './UiIcon';
 
 interface GraphCanvasProps {
   wiki: WikiSnapshot | null;
@@ -83,12 +84,12 @@ export default function GraphCanvas({
             border: gapPaths.has(n.id) ? '#c0392b' : '#2c3e50',
           },
           font: {
-            color: '#302a25',
+            color: '#172033',
             size: 14,
             face: 'system-ui, PingFang SC, Microsoft YaHei, sans-serif',
-            background: 'rgba(255, 253, 249, 0.9)',
+            background: 'rgba(248, 250, 252, 0.92)',
             strokeWidth: 2,
-            strokeColor: '#fffdf9',
+            strokeColor: '#f8fafc',
           },
           shape: gapPaths.has(n.id) ? 'diamond' : 'dot',
           size: gapPaths.has(n.id) ? 20 : 15,
@@ -99,13 +100,13 @@ export default function GraphCanvas({
         graphEdges.map((e) => ({
           ...e,
           arrows: 'to',
-          color: { color: '#b8aa99', highlight: '#7f5035' },
+          color: { color: '#94a3b8', highlight: '#2563eb' },
           font: {
             size: 11,
-            color: '#50473f',
-            background: 'rgba(255, 253, 249, 0.82)',
+            color: '#475569',
+            background: 'rgba(248, 250, 252, 0.9)',
             strokeWidth: 2,
-            strokeColor: '#fffdf9',
+            strokeColor: '#f8fafc',
           },
         })),
       );
@@ -160,73 +161,69 @@ export default function GraphCanvas({
   const legend = Object.entries(ENTITY_COLORS);
 
   return (
-    <div className="h-full flex flex-col">
-      {/* 工具栏 */}
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-ink-200 bg-white no-print">
-        <span className="text-sm font-semibold text-ink-900">Wiki 图谱</span>
-        <div className="flex-1" />
-        <label className="flex items-center gap-1 text-xs text-ink-600 cursor-pointer">
-          <input
-            type="checkbox"
-            checked={showGaps}
-            onChange={(e) => setShowGaps(e.target.checked)}
-            className="rounded text-brand-500"
-          />
-          高亮缺口
-        </label>
-      </div>
-
-      <div className="flex-1 flex">
-        {/* 画布 */}
-        <div className="flex-1 relative bg-ink-50">
-          <div ref={containerRef} className="w-full h-full" />
-          {/* 图例 */}
-          <div className="absolute bottom-4 left-4 bg-white/95 rounded-lg shadow p-3 text-ink-800 no-print">
-            <div className="text-xs font-semibold text-ink-800 mb-2">实体类型</div>
-            <div className="space-y-1">
-              {legend.map(([type, color]) => (
-                <div key={type} className="flex items-center gap-2 text-xs text-ink-800">
-                  <span
-                    className="w-3 h-3 rounded-full"
-                    style={{ background: color }}
-                  />
-                  {ENTITY_LABELS[type as keyof typeof ENTITY_LABELS]}
-                </div>
-              ))}
-              {showGaps && (
-                <div className="flex items-center gap-2 text-xs text-ink-800 pt-1 border-t border-ink-200 mt-1">
-                  <span className="w-3 h-3 rotate-45 bg-red-400" />
-                  缺口/孤立
-                </div>
-              )}
-            </div>
+    <div className="h-full flex">
+      {/* 图谱画布 */}
+      <div className="flex-1 relative bg-ink-50">
+        <div ref={containerRef} className="w-full h-full" />
+        <div className="graph-canvas-actions no-print">
+          <label className="graph-toggle">
+            <input
+              type="checkbox"
+              checked={showGaps}
+              onChange={(e) => setShowGaps(e.target.checked)}
+              className="rounded text-brand-500 focus:ring-brand-300"
+            />
+            高亮缺口
+          </label>
+        </div>
+        {/* 图例 */}
+        <div className="absolute bottom-4 left-4 bg-white/95 rounded-lg shadow p-3 text-ink-800 no-print">
+          <div className="text-xs font-semibold text-ink-800 mb-2">实体类型</div>
+          <div className="space-y-1">
+            {legend.map(([type, color]) => (
+              <div key={type} className="flex items-center gap-2 text-xs text-ink-800">
+                <span
+                  className="w-3 h-3 rounded-full"
+                  style={{ background: color }}
+                />
+                {ENTITY_LABELS[type as keyof typeof ENTITY_LABELS]}
+              </div>
+            ))}
+            {showGaps && (
+              <div className="flex items-center gap-2 text-xs text-ink-800 pt-1 border-t border-ink-200 mt-1">
+                <span className="w-3 h-3 rotate-45 bg-red-400" />
+                缺口/孤立
+              </div>
+            )}
           </div>
         </div>
-
-        {/* 节点详情侧栏 */}
-        {selectedNode && (
-          <div className="w-80 border-l border-ink-200 bg-white overflow-y-auto p-4 no-print">
-            <div className="flex items-center justify-between mb-3">
-              <span
-                className="px-2 py-0.5 rounded text-xs font-semibold"
-                style={{
-                  background: ENTITY_COLORS[selectedNode.entity],
-                  color: getReadableGraphTextColor(ENTITY_COLORS[selectedNode.entity]),
-                }}
-              >
-                {ENTITY_LABELS[selectedNode.entity]}
-              </span>
-              <button
-                onClick={() => onSelectNode(null)}
-                className="text-ink-600 hover:text-ink-900"
-              >
-                ✕
-              </button>
-            </div>
-            <NodeDetail entity={selectedNode} />
-          </div>
-        )}
       </div>
+
+      {/* 节点详情侧栏 */}
+      {selectedNode && (
+        <div className="w-80 border-l border-ink-200 bg-white overflow-y-auto p-4 no-print">
+          <div className="flex items-center justify-between mb-3">
+            <span
+              className="px-2 py-0.5 rounded text-xs font-semibold"
+              style={{
+                background: ENTITY_COLORS[selectedNode.entity],
+                color: getReadableGraphTextColor(ENTITY_COLORS[selectedNode.entity]),
+              }}
+            >
+              {ENTITY_LABELS[selectedNode.entity]}
+            </span>
+            <button
+              onClick={() => onSelectNode(null)}
+              className="icon-button"
+              title="关闭详情"
+              aria-label="关闭节点详情"
+            >
+              <UiIcon name="close" size={17} />
+            </button>
+          </div>
+          <NodeDetail entity={selectedNode} />
+        </div>
+      )}
     </div>
   );
 }

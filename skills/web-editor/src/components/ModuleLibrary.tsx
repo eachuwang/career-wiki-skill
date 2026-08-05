@@ -21,7 +21,7 @@ function ModuleCard({ module }: { module: ModuleDef }) {
       ref={setNodeRef}
       {...listeners}
       {...attributes}
-      className={`module-library-card group flex min-h-16 items-center gap-3 rounded-xl border bg-white p-3 cursor-grab hover:border-brand-300 hover:shadow-sm transition-all ${
+      className={`module-library-card group flex min-h-16 items-center gap-3 rounded-lg border bg-white p-3 cursor-grab hover:border-brand-300 hover:shadow-sm transition-all ${
         isDragging ? 'opacity-40' : 'border-ink-200'
       }`}
     >
@@ -47,7 +47,6 @@ export default function ModuleLibrary() {
   return (
     <div className="h-full flex flex-col">
       <div className="pane-heading">
-        <div className="pane-heading-kicker">构建简历</div>
         <h2 className="pane-heading-title">模块库</h2>
         <p className="pane-heading-description">拖拽模块到编辑区添加</p>
       </div>

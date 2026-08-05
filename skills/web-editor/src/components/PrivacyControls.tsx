@@ -1,8 +1,7 @@
 /**
  * PrivacyControls — 脱敏设置面板
  *
- * 6 个字段开关，实时控制预览脱敏效果。
- * 对应 privacy-filter skill 的 6 个规则。
+ * 6 个字段开关，实时控制预览脱敏效果（原 privacy-filter 能力并入编辑器）。
  */
 
 import type { PrivacyConfig } from '../types';
@@ -22,6 +21,9 @@ const TOGGLES: ToggleItem[] = [
   { key: 'mask_name', label: '姓名', description: '王**' },
   { key: 'mask_phone', label: '电话', description: '138****5678' },
   { key: 'mask_email', label: '邮箱', description: 'w***@example.com' },
+  { key: 'mask_salary', label: '薪资', description: '[薪资已隐藏]' },
+  { key: 'mask_company', label: '公司', description: '[公司已隐藏]' },
+  { key: 'mask_github', label: 'GitHub', description: '[GitHub已隐藏]' },
 ];
 
 export default function PrivacyControls({

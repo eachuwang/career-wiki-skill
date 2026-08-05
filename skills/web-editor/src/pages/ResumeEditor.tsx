@@ -22,6 +22,7 @@ import { arrayMove } from '@dnd-kit/sortable';
 import ModuleLibrary from '../components/ModuleLibrary';
 import EditPanel from '../components/EditPanel';
 import PreviewPanel from '../components/PreviewPanel';
+import ResumeSelector from '../components/ResumeSelector';
 import TemplateSelector from '../components/TemplateSelector';
 import PrivacyControls from '../components/PrivacyControls';
 import UiIcon from '../components/UiIcon';
@@ -64,14 +65,19 @@ export default function ResumeEditor({
   resumes,
   onRefreshWiki,
 }: ResumeEditorProps) {
-  // 当前简历配置
+  // 当前简历配置（resumeList 为本地管理的简历列表，支持新建/复制/删除后即时刷新）
   const [currentResumeId, setCurrentResumeId] = useState<string>('');
+  const [resumeList, setResumeList] = useState<ResumeConfig[]>(resumes);
+  const [templateList, setTemplateList] = useState<TemplateConfig[]>(templates);
   const [resumeName, setResumeName] = useState('新建简历');
   const [templateId, setTemplateId] = useState<string>('');
   const [privacy, setPrivacy] = useState<PrivacyConfig>({
     mask_name: false,
     mask_phone: true,
     mask_email: true,
+    mask_salary: true,
+    mask_company: false,
+    mask_github: false,
   });
   const [modules, setModules] = useState<ModuleInstance[]>([]);
   const [activeDrag, setActiveDrag] = useState<{ id: string; type: string } | null>(null);
@@ -84,7 +90,16 @@ export default function ResumeEditor({
     (config: ResumeConfig) => {
       setResumeName(config.name);
       setTemplateId(config.template);
-      setPrivacy(config.privacy || { mask_phone: true, mask_email: true });
+      setPrivacy(
+        config.privacy || {
+          mask_name: false,
+          mask_phone: true,
+          mask_email: true,
+          mask_salary: true,
+          mask_company: false,
+          mask_github: false,
+        },
+      );
       setModules(
         (config.modules || []).map((type) => {
           const def = MODULE_LIBRARY.find((m) => m.type === type);
@@ -102,11 +117,19 @@ export default function ResumeEditor({
     [],
   );
 
+  // App 刷新数据时同步本地简历/模板列表
+  useEffect(() => {
+    setResumeList(resumes);
+  }, [resumes]);
+  useEffect(() => {
+    setTemplateList(templates);
+  }, [templates]);
+
   // 加载第一份简历
   useEffect(() => {
-    if (resumes.length > 0 && !currentResumeId) {
-      setCurrentResumeId(resumes[0].id);
-      loadResume(resumes[0]);
+    if (resumeList.length > 0 && !currentResumeId) {
+      setCurrentResumeId(resumeList[0].id);
+      loadResume(resumeList[0]);
       // 简历配置里已带模板，直接返回；
       // 否则下面的默认模板逻辑会在同一次 effect 里用闭包中的旧值
       // 把 loadResume 设置的 templateId 覆盖掉
@@ -116,10 +139,163 @@ export default function ResumeEditor({
     if (templates.length > 0 && !templateId) {
       setTemplateId(templates[0].id);
     }
-  }, [resumes, templates, currentResumeId, templateId, loadResume]);
+  }, [resumeList, templates, currentResumeId, templateId, loadResume]);
+
+  // ---------- 多简历管理（原 multi-resume 能力） ----------
+
+  /** 重新拉取简历列表并同步本地状态，返回最新列表 */
+  const refreshResumeList = async (): Promise<ResumeConfig[]> => {
+    const fresh = await api.getResumes();
+    setResumeList(fresh);
+    return fresh;
+  };
+
+  /** 切换简历：按 id 加载对应配置 */
+  const handleSelectResume = (id: string) => {
+    const config = resumeList.find((r) => r.id === id);
+    if (!config || id === currentResumeId) return;
+    setCurrentResumeId(id);
+    loadResume(config);
+  };
+
+  /** 新建简历：默认模板 + 常用模块，保存后立即加载 */
+  const handleNewResume = async () => {
+    const newId = `resume-${Date.now()}`;
+    // 常用模块按模块库定义构造 ModuleInstance 列表
+    const defaultTypes: EntityType[] = [
+      'person',
+      'experience',
+      'project',
+      'skill',
+      'education',
+    ];
+    const newModules: ModuleInstance[] = defaultTypes.map((type) => {
+      const def = MODULE_LIBRARY.find((m) => m.type === type);
+      return {
+        id: genId(),
+        type,
+        label: def?.label || type,
+        expanded: false,
+        overrides: {},
+        hiddenItemIds: [],
+      };
+    });
+    const config = createResumeConfig({
+      resumeName: `新简历 ${resumeList.length + 1}`,
+      resumeId: newId,
+      templateId: templateId || templates[0]?.id || '',
+      privacy: {
+        mask_name: false,
+        mask_phone: true,
+        mask_email: true,
+        mask_salary: true,
+        mask_company: false,
+        mask_github: false,
+      },
+      modules: newModules,
+    });
+    try {
+      await api.saveResume(config);
+      const fresh = await refreshResumeList();
+      const created = fresh.find((r) => r.id === newId);
+      if (created) {
+        setCurrentResumeId(created.id);
+        loadResume(created);
+      }
+    } catch (e) {
+      alert(`新建简历失败: ${e instanceof Error ? e.message : e}`);
+    }
+  };
+
+  /** 复制当前简历：生成新 id/name，保留模板/模块/脱敏配置 */
+  const handleDuplicateResume = async () => {
+    const source = resumeList.find((r) => r.id === currentResumeId);
+    if (!source) return;
+    const newId = `${source.id}-copy`;
+    const copy: ResumeConfig = {
+      ...source,
+      id: newId,
+      name: `${source.name} 副本`,
+      created: new Date().toISOString().slice(0, 10),
+      updated: new Date().toISOString().slice(0, 10),
+    };
+    try {
+      await api.saveResume(copy);
+      const fresh = await refreshResumeList();
+      const created = fresh.find((r) => r.id === newId);
+      if (created) {
+        setCurrentResumeId(created.id);
+        loadResume(created);
+      }
+    } catch (e) {
+      alert(`复制简历失败: ${e instanceof Error ? e.message : e}`);
+    }
+  };
+
+  /** 删除当前简历：确认后删除配置并切到剩余第一份 */
+  const handleDeleteResume = async () => {
+    const target = resumeList.find((r) => r.id === currentResumeId);
+    if (!target || resumeList.length <= 1) return;
+    if (!window.confirm(`确定删除简历「${target.name}」？仅删除配置，wiki 数据不受影响。`)) return;
+    try {
+      await api.deleteResume(target.id);
+      const fresh = await refreshResumeList();
+      if (fresh.length > 0) {
+        setCurrentResumeId(fresh[0].id);
+        loadResume(fresh[0]);
+      } else {
+        // 无简历：重置为空状态
+        setCurrentResumeId('');
+        setResumeName('新建简历');
+        setModules([]);
+      }
+    } catch (e) {
+      alert(`删除简历失败: ${e instanceof Error ? e.message : e}`);
+    }
+  };
 
   // 当前模板对象
-  const currentTemplate = templates.find((t) => t.id === templateId) || null;
+  const currentTemplate = templateList.find((t) => t.id === templateId) || null;
+
+  // ---------- 模板管理（原 template-manager 能力） ----------
+
+  /** 复制当前模板：生成新 id/name，携带源模板 CSS */
+  const handleDuplicateTemplate = async () => {
+    const source = templateList.find((t) => t.id === templateId);
+    if (!source) return;
+    const newId = `${source.id}-copy`;
+    const copy: TemplateConfig = {
+      ...source,
+      id: newId,
+      name: `${source.name} 副本`,
+    };
+    try {
+      const css = await api.getTemplateCss(source.id);
+      await api.saveTemplate(copy, css);
+      const fresh = await api.getTemplates();
+      setTemplateList(fresh);
+      setTemplateId(newId);
+    } catch (e) {
+      alert(`复制模板失败: ${e instanceof Error ? e.message : e}`);
+    }
+  };
+
+  /** 删除当前模板：确认后删除 JSON + CSS，切到剩余第一个模板 */
+  const handleDeleteTemplate = async () => {
+    if (!templateId || templateList.length <= 1) return;
+    const target = templateList.find((t) => t.id === templateId);
+    if (!target) return;
+    if (!window.confirm(`确定删除模板「${target.name}」？`)) return;
+    try {
+      await api.deleteTemplate(target.id);
+      const fresh = await api.getTemplates();
+      setTemplateList(fresh);
+      const next = fresh[0]?.id || '';
+      setTemplateId(next);
+    } catch (e) {
+      alert(`删除模板失败: ${e instanceof Error ? e.message : e}`);
+    }
+  };
 
   // ---------- dnd-kit handlers ----------
 
@@ -310,6 +486,14 @@ export default function ResumeEditor({
         {/* 顶栏 */}
         <div className="editor-toolbar no-print">
           <div className="toolbar-primary">
+            <ResumeSelector
+              resumes={resumeList}
+              currentId={currentResumeId}
+              onChange={handleSelectResume}
+              onNew={handleNewResume}
+              onDuplicate={handleDuplicateResume}
+              onDelete={handleDeleteResume}
+            />
             <label className="toolbar-field">
               <span>简历名称</span>
               <input
@@ -320,9 +504,11 @@ export default function ResumeEditor({
               />
             </label>
             <TemplateSelector
-              templates={templates}
+              templates={templateList}
               currentId={templateId}
               onChange={setTemplateId}
+              onDuplicate={handleDuplicateTemplate}
+              onDelete={handleDeleteTemplate}
             />
           </div>
           <div className="toolbar-privacy">

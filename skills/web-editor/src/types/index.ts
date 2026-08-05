@@ -2,7 +2,7 @@
  * Career-Wiki-Skill 前端类型定义
  *
  * 对应 wiki-engine schema（10 实体 + 13 关系）、
- * template-manager（模板 JSON）、multi-resume（简历配置 JSON）。
+ * 模板配置 JSON、多简历配置 JSON。
  * 前端通过 resume-generator API server 拿到这些数据。
  */
 
@@ -71,7 +71,7 @@ export interface WikiSnapshot {
   exportedAt?: string;
 }
 
-// ---------- 模板配置（template-manager） ----------
+// ---------- 模板配置 ----------
 
 export type LayoutType = 'single-column' | 'double-column';
 
@@ -100,7 +100,7 @@ export interface TemplateConfig {
   sections: TemplateSection[];
 }
 
-// ---------- 简历配置（multi-resume） ----------
+// ---------- 简历配置 ----------
 
 export interface ResumeEmphasize {
   module: EntityType;
@@ -121,6 +121,12 @@ export interface PrivacyConfig {
   mask_name?: boolean;
   mask_phone?: boolean;
   mask_email?: boolean;
+  /** 薪资：整段隐藏为 [薪资已隐藏] */
+  mask_salary?: boolean;
+  /** 公司名：整段隐藏为 [公司已隐藏] */
+  mask_company?: boolean;
+  /** GitHub：整段隐藏为 [GitHub已隐藏] */
+  mask_github?: boolean;
   /** 自定义脱敏规则扩展 */
   custom?: unknown[];
 }

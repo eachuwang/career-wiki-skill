@@ -23,7 +23,7 @@
  */
 
 import { createServer } from 'node:http';
-import { readFile, writeFile, readdir, stat, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, readdir, stat, mkdir, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join, extname, basename, dirname } from 'node:path';
 import { homedir } from 'node:os';
@@ -731,6 +731,110 @@ async function handleSave(wikiRoot, res, body) {
   }
 }
 
+/** POST /api/resume/delete — 删除简历配置（仅删配置，不删 wiki 数据） */
+async function handleDeleteResume(wikiRoot, res, body) {
+  const id = String(body.id || '');
+  if (!/^[a-z0-9-]+$/i.test(id)) {
+    return sendJson(res, 400, { error: '非法简历 id' });
+  }
+  const filePath = join(wikiRoot, 'resumes', `${id}.json`);
+  try {
+    await unlink(filePath);
+  } catch (e) {
+    if (e.code === 'ENOENT') {
+      return sendJson(res, 404, { error: '简历配置不存在', id });
+    }
+    return sendJson(res, 500, { error: '删除失败', message: e.message });
+  }
+  sendJson(res, 200, { status: 'deleted', id });
+}
+
+/** 校验模板 id，仅允许安全字符，防止路径穿越 */
+function isSafeId(id) {
+  return /^[a-z0-9-]+$/i.test(String(id || ''));
+}
+
+/** POST /api/template/save — 创建/更新模板（JSON + 可选 CSS），id 即文件名前缀 */
+async function handleSaveTemplate(wikiRoot, res, body) {
+  const template = body.template || body;
+  if (!template.id || !template.name || !Array.isArray(template.sections)) {
+    return sendJson(res, 400, { error: '模板缺少 id/name/sections' });
+  }
+  if (!isSafeId(template.id)) {
+    return sendJson(res, 400, { error: '非法模板 id，仅允许字母数字与连字符' });
+  }
+
+  const templatesDir = join(wikiRoot, 'templates');
+  await mkdir(templatesDir, { recursive: true });
+
+  // 补全 style 字段：未指定时按模板 id 生成
+  if (!template.style) {
+    template.style = `${template.id}.css`;
+  }
+
+  try {
+    await writeFile(
+      join(templatesDir, `${template.id}.json`),
+      JSON.stringify(template, null, 2),
+      'utf-8',
+    );
+    // 可选：同时写 CSS 文件（复制模板时携带源 CSS）
+    if (typeof body.css === 'string') {
+      await writeFile(
+        join(templatesDir, `${template.id}.css`),
+        body.css,
+        'utf-8',
+      );
+    }
+    sendJson(res, 200, { status: 'saved', id: template.id });
+  } catch (e) {
+    sendJson(res, 500, { error: '模板保存失败', message: e.message });
+  }
+}
+
+/** POST /api/template/delete — 删除模板（JSON + 同名 CSS） */
+async function handleDeleteTemplate(wikiRoot, res, body) {
+  const id = String(body.id || '');
+  if (!isSafeId(id)) {
+    return sendJson(res, 400, { error: '非法模板 id' });
+  }
+  const templatesDir = join(wikiRoot, 'templates');
+  const jsonPath = join(templatesDir, `${id}.json`);
+  const cssPath = join(templatesDir, `${id}.css`);
+  try {
+    await unlink(jsonPath);
+  } catch (e) {
+    if (e.code === 'ENOENT') {
+      return sendJson(res, 404, { error: '模板不存在', id });
+    }
+    return sendJson(res, 500, { error: '模板删除失败', message: e.message });
+  }
+  // CSS 文件可能不存在，忽略删除错误
+  try {
+    await unlink(cssPath);
+  } catch {}
+  sendJson(res, 200, { status: 'deleted', id });
+}
+
+/** GET /api/template/css?id=xxx — 返回模板 CSS 文本（供复制/预览使用） */
+async function handleGetTemplateCss(wikiRoot, res, query) {
+  const id = String(query.id || '');
+  if (!isSafeId(id)) {
+    return sendJson(res, 400, { error: '非法模板 id' });
+  }
+  const cssPath = join(wikiRoot, 'templates', `${id}.css`);
+  try {
+    const css = await readFile(cssPath, 'utf-8');
+    res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8' });
+    return res.end(css);
+  } catch (e) {
+    if (e.code === 'ENOENT') {
+      return sendJson(res, 404, { error: '模板 CSS 不存在', id });
+    }
+    return sendJson(res, 500, { error: '读取 CSS 失败', message: e.message });
+  }
+}
+
 /** PUT /api/wiki/refresh */
 async function handleRefresh(wikiRoot, res) {
   sendJson(res, 200, {
@@ -777,6 +881,10 @@ async function handleRequest(req, wikiRoot, res) {
           'POST /api/resume/generate',
           'POST /api/resume/export',
           'POST /api/resume/save',
+          'POST /api/resume/delete',
+          'POST /api/template/save',
+          'POST /api/template/delete',
+          'GET /api/template/css',
           'PUT /api/wiki/refresh',
         ],
       });
@@ -833,6 +941,29 @@ async function handleRequest(req, wikiRoot, res) {
       return await handleSave(wikiRoot, res, body);
     }
 
+    // /api/resume/delete
+    if (method === 'POST' && segs[1] === 'resume' && segs[2] === 'delete') {
+      const body = await readBody(req);
+      return await handleDeleteResume(wikiRoot, res, body);
+    }
+
+    // /api/template/save
+    if (method === 'POST' && segs[1] === 'template' && segs[2] === 'save') {
+      const body = await readBody(req);
+      return await handleSaveTemplate(wikiRoot, res, body);
+    }
+
+    // /api/template/delete
+    if (method === 'POST' && segs[1] === 'template' && segs[2] === 'delete') {
+      const body = await readBody(req);
+      return await handleDeleteTemplate(wikiRoot, res, body);
+    }
+
+    // /api/template/css
+    if (method === 'GET' && segs[1] === 'template' && segs[2] === 'css') {
+      return await handleGetTemplateCss(wikiRoot, res, query);
+    }
+
     // 未匹配
     return sendJson(res, 404, { error: '接口不存在', method, path: pathname });
   } catch (e) {
@@ -867,6 +998,10 @@ async function start() {
     console.log(`  POST /api/resume/generate`);
     console.log(`  POST /api/resume/export`);
     console.log(`  POST /api/resume/save`);
+    console.log(`  POST /api/resume/delete`);
+    console.log(`  POST /api/template/save`);
+    console.log(`  POST /api/template/delete`);
+    console.log(`  GET  /api/template/css`);
     console.log(`  PUT  /api/wiki/refresh`);
     console.log(`\n→ http://localhost:${port}/api/health`);
   });

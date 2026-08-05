@@ -49,7 +49,7 @@ career-wiki-skill 把这些问题一次性解决：**采访采集 → Wiki 知�
 
 ---
 
-## 9 个 Skill 组成
+## 6 个 Skill 组成
 
 | # | Skill | 形式 | 职责 |
 |---|-------|------|------|
@@ -58,10 +58,7 @@ career-wiki-skill 把这些问题一次性解决：**采访采集 → Wiki 知�
 | 3 | **file-parser** | 纯 SKILL.md | 上传 PDF/图片/文档，Agent 提取内容落到 raw |
 | 4 | **wiki-engine** | SKILL.md + Node 脚本 | 数据 schema 定义、compile/lint/OKF 导入导出 |
 | 5 | **resume-generator** | SKILL.md + Node API server | 从 Wiki 查询数据，按模板组装简历 JSON |
-| 6 | **web-editor** | SKILL.md + React 项目 | 可视化编辑、条目显隐、实时预览、Wiki 图谱、直接导出 PDF |
-| 7 | **template-manager** | SKILL.md + 模板文件 | 预设/自定义简历模板（JSON + CSS） |
-| 8 | **multi-resume** | 纯 SKILL.md | 一个 Wiki → 多份不同岗位简历配置 |
-| 9 | **privacy-filter** | SKILL.md + Python 脚本 | 导出前实时脱敏，字段可见性控制 |
+| 6 | **web-editor** | SKILL.md + React 项目 | 可视化编辑、多简历管理、模板复制/删除、6 字段隐私脱敏、实时预览、Wiki 图谱、直接导出 PDF |
 
 ---
 
@@ -213,7 +210,7 @@ career-wiki-skill 在以下 Agent 工具中均可使用：
 | Wiki 数据 | Markdown + YAML frontmatter + wikilink |
 | API Server | Node.js + gray-matter（纯 `node:http`，无框架） |
 | Web 前端 | React 18 + Vite + dnd-kit + Tailwind CSS + vis-network + html2pdf.js |
-| Python 脚本 | 环境检查、隐私脱敏（标准库） |
+| Python 脚本 | 环境检查（标准库） |
 | 导出格式 | PDF（按 A4 预览直接下载）/ HTML / JSON / OKF |
 | 模板系统 | JSON 配置 + CSS 样式 |
 

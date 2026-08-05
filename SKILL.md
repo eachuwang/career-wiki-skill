@@ -25,10 +25,7 @@ license: MIT
 | "检查 wiki" / "lint" | wiki-engine | 孤儿/断链/重复/过期检查 |
 | "导出 OKF" / "导入 OKF" | wiki-engine | Node 脚本，OKF JSON 双向转换 |
 | "生成简历" / "导出简历" / "启动 API server" | resume-generator | Node API server，查询 wiki + 组装简历 |
-| "打开编辑器" / "启动前端" / "看看简历预览" | web-editor | React 前端，拖拽编辑 + 实时预览 + 导出 |
-| "创建模板" / "看看有哪些模板" / "复制技术简约" | template-manager | 对话创建/查看/删除模板 |
-| "创建字节版简历" / "生成产品岗简历" / "看看我有几份简历" | multi-resume | 一个 Wiki → 多份不同岗位简历配置 |
-| "预览脱敏效果" / "导出前脱敏" / "隐藏敏感信息" | privacy-filter | Web 预览时实时脱敏 |
+| "打开编辑器" / "启动前端" / "看看简历预览" | web-editor | React 前端，拖拽编辑 + 实时预览 + 导出；含多简历/模板管理/隐私脱敏 |
 
 ---
 
@@ -41,14 +38,7 @@ interview ──→ wiki-engine（采完自动 compile）
 file-parser ──→ wiki-engine（提取完自动 compile）
 
 wiki-engine ──→ resume-generator（提供 wiki 数据）
-template-manager ──→ resume-generator（提供模板 schema）
-template-manager ──→ web-editor（模板选择 UI）
-
-resume-generator ──→ web-editor（前端调 API）
-multi-resume ──→ resume-generator（多配置）
-multi-resume ──→ web-editor（多简历切换 UI）
-
-privacy-filter ──→ web-editor（预览时脱敏）
+resume-generator ──→ web-editor（前端调 API，含模板/多简历/脱敏数据）
 ```
 
 ---
@@ -193,9 +183,9 @@ env-init skill 会：
 - [ ] wiki-engine lint 无 error（warn 可接受）
 - [ ] resume-generator API server 可启动，9 个接口可调
 - [ ] web-editor 前端可打开，拖拽/预览/导出功能正常
-- [ ] template-manager 预设模板 JSON + CSS 都在
-- [ ] multi-resume 简历配置在 `resumes/` 下
-- [ ] privacy-filter 脱敏预览效果正确
+- [ ] web-editor 多简历切换/新建/复制/删除正常，配置在 `resumes/` 下
+- [ ] web-editor 模板复制/删除正常，模板在 `templates/` 下
+- [ ] web-editor 6 字段脱敏开关实时生效，预览与导出一致
 
 ---
 
@@ -208,10 +198,7 @@ env-init skill 会：
 | file-parser | SKILL.md |
 | wiki-engine | SKILL.md + scripts/okf_export.mjs + scripts/okf_import.mjs |
 | resume-generator | SKILL.md + scripts/api_server.mjs + package.json |
-| web-editor | SKILL.md + React 项目（18 源文件） |
-| template-manager | SKILL.md + templates/（4 JSON + 4 CSS） |
-| multi-resume | SKILL.md |
-| privacy-filter | SKILL.md + scripts/privacy_filter.py |
+| web-editor | SKILL.md + React 项目 + templates/（4 JSON + 4 CSS） |
 
 ---
 

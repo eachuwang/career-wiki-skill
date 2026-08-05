@@ -1,13 +1,13 @@
 ---
 name: resume-generator
-description: 简历生成 skill。提供 Node API server（9 个 HTTP 接口），读 wiki markdown → gray-matter 解析 frontmatter → 正则提取 wikilink → 按模板 schema 组装结构化简历 JSON。用户说"生成简历""导出简历""启动 API server"时触发。纯确定性操作，不需要 LLM。PDF/HTML 导出由前端渲染。
+description: 简历生成 skill。提供 Node API server（13 个 HTTP 接口），读 wiki markdown → gray-matter 解析 frontmatter → 正则提取 wikilink → 按模板 schema 组装结构化简历 JSON。用户说"生成简历""导出简历""启动 API server"时触发。纯确定性操作，不需要 LLM。PDF/HTML 导出由前端渲染。
 version: 1.0.0
 author: career-wiki-skill
 license: MIT
 metadata:
   hermes:
     tags: [resume-generator, career-wiki-skill, api-server, resume, generate, export]
-    related_skills: [wiki-engine, template-manager, multi-resume, web-frontend, privacy-filter]
+    related_skills: [wiki-engine, web-editor]
     tickets: [F06]
 ---
 
@@ -19,7 +19,7 @@ career-wiki-skill 的简历生成层。提供 **Node HTTP API server**，从 wik
 
 **核心理念：** 简历生成是**纯确定性操作**（Node 做，不需要 LLM）。读 wiki → 解析 → 按模板 schema 组装 → 返回 JSON。数据组装、字段映射、排序、过滤全在 Node 脚本完成。简历润色是 LLM 操作（用户需要时在 Web 前端触发 Agent）。
 
-**模板格式：** JSON 配置（字段映射 + 布局参数）+ CSS 样式文件。预设 4 个模板（技术简约/商务侧栏/创意色块/学术纯文），由 template-manager skill 管理。
+**模板格式：** JSON 配置（字段映射 + 布局参数）+ CSS 样式文件。预设 4 个模板（技术简约/商务侧栏/创意色块/学术纯文），由 web-editor 前端管理（复制/删除）。
 
 **导出方式：**
 - **JSON** — Node 直接返回组装好的结构化简历 JSON
@@ -37,7 +37,7 @@ career-wiki-skill 的简历生成层。提供 **Node HTTP API server**，从 wik
 - Web 前端启动时自动调 `GET /api/health` 检查服务状态
 - Web 前端简历编辑器调 `GET /api/resumes` + `GET /api/templates` 填充 UI
 
-**不用于：** 管理多份简历配置（用 multi-resume skill）；管理模板（用 template-manager skill）；编译 wiki（用 wiki-engine skill）。
+**不用于：** 编译 wiki（用 wiki-engine skill）；多简历配置与模板管理已并入 web-editor 前端。
 
 ---
 
@@ -97,7 +97,7 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 - `gray-matter` — 解析 markdown frontmatter（仓库根 package.json 声明）
 - Node 内置 `http` / `fs` / `path` — 不需要额外依赖
 
-### 9 个接口
+### 13 个接口
 
 | # | 方法 | 路径 | 说明 |
 |---|------|------|------|
@@ -110,6 +110,10 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 | 7 | POST | `/api/resume/export` | 导出 PDF/HTML/JSON（JSON 直接返回，HTML/PDF 由前端渲染） |
 | 8 | POST | `/api/resume/save` | 保存简历配置到 resumes/ |
 | 9 | PUT | `/api/wiki/refresh` | 触发 wiki 重新 compile（提示用户调 Agent） |
+| 10 | POST | `/api/resume/delete` | 删除简历配置（仅删 JSON，不删 wiki 数据） |
+| 11 | POST | `/api/template/save` | 创建/更新模板（JSON + 可选 CSS） |
+| 12 | POST | `/api/template/delete` | 删除模板（JSON + 同名 CSS） |
+| 13 | GET | `/api/template/css` | 读取模板 CSS 文本（供复制/预览） |
 
 ---
 
@@ -429,7 +433,7 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 
 保存简历配置到 `~/.career_wiki/resumes/{id}.json`。
 
-**请求体：** 完整的简历配置 JSON（格式见 multi-resume skill）。
+**请求体：** 完整的简历配置 JSON（由 web-editor 前端生成，格式见 `resumes/` 下现有配置）。
 
 **响应 200：**
 ```json
@@ -473,7 +477,7 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 
 2. **简历配置的 template 指向不存在的模板。** `/api/resume/generate` 会返回 404。生成前应检查模板文件存在。
 
-3. **强调名称或隐藏路径跟 Wiki 对不上。** `emphasize.items` 按实体名称匹配；`hide.items` 按 API 返回的 `_path`/`path` 精确匹配，配置应由 multi-resume 或 Web 编辑器从真实 Wiki 数据生成。
+3. **强调名称或隐藏路径跟 Wiki 对不上。** `emphasize.items` 按实体名称匹配；`hide.items` 按 API 返回的 `_path`/`path` 精确匹配，配置应由 Web 编辑器从真实 Wiki 数据生成。
 
 4. **数据目录找不到。** `WIKI_ROOT` 环境变量没设、config.json 不存在、目录路径写错——API server 启动时应该 fallback 到 `~/.career_wiki/`，并在 `/api/health` 里返回实际用的路径让用户确认。
 

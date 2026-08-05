@@ -80,7 +80,44 @@ export async function saveResume(config: ResumeConfig): Promise<void> {
   });
 }
 
+/** 删除简历配置（仅删配置，不删 wiki 数据） */
+export async function deleteResume(id: string): Promise<void> {
+  await request<void>('/api/resume/delete', {
+    method: 'POST',
+    body: JSON.stringify({ id }),
+  });
+}
+
 // ---------- 模板 ----------
+
+/** 获取模板 CSS 文本（用于复制模板时携带样式） */
+export async function getTemplateCss(id: string): Promise<string> {
+  const resp = await fetch(
+    `${BASE_URL}/api/template/css?id=${encodeURIComponent(id)}`,
+  );
+  if (!resp.ok) throw new Error('读取模板 CSS 失败');
+  return resp.text();
+}
+
+/** 保存/更新模板（可携带 CSS 文本） */
+export async function saveTemplate(
+  template: TemplateConfig,
+  css?: string,
+): Promise<void> {
+  await request<void>('/api/template/save', {
+    method: 'POST',
+    body: JSON.stringify({ template, css }),
+  });
+}
+
+/** 删除模板 */
+export async function deleteTemplate(id: string): Promise<void> {
+  await request<void>('/api/template/delete', {
+    method: 'POST',
+    body: JSON.stringify({ id }),
+  });
+}
+
 
 /** 获取所有模板 */
 export async function getTemplates(): Promise<TemplateConfig[]> {

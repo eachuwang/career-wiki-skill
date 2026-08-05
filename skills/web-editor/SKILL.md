@@ -1,13 +1,13 @@
 ---
 name: web-editor
-description: 用途：Career-Wiki-Skill 前端 React 应用（简历编辑器 + Wiki 图谱）。用户说"打开编辑器""启动前端""看看简历预览""查看知识图谱"时触发。源码随 skill 包分发，npm install + npm run dev 启动。调 resume-generator 的 API server（默认 localhost:3001）拿数据。支持拖拽排序、实时预览、脱敏切换、模板切换、PDF/HTML/JSON 直接下载。
+description: 用途：Career-Wiki-Skill 前端 React 应用（简历编辑器 + Wiki 图谱），集成了模板管理、多简历管理与隐私脱敏。用户说"打开编辑器""启动前端""看看简历预览""创建模板""创建字节版简历""预览脱敏效果""查看知识图谱"时触发。源码随 skill 包分发，npm install + npm run dev 启动。调 resume-generator 的 API server（默认 localhost:3001）拿数据。支持拖拽排序、实时预览、多简历切换/新建/复制/删除、模板复制/删除、6 字段脱敏开关、PDF/HTML/JSON 直接下载。
 version: 1.0.0
 author: career-wiki-skill
 license: MIT
 metadata:
   hermes:
     tags: [web-editor, career-wiki-skill, frontend, react, resume, graph]
-    related_skills: [resume-generator, template-manager, multi-resume, privacy-filter, wiki-engine]
+    related_skills: [resume-generator, wiki-engine]
     tickets: [F07]
 ---
 
@@ -30,8 +30,11 @@ Career-Wiki-Skill 的前端 React 应用，包含两个页面：
 - 用户说"导出 PDF" → 前端用 `html2pdf.js` 将当前 A4 预览直接下载为 PDF
 - 用户说"导出 HTML" → 前端保存渲染的 HTML 到文件
 - 用户说"导出 JSON" → 调 API server 的 export 接口
+- 用户说"新建/复制/删除简历""切换简历" → 顶栏「简历」下拉 + 操作按钮，调 resumes API
+- 用户说"复制/删除模板" → 顶栏模板下拉 + 操作按钮，调 templates API
+- 用户说"预览脱敏效果""隐藏敏感信息" → 隐私预览 6 个开关实时生效
 
-**不用于：** 生成简历数据（用 resume-generator）；管理模板（用 template-manager）；管理简历配置（用 multi-resume）。前端只消费这些 skill 产出的数据。
+**不用于：** 生成简历数据（用 resume-generator）；采访与 Wiki 编译（用 interview / wiki-engine）。模板管理、多简历管理、隐私脱敏已并入本前端，不再作为独立 skill。
 
 ## 技术栈
 
@@ -204,7 +207,7 @@ npm run build    # 输出到 dist/
 
 - 假设 Agent 有终端执行能力（跑 `npm install` + `npm run dev`）
 - 前端不直接读写文件系统，所有数据通过 API server
-- 类型定义（`src/types/index.ts`）跟 wiki-engine schema / template-manager / multi-resume 的 JSON 格式对齐
+- 类型定义（`src/types/index.ts`）跟 wiki-engine schema / 模板 JSON / 简历配置 JSON 格式对齐
 - Vite proxy 配置确保开发时前后端分离运行
 
 ## Common Pitfalls

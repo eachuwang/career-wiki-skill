@@ -70,8 +70,20 @@ function maskValue(field: string, value: unknown, privacy: PrivacyConfig): strin
     return at > 0 ? `${v[0]}***${v.slice(at)}` : v;
   }
   // name
-  if (privacy.mask_name && (field === 'name' || field === 'company')) {
+  if (privacy.mask_name && field === 'name') {
     return v.length > 1 ? `${v[0]}${'*'.repeat(v.length - 1)}` : v;
+  }
+  // company（与 name 独立开关）
+  if (privacy.mask_company && field === 'company') {
+    return '[公司已隐藏]';
+  }
+  // salary
+  if (privacy.mask_salary && field === 'salary') {
+    return '[薪资已隐藏]';
+  }
+  // github
+  if (privacy.mask_github && field === 'github') {
+    return '[GitHub已隐藏]';
   }
   return v;
 }

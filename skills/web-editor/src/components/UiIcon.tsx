@@ -17,6 +17,7 @@ import {
   Certificate,
   ChartBar,
   Code,
+  Copy,
   Download,
   DotsSixVertical,
   Envelope,
@@ -54,6 +55,7 @@ export type UiIconName =
   | 'chevron-right'
   | 'close'
   | 'code'
+  | 'copy'
   | 'download'
   | 'eye'
   | 'eye-off'
@@ -89,6 +91,7 @@ const ICONS: Record<UiIconName, Icon> = {
   'chevron-right': CaretRight,
   close: X,
   code: Code,
+  copy: Copy,
   download: Download,
   eye: Eye,
   'eye-off': EyeSlash,

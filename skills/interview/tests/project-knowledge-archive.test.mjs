@@ -36,7 +36,7 @@ test('项目深度信息进入 Wiki Schema 且默认不展示在简历', async (
 
   for (const template of ['tech-minimal', 'business-sidebar', 'creative-color']) {
     const content = await readFile(
-      new URL(`../../template-manager/templates/${template}.json`, import.meta.url),
+      new URL(`../../web-editor/templates/${template}.json`, import.meta.url),
       'utf8',
     );
     for (const field of hiddenByDefault) assert.doesNotMatch(content, new RegExp(field));

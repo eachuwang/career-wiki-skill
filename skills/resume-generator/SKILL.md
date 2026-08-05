@@ -115,6 +115,21 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 | 12 | POST | `/api/template/delete` | 删除模板（JSON + 同名 CSS） |
 | 13 | GET | `/api/template/css` | 读取模板 CSS 文本（供复制/预览） |
 
+### 模块结构
+
+`scripts/` 按领域拆分（候选 D），`api_server.mjs` 仅是入口：
+
+| 文件 | 职责 |
+|------|------|
+| `api_server.mjs` | 入口，调 `http.mjs` 的 `start()` |
+| `http.mjs` | HTTP 壳：`readBody`/`sendJson`、路由分发、`generate`/`export` 处理器、服务启动 |
+| `crud.mjs` | 简历/模板 CRUD + `generate`/`export` 共用的 `loadResumeConfig`/`loadTemplate` |
+| `assembler.mjs` | 纯函数组装核心（可直测，消费 `resume-rules.mjs` + `wiki-parser.mjs`） |
+| `wiki-reader.mjs` | wiki 读取域：路径解析、实体读取、health 计数、refresh 提示（复用 `wiki-engine` 的 `wiki-parser.mjs`） |
+| `resume-rules.mjs` | 共享渲染规则（脱敏/排序/字段选择/隐藏/分组，web-editor 复用） |
+
+`generate` 与 `export` 共用 `crud.mjs` 的配置+模板加载逻辑，再调 `assembler.mjs` 的纯函数组装，避免两处加载分叉。
+
 ---
 
 ## 数据组装流程（核心）

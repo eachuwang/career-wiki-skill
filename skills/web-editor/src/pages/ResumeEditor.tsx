@@ -193,8 +193,12 @@ export default function ResumeEditor({
     );
   };
 
-  const handleRemoveModule = (id: string) => {
-    setModules((prev) => prev.filter((m) => m.id !== id));
+  const handleRemoveModule = async (id: string) => {
+    // 用删除后的模块列表更新界面，并立即保存，
+    // 保证刷新后被删组件不会重新出现。
+    const nextModules = modules.filter((m) => m.id !== id);
+    setModules(nextModules);
+    await handleSave(nextModules);
   };
 
   /** 为键盘用户提供确定性的模块排序入口，并限制索引不越界。 */
@@ -219,25 +223,25 @@ export default function ResumeEditor({
 
   // ---------- 导出 ----------
 
-  const buildResumeConfig = (): ResumeConfig => {
+  const buildResumeConfig = (modulesOverride?: ModuleInstance[]): ResumeConfig => {
     const baseConfig = resumes.find((resume) => resume.id === currentResumeId);
     return createResumeConfig({
       resumeName,
       resumeId: currentResumeId,
       templateId,
       privacy,
-      modules,
+      modules: modulesOverride ?? modules,
       baseConfig,
     });
   };
 
-  const handleSave = async () => {
+  const handleSave = async (modulesOverride?: ModuleInstance[]) => {
     setSaving(true);
     setSaveMsg('');
     try {
-      const config = buildResumeConfig();
+      const config = buildResumeConfig(modulesOverride);
       await api.saveResume(config);
-      setSaveMsg('已保存');
+      setSaveMsg(modulesOverride ? '已删除并保存' : '已保存');
       setTimeout(() => setSaveMsg(''), 3000);
     } catch (e) {
       setSaveMsg(`保存失败：${e instanceof Error ? e.message : e}`);
@@ -343,7 +347,7 @@ export default function ResumeEditor({
               </button>
             </div>
             <button
-              onClick={handleSave}
+              onClick={() => handleSave()}
               disabled={saving}
               className="toolbar-button strong"
             >

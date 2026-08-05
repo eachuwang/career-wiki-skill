@@ -376,6 +376,10 @@ export default function PreviewPanel({
   /** 按页码分组内容块；未分页前先按一页兜底渲染 */
   const pageGroups = useMemo(() => {
     if (!pageIndexes) return null;
+    // 页码必须与内容块一一对应；长度不一致说明分页结果已过期
+    // （如删除/新增模块后尚未重算），此时回退单页兜底渲染，
+    // 避免按旧页码越界访问 blocks 导致渲染崩溃。
+    if (pageIndexes.length !== blocks.length) return null;
     const groups: ResumeBlock[][] = [];
     pageIndexes.forEach((page, i) => {
       (groups[page] = groups[page] || []).push(blocks[i]);

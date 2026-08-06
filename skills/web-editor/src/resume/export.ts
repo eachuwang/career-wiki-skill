@@ -65,6 +65,16 @@ export function buildStandaloneResumeHtml({
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(title)}</title>
   <style>${cssText}</style>
+  <style>
+    /* 防御性覆盖：确保编辑器工具栏等 .no-print 元素在屏幕查看时也不可见
+       （collectDocumentCss 收集的 .no-print 规则仅在 @media print 下生效，
+       独立 HTML 用浏览器打开默认是屏幕视图，工具栏会泄漏进来）。 */
+    .no-print { display: none !important; }
+    .paginate-measure { display: none !important; }
+    /* 独立 HTML 文档视图：去掉预览用的阴影和外边距，接近最终文档外观 */
+    .a4-page { box-shadow: none; margin: 0 auto 16px; }
+    body { background: #fff; }
+  </style>
 </head>
 <body>${resumeMarkup}</body>
 </html>`;
@@ -125,6 +135,14 @@ export async function downloadResumePdf({
     shell.style.transform = 'none';
   }
 
+  // 防御性隐藏：html2canvas 渲染时会克隆整个文档计算样式，
+  // 隐藏 .no-print 和 .paginate-measure 避免它们干扰渲染产物。
+  const hiddenEls = typeof document !== 'undefined'
+    ? Array.from(document.querySelectorAll<HTMLElement>('.no-print, .paginate-measure'))
+    : [];
+  const prevDisplay = hiddenEls.map((el) => el.style.display);
+  hiddenEls.forEach((el) => { el.style.display = 'none'; });
+
   try {
     const pdf = createPdf();
     for (let i = 0; i < pages.length; i += 1) {
@@ -146,5 +164,12 @@ export async function downloadResumePdf({
         shell.style.removeProperty('transform');
       }
     }
+    hiddenEls.forEach((el, i) => {
+      if (prevDisplay[i]) {
+        el.style.display = prevDisplay[i];
+      } else {
+        el.style.removeProperty('display');
+      }
+    });
   }
 }

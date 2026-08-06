@@ -493,16 +493,9 @@ export default function ResumeEditor({
               onNew={handleNewResume}
               onDuplicate={handleDuplicateResume}
               onDelete={handleDeleteResume}
+              name={resumeName}
+              onNameChange={setResumeName}
             />
-            <label className="toolbar-field">
-              <span>简历名称</span>
-              <input
-                type="text"
-                value={resumeName}
-                onChange={(e) => setResumeName(e.target.value)}
-                className="resume-name-input"
-              />
-            </label>
             <TemplateSelector
               templates={templateList}
               currentId={templateId}

@@ -5,6 +5,8 @@
  * 删除仅删配置 JSON，wiki 源数据不受影响。
  */
 
+import { useState } from 'react';
+import type { KeyboardEvent } from 'react';
 import type { ResumeConfig } from '../types';
 import UiIcon from './UiIcon';
 
@@ -15,6 +17,8 @@ interface ResumeSelectorProps {
   onNew: () => void;
   onDuplicate: () => void;
   onDelete: () => void;
+  name: string;
+  onNameChange: (name: string) => void;
 }
 
 export default function ResumeSelector({
@@ -24,9 +28,21 @@ export default function ResumeSelector({
   onNew,
   onDuplicate,
   onDelete,
+  name,
+  onNameChange,
 }: ResumeSelectorProps) {
+  const [editingName, setEditingName] = useState(false);
+
+  /** 结束名称编辑，保留已经同步到父级的最新名称。 */
+  const finishNameEditing = () => setEditingName(false);
+
+  /** 允许回车或 Escape 快速结束名称编辑。 */
+  const handleNameKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Escape' || event.key === 'Enter') finishNameEditing();
+  };
+
   return (
-    <div className="resume-selector">
+    <div className="resume-selector" data-editing-name={editingName}>
       <label className="toolbar-field">
         <span>简历</span>
         <select
@@ -44,8 +60,33 @@ export default function ResumeSelector({
       </label>
       <button
         type="button"
+        onClick={() => setEditingName((value) => !value)}
+        className="toolbar-icon-button toolbar-icon-button-subtle"
+        title="编辑简历名称"
+        aria-label="编辑简历名称"
+        aria-pressed={editingName}
+      >
+        <UiIcon name="pencil" size={16} />
+      </button>
+      {editingName && (
+        <label className="toolbar-field resume-name-editor">
+          <span>重命名</span>
+          <input
+            type="text"
+            value={name}
+            onChange={(event) => onNameChange(event.target.value)}
+            onBlur={finishNameEditing}
+            onKeyDown={handleNameKeyDown}
+            className="resume-name-input"
+            aria-label="编辑简历名称"
+            autoFocus
+          />
+        </label>
+      )}
+      <button
+        type="button"
         onClick={onNew}
-        className="toolbar-icon-button"
+        className="toolbar-icon-button toolbar-icon-button-subtle"
         title="新建简历"
         aria-label="新建简历"
       >
@@ -54,7 +95,7 @@ export default function ResumeSelector({
       <button
         type="button"
         onClick={onDuplicate}
-        className="toolbar-icon-button"
+        className="toolbar-icon-button toolbar-icon-button-subtle"
         title="复制当前简历"
         aria-label="复制当前简历"
       >
@@ -64,7 +105,7 @@ export default function ResumeSelector({
         type="button"
         onClick={onDelete}
         disabled={resumes.length <= 1}
-        className="toolbar-icon-button"
+        className="toolbar-icon-button toolbar-icon-button-subtle"
         title={resumes.length <= 1 ? '至少保留一份简历' : '删除当前简历'}
         aria-label="删除当前简历"
       >

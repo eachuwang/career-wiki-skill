@@ -49,7 +49,7 @@ export default function TemplateSelector({
       <button
         type="button"
         onClick={onDuplicate}
-        className="toolbar-icon-button"
+        className="toolbar-icon-button toolbar-icon-button-subtle"
         title="复制当前模板"
         aria-label="复制当前模板"
       >
@@ -59,7 +59,7 @@ export default function TemplateSelector({
         type="button"
         onClick={onDelete}
         disabled={!deletable}
-        className="toolbar-icon-button"
+        className="toolbar-icon-button toolbar-icon-button-subtle"
         title={deletable ? '删除当前模板' : '至少保留一个模板'}
         aria-label="删除当前模板"
       >

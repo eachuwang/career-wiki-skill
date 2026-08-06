@@ -980,6 +980,31 @@ button:disabled {
   page-break-inside: avoid;
 }
 
+/* 条目拆分为细粒度分页块：title+sub 独占 lead 块，每个描述字段各自成块。
+   块被 .paginate-block 包裹，相邻选择器无法跨包裹生效，故条目间距改由
+   lead 的 margin-top 承担（前一个 desc 的 margin-bottom 为 0，折叠后
+   即得 3.8mm 条目间距）；section 首个 lead 紧跟 section-title，单独置 0
+   复刻原 .entry（margin-top 0）的内部间距，避免拆分后排版漂移：
+   - lead → desc：desc 的 1.4mm 上间距（与原 .entry 内部一致）
+   - desc → desc：1.4mm
+   - desc → lead：3.8mm（条目间距）
+   这样跨页边界下移的只是单个描述字段（高度小），第一页底部留白大幅缩小。 */
+.entry-lead {
+  margin: 3.8mm 0 0;
+  break-inside: avoid-page;
+  page-break-inside: avoid;
+}
+
+.section-title + .entry-lead {
+  margin-top: 0;
+}
+
+.entry-desc-block {
+  margin-bottom: 0;
+  break-inside: avoid-page;
+  page-break-inside: avoid;
+}
+
 .entry-title {
   color: var(--resume-text);
   font-size: 10.5pt;

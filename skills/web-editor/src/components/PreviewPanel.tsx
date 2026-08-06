@@ -471,18 +471,24 @@ export default function PreviewPanel({
       {typeof document !== 'undefined' &&
         createPortal(
           <div className="paginate-measure" aria-hidden ref={measureRef}>
-            <div className="a4-content">
-              {blocks.map((block, i) => (
-                <div
-                  key={block.key}
-                  className="paginate-block"
-                  ref={(el) => {
-                    blockElsRef.current[i] = el;
-                  }}
-                >
-                  {block.node}
-                </div>
-              ))}
+            {/* 套上与可见页一致的 resume-document + templateClass 作用域，
+                否则 .resume-document 下设定的 font-size/line-height/色彩在
+                测量容器中失效，块高被高估、分页把过多块挤进下一页，
+                可见页内容区底部出现大段空白。 */}
+            <div className={`resume-document ${templateClass}`}>
+              <div className="a4-content">
+                {blocks.map((block, i) => (
+                  <div
+                    key={block.key}
+                    className="paginate-block"
+                    ref={(el) => {
+                      blockElsRef.current[i] = el;
+                    }}
+                  >
+                    {block.node}
+                  </div>
+                ))}
+              </div>
             </div>
           </div>,
           document.body,

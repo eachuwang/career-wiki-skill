@@ -34,6 +34,7 @@ import {
   Medal,
   Minus,
   Phone,
+  PencilSimple,
   Plus,
   Sparkle,
   Trash,
@@ -66,6 +67,7 @@ export type UiIconName =
   | 'plus'
   | 'refresh'
   | 'save'
+  | 'pencil'
   | 'trash';
 
 interface UiIconProps extends SVGProps<SVGSVGElement> {
@@ -105,6 +107,7 @@ const ICONS: Record<UiIconName, Icon> = {
   trash: Trash,
   mail: Envelope,
   phone: Phone,
+  pencil: PencilSimple,
   github: GithubLogo,
   globe: Globe,
 };

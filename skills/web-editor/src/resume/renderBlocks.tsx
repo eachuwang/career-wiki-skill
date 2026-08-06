@@ -152,14 +152,17 @@ export function renderModuleBlocks(
       f !== 'start' &&
       f !== 'end',
   );
-  const items = sorted.map((e, i) => {
+  // 细粒度分块：title+sub 独占一块，每个描述字段各自成块。
+  // 这样跨页边界的只是单个描述字段（高度小），下移留白大幅缩小，
+  // 第一页内容区被尽量填满；title+sub 块很小、极少跨页，不会孤行。
+  const headItems = sorted.map((e, i) => {
     const startText = formatDate(e.fields.start);
     const endText = formatDate(e.fields.end);
     const dateRange = startText ? `${startText} - ${endText || '至今'}` : endText;
     return {
-      key: `${module.id}-entry-${e.path || i}`,
+      key: `${module.id}-entry-${e.path || i}-head`,
       node: (
-        <div className="entry">
+        <div className="entry entry-lead">
           <div className="entry-title">
             {maskValue(e.fields[titleField], titleField, privacy)}
           </div>
@@ -174,27 +177,34 @@ export function renderModuleBlocks(
               <span className="entry-date">{dateRange}</span>
             )}
           </div>
-          {descFields.map(
-            (f) =>
-              e.fields[f] != null && (
-                <div key={f} className="entry-desc">
-                  {module.type === 'project' && f === 'description' && (
-                    <span className="entry-desc-label">项目描述：</span>
-                  )}
-                  {f === 'responsibilities' && (
-                    <span className="entry-desc-label">岗位职责：</span>
-                  )}
-                  {f === 'tech_stack' && (
-                    <span className="entry-desc-label">技术栈：</span>
-                  )}
-                  {maskValue(e.fields[f], f, privacy)}
-                </div>
-              ),
-          )}
         </div>
       ),
     };
   });
-  pushSection(items[0], items.slice(1));
+  const descItem = (e: WikiEntity, i: number, f: string) => ({
+    key: `${module.id}-entry-${e.path || i}-desc-${f}`,
+    node: (
+      <div className="entry-desc entry-desc-block">
+        {module.type === 'project' && f === 'description' && (
+          <span className="entry-desc-label">项目描述：</span>
+        )}
+        {f === 'responsibilities' && (
+          <span className="entry-desc-label">岗位职责：</span>
+        )}
+        {f === 'tech_stack' && (
+          <span className="entry-desc-label">技术栈：</span>
+        )}
+        {maskValue(e.fields[f], f, privacy)}
+      </div>
+    ),
+  });
+  const entryBlocks: ResumeBlock[] = [];
+  sorted.forEach((e, i) => {
+    entryBlocks.push(headItems[i]);
+    descFields.forEach((f) => {
+      if (e.fields[f] != null) entryBlocks.push(descItem(e, i, f));
+    });
+  });
+  pushSection(entryBlocks[0], entryBlocks.slice(1));
   return blocks;
 }

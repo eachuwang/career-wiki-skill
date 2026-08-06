@@ -144,3 +144,60 @@ async function previewShowsProjectResponsibilities(): Promise<void> {
 }
 
 test('项目预览兼容显示岗位职责和技术栈字段', previewShowsProjectResponsibilities);
+
+/**
+ * 条目按描述字段拆分为细粒度分页块：title+sub 独占 lead 块，每个描述字段
+ * 各自成 desc 块。这样跨页边界下移的只是单个描述字段（高度小），第一页
+ * 底部留白大幅缩小；若回归成「整条目单块」，大条目跨页会重新留出大段空白。
+ */
+async function entrySplitsIntoGranularBlocks(): Promise<void> {
+  const html = await renderPreview({
+    modules: [
+      {
+        id: 'project-module',
+        type: 'project',
+        label: '项目经验',
+        expanded: true,
+        overrides: {},
+        hiddenItemIds: [],
+      },
+    ],
+    wikiEntities: [
+      {
+        path: 'projects/data-agent.md',
+        entity: 'project',
+        confidence: 'extracted',
+        sources: [],
+        relations: [],
+        links: [],
+        fields: {
+          name: '数据智能体',
+          role: '大模型应用工程师',
+          start: '2024-01',
+          end: 'present',
+          description: '自动生成数据接入脚本。',
+          responsibilities: '解析数据字典；生成 DDL 与 ETL 脚本。',
+          tech_stack: 'Node.js、PostgreSQL、LangChain',
+        },
+      },
+    ],
+    template: {
+      id: 'legacy-template',
+      name: '旧模板',
+      sections: [
+        {
+          module: 'project',
+          title: '项目经验',
+          fields: ['name', 'role', 'start', 'end', 'description'],
+        },
+      ],
+    },
+  });
+
+  // title+sub 独占一个 lead 块
+  assert.equal(html.match(/class="entry entry-lead"/g)?.length, 1);
+  // 三个描述字段各自成块（description / responsibilities / tech_stack）
+  assert.equal(html.match(/class="entry-desc entry-desc-block"/g)?.length, 3);
+}
+
+test('条目按描述字段拆分为细粒度分页块以减少跨页留白', entrySplitsIntoGranularBlocks);

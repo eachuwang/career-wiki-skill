@@ -1,3 +1,9 @@
+<div align="right">
+
+[English](README.en.md) · 中文
+
+</div>
+
 <div align="center">
 
 # career-wiki-skill
@@ -226,4 +232,4 @@ career-wiki-skill 在以下 Agent 工具中均可使用：
 
 ## License
 
-MIT
+MIT，详见 [LICENSE](LICENSE)。

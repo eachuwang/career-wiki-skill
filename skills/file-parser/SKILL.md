@@ -14,7 +14,7 @@ metadata:
 
 ## 概述
 
-用户上传的文件（PDF / 图片 / Word / Excel / 纯文本）提取为纯文字 markdown，存入 `sources/raw/uploads/`。**不预结构化提取**——那是 wiki 引擎 compile 的活。文件解析产出跟采访产出平权，统一进 `sources/raw/`。
+用户上传的文件（PDF / 图片 / Word / Excel / 纯文本）提取为纯文字 markdown，存入 `sources/raw/uploads/`。**不在文件解析阶段预结构化提取**——那是 wiki 引擎 compile 的活。文件解析产出跟采访产出平权，统一进 `sources/raw/`；简历 raw 必须作为 Wiki 编译的正式输入，不能只作为采访时的参考附件。
 
 **核心理念：** Agent 自身的 Read / vision 能力覆盖所有格式，不需要 Python 解析脚本。
 
@@ -106,7 +106,9 @@ interviewer: career-wiki-skill
 
 1. **有 subagent 能力** → 并行触发 compile，不阻塞用户
 2. **无 subagent 能力** → 同步执行 compile，跑完告诉用户
-3. 告诉用户：原始文件路径 + 提取的 markdown 路径 + compile 状态
+3. compile 必须全量读取 `sources/raw/`，包括本次生成的 `sources/raw/uploads/{文件名}.md`，识别并写入其中的 person、experience、project、skill、education 等实体及关系；不能只返回“已解析文件”而不生成 Wiki 页面。
+4. 验证本次 raw 的路径出现在相关 Wiki 页面的 `sources` 中；简历含项目描述或岗位职责时，至少验证对应的 `wiki/projects/` 页面已保存这些字段。
+5. 告诉用户：原始文件路径 + 提取的 markdown 路径 + 生成/更新的 Wiki 页面数量 + compile 状态
 
 ## 续解析支持
 
@@ -131,7 +133,7 @@ interviewer: career-wiki-skill
 
 4. **把提取的 markdown 和原始文件放同一目录。** 原始文件在 `sources/uploads/`，提取产出在 `sources/raw/uploads/`，分开存。
 
-5. **忘记触发 compile。** 步骤 4 必须调 wiki 引擎。有 subagent 并行，没有同步，不能跳过。
+5. **只完成文件提取，没有生成 Wiki。** 步骤 4 必须调 wiki 引擎；简历 raw 是正式数据源，不是临时参考材料。必须确认实体页面已写入并带有该 raw 的 `sources`。
 
 6. **vision 识别不确认就写。** 图片/扫描件 vision 提取的内容，如果置信度低（文字模糊、布局复杂），告诉用户"识别可能有误，原始文件在 X，请核对"。
 
@@ -144,4 +146,6 @@ interviewer: career-wiki-skill
 - [ ] markdown frontmatter 含 `upload_date / original_file / file_type / interviewer: career-wiki-skill`
 - [ ] 正文为纯文字，保持原文件结构，无结构化提取标注
 - [ ] wiki 引擎 compile 已触发（并行或同步）
+- [ ] compile 已读取本次简历 raw，并将其中实体和关系写入 `wiki/`
+- [ ] 简历中的项目描述、岗位职责已保存到对应 `wiki/projects/` 页面
 - [ ] 已告知用户原始文件路径 + markdown 路径 + compile 状态

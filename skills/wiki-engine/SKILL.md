@@ -22,6 +22,8 @@ career-wiki-skill 的核心引擎。做三件事：
 
 **核心理念：** schema 写在本 SKILL.md 里（不用 profile.json）；compile 的实体识别纯靠 Agent LLM 理解能力（不需要脚本）；wiki 是编译产物，不允许人工编辑，每次从所有 raw 全量重建。
 
+**文件 raw 是一等输入：** `sources/raw/uploads/` 下由简历或其他文件解析产生的 markdown，与 interview raw 具有同等编译优先级。不能只把文件 raw 当作采访参考或附件索引；compile 必须从文件 raw 中识别实体、字段和关系，并将结果持久化到 `wiki/`。
+
 ---
 
 ## 数据规范（F01）
@@ -274,7 +276,7 @@ find ~/.career_wiki/sources/raw/ -name '*.md' -type f
 **识别规则：**
 - person — 姓名、职位、联系方式
 - experience — 公司+职位+起止时间的组合
-- project — 项目名+角色+起止时间+项目描述+岗位职责+技术栈+困难+解决方案+结果+复盘
+- project — 项目名+角色+起止时间是实体识别基础；项目描述、岗位职责、技术栈、困难、解决方案、结果、复盘等字段按 raw 中实际出现的内容逐项提取，不得因为某些可选字段缺失而丢弃项目实体
 - skill — 技能名+分类+熟练度
 - education — 学校+学历+专业+起止
 - certificate — 证书名+机构+日期
@@ -390,6 +392,15 @@ relations:
 > 3. 如果用户犹豫，先建议运行 OKF 导出备份：`node skills/wiki-engine/scripts/okf_export.mjs ~/.career_wiki/wiki/ -o wiki-backup.json`
 
 用户确认后，清空 `wiki/` 下所有子目录，确保是全新重建。旧文件不保留。
+
+#### 9. 编译完成校验
+
+清理并重建后，必须做以下校验再宣称 compile 完成：
+
+1. `sources/raw/`（包括 `sources/raw/uploads/`）中的每个 raw 都已读取。
+2. 文件 raw 中识别出的实体已写入对应 `wiki/` 目录，页面 frontmatter 的 `sources` 包含该 raw 路径。
+3. 文件 raw 中出现项目名称、项目描述或岗位职责时，对应 `wiki/projects/` 页面必须存在，并保留 `description` 与职责正文；不能只生成项目名称、时间。
+4. 若校验失败，必须报告未生成的实体或字段，不能用“已编译”掩盖缺失。
 
 ---
 
@@ -553,6 +564,9 @@ npm install
 - [ ] frontmatter relations 已填写
 - [ ] wiki/ 旧文件已清空
 - [ ] 新页面已写入对应子目录
+- [ ] `sources/raw/uploads/` 下的文件 raw 已作为正式输入完成解析
+- [ ] 简历中的项目描述、岗位职责已保存到对应 `wiki/projects/` 页面
+- [ ] 相关 Wiki 页面的 `sources` 包含对应文件 raw 路径
 
 ### Lint
 - [ ] 所有 wiki 页面 frontmatter 含 entity/confidence/sources

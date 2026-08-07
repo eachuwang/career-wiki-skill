@@ -1,6 +1,6 @@
 ---
 name: env-init
-description: 环境初始化 skill。检查 Node.js/Python/npm 版本、创建 ~/.career_wiki/ 目录结构、npm 安装 Node 依赖、首次引导用户选数据目录。当用户说"检查环境"/"初始化"/"环境配置"时触发。所有其他 skill 的前置依赖。
+description: career-wiki 环境初始化 skill。检查 Node.js/Python/npm 版本、创建 ~/.career_wiki/ 目录结构、npm 安装 Node 依赖、首次引导用户选数据目录。当用户明确说"检查 career-wiki 环境"/"初始化 career-wiki 环境"/"初始化 career-wiki"时触发。所有其他 career-wiki skill 的前置依赖。
 category: career-wiki-skill
 ---
 
@@ -11,7 +11,7 @@ category: career-wiki-skill
 - 用户第一次使用 career-wiki-skill 包时
 - 用户环境变化后（升级了 Node、重装系统、切换机器）
 - 任何其他 career-wiki-skill skill 报告依赖缺失时
-- 用户显式要求"检查环境"/"初始化环境"时
+- 用户显式要求"检查 career-wiki 环境"/"初始化 career-wiki 环境"时
 
 ## 检查项
 

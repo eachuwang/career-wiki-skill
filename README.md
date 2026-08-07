@@ -146,7 +146,7 @@ git clone https://github.com/eachuwang/career-wiki-skill.git
 在你的 Agent 里说：
 
 ```
-检查环境 / 初始化 career-wiki
+检查 career-wiki 环境 / 初始化 career-wiki 环境
 ```
 
 env-init skill 会：

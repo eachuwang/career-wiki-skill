@@ -29,11 +29,12 @@ metadata:
 
 - 存储：`~/.career_wiki/sources/raw/interview-{YYYYMMDD-HHmmss}.md`
 - 续采时 round 递增（首轮 round=1，第一次补 round=2）
+- 进行中的采访断点：`~/.career_wiki/.career-wiki-skill/interview-checkpoint.json`
 - 所有路径以 `~/.career_wiki` 为根，Agent 首次调用先确认该目录存在；不存在则提示用户先跑 env-init skill
 
 ## 产出文件格式
 
-每个采访产出文件结构：
+每个已完成采访产出文件结构：
 
 ```markdown
 ---
@@ -60,6 +61,29 @@ interviewer: career-wiki-skill
 
 **保留用户原话。** 用户自由讲的部分用引用块 `>` 记录原话，Agent 的提取确认用普通文本跟在后面。项目回答的完整原话必须写入 raw，不能只保留面向简历的摘要。不做 frontmatter 实体提取——那是 compile 的活。
 
+### 断点文件格式
+
+采访进行中不能只依赖当前会话上下文。每次用户回答后，都要更新 `interview-checkpoint.json`，至少保存：
+
+```json
+{
+  "status": "in_progress",
+  "round": 1,
+  "interview_file": "sources/raw/interview-20260807-140000.md",
+  "current_section": "project",
+  "current_item": "基于 LangChain 的数据入湖智能体开发",
+  "last_completed_field": "项目描述",
+  "pending_question": "你在这个项目中具体负责什么？",
+  "completed_sections": ["basic", "experience"],
+  "confirmed_content": [],
+  "updated_at": "2026-08-07T14:30:00+08:00"
+}
+```
+
+- `confirmed_content` 保存已确认的原话和整理结果，不能只保存“已聊到项目经验”这类摘要。
+- checkpoint 是进行中状态，不得放入 `sources/raw/`，也不得在采访未结束时触发 compile。
+- 用户明确表示结束采访时，才将 checkpoint 中的完整内容写入 `interview_file`，删除或标记 checkpoint 为 `completed`，再触发 compile。
+
 ## 采访流程
 
 ### 阶段 0：开场定位
@@ -67,10 +91,25 @@ interviewer: career-wiki-skill
 > 🔴 **CHECKPOINT** — 开始采访前必须完成以下确认
 >
 > 1. 确认 `~/.career_wiki/` 存在；不存在 → 🛑 STOP，提示用户先跑 env-init
-> 2. 如果是续采，先读上一轮 raw 文件，告诉用户已有什么、问要补哪节
-> 3. 如果首轮，说明流程："我会按 7 节问，基本信息快过，经历项目你自由讲我来整理确认"
+> 2. 先检查 `interview-checkpoint.json`：如果 `status=in_progress`，恢复同一轮采访，不创建新 round；读取其中的完整已确认内容、当前节、当前项目、最后完成字段和待问问题。
+> 3. 如果没有进行中的 checkpoint，再读取最新 interview raw；对其中“详见某个 raw 文件”或来源列表里的引用，继续读取对应 raw 文件全文，并核对已有 `wiki/` 编译结果，再告诉用户已有什么、问要补哪节。
+> 4. 如果是首轮，说明流程："我会按 7 节问，基本信息快过，经历项目你自由讲我来整理确认"
 >
 > 🛑 目录不存在时不要继续。没有数据目录，采集的内容无处可写。
+
+### 中断恢复方式
+
+检测到进行中的 checkpoint 时，不要重新展示完整问题树，也不要从基本信息重新开始。先用自然语言恢复上下文，例如：
+
+> “欢迎回来。上次我们已经确认了基本信息和工作经历，正在补充「基于 LangChain 的数据入湖智能体开发」的项目描述，刚才停在项目职责。我们接着聊：你在这个项目中具体负责什么？”
+
+恢复规则：
+
+1. 优先继续 `pending_question`；如果该问题已在 checkpoint 中标记完成，则继续当前节下一个未完成字段。
+2. 如果上次停在用户回答之后但还没完成确认，先复述待确认内容，只确认这一项，不重复之前已确认的问题。
+3. 如果 checkpoint 内容与最新 raw 或 Wiki 冲突，以时间较新的用户明确回答为准，并在本轮结束时合并来源。
+4. 用户说“继续采访 / 接着上次”但没有明确主题时，直接恢复 checkpoint，不再让用户重新选择章节。
+5. 用户说“重新开始”或明确要求放弃上次内容时，才废弃 checkpoint 并新建一轮。
 
 ### 阶段 1：基本信息（填表式快过）
 
@@ -195,16 +234,35 @@ interviewer: career-wiki-skill
 > 2. **自动触发 wiki 引擎 compile**（F04）：
 >    - **有 subagent 能力**：并行触发 compile，不阻塞用户
 >    - **无 subagent 能力**：同步执行 compile，跑完告诉用户"已编译进 wiki"
+>    - compile 必须全量读取 `sources/raw/`，包括 `sources/raw/uploads/` 下的简历 raw；简历 raw 中的项目描述、本人职责和其他实体必须解析并保存到对应 Wiki 页面，不能只作为采访文件的引用。
+>    - compile 完成后核对相关 Wiki 页面的 `sources` 是否包含简历 raw，并确认项目页面保留描述和职责正文。
 > 3. 告诉用户文件路径 + compile 状态
+
+### 每轮对话后的保存规则
+
+每次用户回答或确认后，必须先保存 checkpoint，再继续提问：
+
+1. 将用户原话追加到 `confirmed_content`，同时更新当前节、当前项目、已完成字段和下一个待问问题。
+2. 更新 `updated_at`；写入失败时暂停提问并告知用户，不能继续依赖易失的会话上下文。
+3. 用户临时离开、说“下次继续”、关闭会话或没有完成阶段 8 确认时，保持 `status=in_progress`，不要写入完成 raw，也不要触发 compile。
+4. 下次启动时以 checkpoint 恢复；只有用户确认采访结束后，才生成最终 raw 并编译。
 
 ## 续采支持
 
 用户后续补信息时的流程：
 
-1. 读最新的 raw 文件，看 round 号，新文件 round+1
-2. **用户明确说补什么** → 直接进对应节（如"补一个项目"→ 阶段 3 流程）
-3. **用户不明确**（如"再补充点"）→ 引导："上次采集到 round {N}，工作经历/项目/技能都有了吗？要补哪节？"
-4. 续采只写新增内容到新文件，不改旧文件（compile 时全量合并所有 raw）
+1. 先检查进行中的 `interview-checkpoint.json`：存在且 `status=in_progress` 时，恢复原 round，不创建新文件、不递增 round。
+2. 没有进行中的 checkpoint 时，读取最新的 interview raw 文件，看 round 号，新文件 round+1。
+3. 从该文件正文、frontmatter 的 `sources` 或“详见/来源”说明中提取引用的 `sources/raw/` 路径，并读取对应 raw 文件全文；不能把“详见简历 raw 文件”当成项目没有详情。
+4. 检查已有 `wiki/` 编译结果，重点读取 `wiki/projects/`、`wiki/experiences/` 等与本轮续采章节相关的页面；如果引用的简历 raw 尚未进入相关 Wiki 页面的 `sources`，先触发一次全量 compile。
+5. 建立缺口时区分三种状态：
+   - **已完整**：引用的 raw 或 Wiki 页面已经有项目描述、本人职责等内容，不得再次判定为缺失；
+   - **部分完整**：已有描述或职责，但技术栈、困难、解决方案、结果、复盘等字段确实缺失，只追问缺失字段；
+   - **未采集**：引用的 raw 和 Wiki 页面都没有相关内容，才列为需要补充的项目。
+6. 汇报现状时必须说明判断依据，例如“13 个项目的描述和职责已从上传简历编译进 Wiki，本轮只需补充困难/解决方案/结果/复盘（如有）”，不能只根据上一轮 interview 文件中的项目索引下结论。
+7. **用户明确说补什么** → 直接进对应节（如“补一个项目”→ 阶段 3 流程）。
+8. **用户不明确**（如“再补充点”）→ 先给出基于上述交叉核对的真实缺口，再引导用户选择。
+9. 续采只写新增内容到新文件，不改旧文件（compile 时全量合并所有 raw）。
 
 ## 跨 Agent 一致性
 
@@ -230,15 +288,22 @@ interviewer: career-wiki-skill
 
 8. **一次抛出多个问题。** 项目补问必须逐题进行；即使缺口很多，也只能在用户答清当前问题后再问下一题。
 
+9. **只读上一轮 interview raw 就判断知识缺口。** interview raw 可能只保存项目索引，并把详细内容引用到上传简历 raw；续采必须跟随引用并核对 Wiki，不能把“文件中没展开”误报成“项目没有展开”。
+
+10. **把中断采访当成新一轮。** 用户只是暂时离开时，必须恢复原 checkpoint 和 round，不能重新询问已确认内容，也不能覆盖或提前编译半成品。
+
 ## Verification Checklist
 
 - [ ] `~/.career_wiki/sources/raw/interview-{timestamp}.md` 已创建
+- [ ] 采访过程中每轮回答都已更新 `interview-checkpoint.json`
 - [ ] frontmatter 含 `interview_date / round / interviewer: career-wiki-skill`
 - [ ] 正文按 7 节组织，经历的节有循环
 - [ ] 用户原话用 `>` 引用块保留，Agent 确认用普通文本
+- [ ] 续采已读取上一轮 interview raw 引用的 raw 文件及相关 Wiki 页面，再判断真实缺口
 - [ ] 每个项目已覆盖项目描述、本人职责、技术栈、困难和解决方案
 - [ ] 项目结果与复盘已按用户实际情况追问，完整原话已存入 raw
 - [ ] 项目缺口补问每轮只有一个问题，未明确的回答已追问到清晰后再继续
 - [ ] 续采文件 round 号正确递增
+- [ ] 中断恢复时沿用原 round，未重复询问已确认内容
 - [ ] wiki 引擎 compile 已触发（并行或同步）
 - [ ] 已告知用户文件路径和 compile 状态

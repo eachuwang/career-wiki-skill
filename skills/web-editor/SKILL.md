@@ -1,6 +1,6 @@
 ---
 name: web-editor
-description: 用途：Career-Wiki-Skill 前端 React 应用（简历编辑器 + Wiki 图谱），集成了模板管理、多简历管理与隐私脱敏。用户说"打开编辑器""启动前端""看看简历预览""创建模板""创建字节版简历""预览脱敏效果""查看知识图谱"时触发。源码随 skill 包分发，npm install + npm run dev 启动。调 resume-generator 的 API server（默认 localhost:3001）拿数据。支持拖拽排序、实时预览、多简历切换/新建/复制/删除、模板复制/删除、6 字段脱敏开关、PDF/HTML/JSON 直接下载。
+description: 用途：Career-Wiki-Skill 前端 React 应用（简历编辑器 + Wiki 图谱），集成了模板管理、多简历管理与隐私脱敏。用户说"打开编辑器""启动前端""看看简历预览""创建模板""创建字节版简历""预览脱敏效果""查看知识图谱"时触发。源码随 skill 包分发；首次使用或依赖变更时执行 npm install，依赖已存在时直接 npm run dev。调 resume-generator 的 API server（默认 localhost:3001）拿数据。支持拖拽排序、实时预览、多简历切换/新建/复制/删除、模板复制/删除、6 字段脱敏开关、PDF/HTML/JSON 直接下载。
 version: 1.0.0
 author: career-wiki-skill
 license: MIT
@@ -49,9 +49,24 @@ Career-Wiki-Skill 的前端 React 应用，包含两个页面：
 
 ```bash
 cd skills/web-editor
-npm install          # 安装依赖
+
+# 仅在依赖缺失，或 package-lock.json 比 node_modules 的安装锁更新时安装
+if [ ! -x node_modules/.bin/vite ] || [ ! -f node_modules/.package-lock.json ] || [ package-lock.json -nt node_modules/.package-lock.json ]; then
+  npm install --no-audit --no-fund
+fi
+
 npm run dev          # 启动开发服务器（http://localhost:5173）
 ```
+
+### 启动决策
+
+按以下顺序执行，不要每次启动都无条件运行 `npm install`：
+
+1. 先检查 `http://localhost:5173` 是否已经有可用的 Vite 服务；已有服务时直接告知用户编辑器已运行，不要再启动第二个进程。
+2. 检查 `node_modules/.bin/vite` 是否存在且可执行；存在时复用当前依赖，直接运行 `npm run dev`。
+3. 依赖目录不存在、Vite 二进制缺失，或 `package-lock.json` 比 `node_modules/.package-lock.json` 更新时，才运行 `npm install --no-audit --no-fund`。
+4. 依赖安装完成后再运行 `npm run dev`，并确认 5173 端口已监听。
+5. 服务停止只代表停止进程，不要因为上次服务停止就重新安装依赖。
 
 **前提：** resume-generator 的 API server 需先启动（默认 `http://localhost:3001`）。Vite 开发服务器已配置代理，将 `/api` 请求转发到 API server。
 
@@ -214,21 +229,24 @@ npm run build    # 输出到 dist/
 
 1. **API server 没启动。** 前端启动后会报连接错误。必须先启动 resume-generator 的 API server（`http://localhost:3001`）。Vite proxy 只在开发模式生效，生产部署需配 nginx 反代。
 
-2. **vis-network 动态导入。** `GraphCanvas.tsx` 用 `import('vis-network/standalone')` 动态加载，避免首屏加载 vis-network 的重量级代码。如果看到图谱不渲染，检查浏览器控制台是否有动态 import 错误。
+2. **每次启动都重新安装依赖。** 停止 Vite 不会删除 `node_modules`。先检查 `node_modules/.bin/vite` 和锁文件状态，只有缺失或依赖声明变化时才安装。
 
-3. **dnd-kit 拖拽需同时有 Draggable + Droppable。** 模块库的卡片是 Draggable，编辑区是 Droppable。少了任一方拖拽都不生效。排序用的是 `SortableContext`。
+3. **vis-network 动态导入。** `GraphCanvas.tsx` 用 `import('vis-network/standalone')` 动态加载，避免首屏加载 vis-network 的重量级代码。如果看到图谱不渲染，检查浏览器控制台是否有动态 import 错误。
 
-4. **PDF 生成范围。** `html2pdf.js` 只接收 `.print-area`，不要传入预览工具栏或缩放容器，否则导出内容会带入界面控件或缩放比例。
+4. **dnd-kit 拖拽需同时有 Draggable + Droppable。** 模块库的卡片是 Draggable，编辑区是 Droppable。少了任一方拖拽都不生效。排序用的是 `SortableContext`。
 
-5. **覆盖不回写 wiki。** 编辑区的字段编辑只存到简历配置的 `overrides` 字段，不修改 wiki 源数据。这是设计意图——改简历不改 wiki，只改视角。
+5. **PDF 生成范围。** `html2pdf.js` 只接收 `.print-area`，不要传入预览工具栏或缩放容器，否则导出内容会带入界面控件或缩放比例。
 
-6. **预览与 HTML 样式分叉。** HTML 导出必须从当前文档样式表收集 CSS，并复用 `.print-area` 的同一渲染树；不要另写一套导出模板。
+6. **覆盖不回写 wiki。** 编辑区的字段编辑只存到简历配置的 `overrides` 字段，不修改 wiki 源数据。这是设计意图——改简历不改 wiki，只改视角。
 
-7. **TypeScript 严格模式。** `tsconfig.json` 开了 strict。API 返回的 `fields: Record<string, unknown>` 需要类型断言才能访问具体字段。不要用 `any` 绕过——用类型守卫或断言。
+7. **预览与 HTML 样式分叉。** HTML 导出必须从当前文档样式表收集 CSS，并复用 `.print-area` 的同一渲染树；不要另写一套导出模板。
+
+8. **TypeScript 严格模式。** `tsconfig.json` 开了 strict。API 返回的 `fields: Record<string, unknown>` 需要类型断言才能访问具体字段。不要用 `any` 绕过——用类型守卫或断言。
 
 ## Verification Checklist
 
 - [ ] `npm install` 成功安装所有依赖
+- [ ] 依赖已存在时未重复执行 `npm install`
 - [ ] `npm run dev` 启动开发服务器，`http://localhost:5173` 可访问
 - [ ] `npm run build` 成功构建到 `dist/`
 - [ ] API server 未启动时前端显示错误提示（不白屏）

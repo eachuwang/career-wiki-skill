@@ -18,7 +18,7 @@ license: MIT
 
 | 用户说 | 子 Skill | 动作 |
 |--------|----------|------|
-| "检查环境" / "初始化" / "环境配置" | env-init | 检查 Node/Python，创建目录，安装依赖 |
+| "检查 career-wiki 环境" / "初始化 career-wiki 环境" / "初始化 career-wiki" | env-init | 检查 Node/Python，创建目录，安装依赖 |
 | "开始采访" / "录入信息" / "补充经历" | interview | 多轮对话采集，产出 raw markdown |
 | "解析简历文件" / "读这个文件" / "上传 PDF" | file-parser | Agent Read 提取内容，落到 raw |
 | "编译 wiki" / "compile" / "重建 wiki" | wiki-engine | 全量重建 wiki/，实体识别+合并+去重 |
@@ -143,7 +143,7 @@ git clone https://github.com/eachuwang/career-wiki-skill.git
 在你的 Agent 里说：
 
 ```
-检查环境 / 初始化 career-wiki
+检查 career-wiki 环境 / 初始化 career-wiki 环境
 ```
 
 env-init skill 会：
@@ -154,7 +154,7 @@ env-init skill 会：
 
 **初始化完成后才能开始采访、编译 wiki、生成简历。**
 
-首次使用时说"检查环境"或"初始化"，env-init skill 会检查环境并创建数据目录。
+首次使用时说"检查 career-wiki 环境"或"初始化 career-wiki 环境"，env-init skill 会检查环境并创建数据目录。
 
 ---
 

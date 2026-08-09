@@ -1,6 +1,6 @@
 ---
 name: career-wiki-skill
-description: "用 AI Agent 采访采集信息，自动生成结构化 Wiki 知识库，从 Wiki 一键生成多份简历，Web 可视化编辑导出。当用户说'开始采访''录入信息''补充经历''解析简历文件''编译 wiki''检查 wiki''导出 OKF''生成简历''打开编辑器''看看简历预览''创建模板''创建字节版简历''预览脱敏效果'时使用。跨 Agent 兼容，纯本地数据，支持 Claude Code/Codex/Hermes/OpenClaw 等所有支持 Skill 的 Agent。"
+description: "用 AI Agent 采访采集信息，自动生成结构化 Wiki 知识库，从 Wiki 一键生成多份简历，Web 可视化编辑导出。当用户说'开始采访''录入信息''补充经历''解析简历文件''编译 wiki''检查 wiki''从 Wiki 删除项目''从知识库删除经历''导出 OKF''生成简历''打开编辑器''看看简历预览''创建模板''创建字节版简历''预览脱敏效果'时使用。跨 Agent 兼容，纯本地数据，支持 Claude Code/Codex/Hermes/OpenClaw 等所有支持 Skill 的 Agent。"
 version: 1.0.0
 author: eachuwang
 license: MIT
@@ -23,9 +23,11 @@ license: MIT
 | "解析简历文件" / "读这个文件" / "上传 PDF" | file-parser | Agent Read 提取内容，落到 raw |
 | "编译 wiki" / "compile" / "重建 wiki" | wiki-engine | 全量重建 wiki/，实体识别+合并+去重 |
 | "检查 wiki" / "lint" | wiki-engine | 孤儿/断链/重复/过期检查 |
+| "删除项目经历" / "从 Wiki 删除项目" / "从知识库删除经历" / "删除知识库实体" | wiki-engine | 先确认是删除当前简历视图还是 Wiki 知识；确认删除 Wiki 后登记删除清单并全量重建 |
 | "导出 OKF" / "导入 OKF" | wiki-engine | Node 脚本，OKF JSON 双向转换 |
 | "生成简历" / "导出简历" / "启动 API server" | resume-generator | Node API server，查询 wiki + 组装简历 |
 | "打开编辑器" / "启动前端" / "看看简历预览" | web-editor | React 前端，拖拽编辑 + 实时预览 + 导出；含多简历/模板管理/隐私脱敏 |
+| "从当前简历隐藏项目" / "不在这份简历显示项目" | web-editor | 只修改当前简历配置的 hide.items，不删除 Wiki 知识 |
 
 ---
 

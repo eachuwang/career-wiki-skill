@@ -1,6 +1,6 @@
 ---
 name: wiki-engine
-description: Wiki 引擎 skill。定义 career-wiki-skill 的核心数据 schema（10 实体 + 13 关系 + frontmatter 规范 + 目录结构），编排 Agent 执行 compile（全量重建）/ lint（7 类检查），并提供 OKF 导入导出 Node 脚本。当用户说"编译 wiki""检查 wiki""导出 OKF""导入 OKF"时触发。
+description: Wiki 引擎 skill。定义 career-wiki-skill 的核心数据 schema（10 实体 + 13 关系 + frontmatter 规范 + 目录结构），编排 Agent 执行 compile（全量重建）/ lint（7 类检查）/ 删除知识库实体，并提供 OKF 导入导出 Node 脚本。当用户说"编译 wiki""检查 wiki""删除项目经历""从 Wiki 删除项目""从知识库删除经历""删除知识库实体""导出 OKF""导入 OKF"时触发。
 version: 1.0.0
 author: career-wiki-skill
 license: MIT
@@ -23,6 +23,8 @@ career-wiki-skill 的核心引擎。做三件事：
 **核心理念：** schema 写在本 SKILL.md 里（不用 profile.json）；compile 的实体识别纯靠 Agent LLM 理解能力（不需要脚本）；wiki 是编译产物，不允许人工编辑，每次从所有 raw 全量重建。
 
 **文件 raw 是一等输入：** `sources/raw/uploads/` 下由简历或其他文件解析产生的 markdown，与 interview raw 具有同等编译优先级。不能只把文件 raw 当作采访参考或附件索引；compile 必须从文件 raw 中识别实体、字段和关系，并将结果持久化到 `wiki/`。
+
+**删除清单是负向事实源：** `~/.career_wiki/.career-wiki-skill/deletions.json` 记录用户明确删除的实体。compile 和 API 都必须优先应用删除清单；raw 或旧 Wiki 页面仍存在时，也不能重新暴露已删除实体。
 
 ---
 
@@ -264,7 +266,7 @@ relations:
 find ~/.career_wiki/sources/raw/ -name '*.md' -type f
 ```
 
-用 `search_files` 或 `find` 列出 `sources/raw/` 下所有 `.md` 文件（含 `uploads/` 子目录）。每个文件都读全文。
+先读取 `~/.career_wiki/.career-wiki-skill/deletions.json`；再用 `search_files` 或 `find` 列出 `sources/raw/` 下所有 `.md` 文件（含 `uploads/` 子目录）。每个文件都读全文。
 
 #### 2. 逐个读文件，Agent 识别实体
 
@@ -284,6 +286,8 @@ find ~/.career_wiki/sources/raw/ -name '*.md' -type f
 - publication — 标题+刊物+日期
 - activity — 活动名+角色+起止
 - summary — 个人优势总结
+
+识别实体后，若实体类型和 Wiki 路径命中删除清单，跳过该实体，不写入 Wiki，也不恢复已删除的旧页面。
 
 **不需要正则或脚本。** Agent 读全文后直接理解"这段在讲哪个实体"。
 
@@ -401,6 +405,38 @@ relations:
 2. 文件 raw 中识别出的实体已写入对应 `wiki/` 目录，页面 frontmatter 的 `sources` 包含该 raw 路径。
 3. 文件 raw 中出现项目名称、项目描述或岗位职责时，对应 `wiki/projects/` 页面必须存在，并保留 `description` 与职责正文；不能只生成项目名称、时间。
 4. 若校验失败，必须报告未生成的实体或字段，不能用“已编译”掩盖缺失。
+
+## 删除知识库实体（破坏性操作）
+
+“从当前简历删除/隐藏项目”和“从 Wiki 知识库删除项目”是两种不同操作：前者只改 `resumes/*.json` 的 `hide.items`，后者必须改变知识库的负向事实源。
+
+### 删除流程
+
+1. **精确定位**：根据实体类型、Wiki 相对路径和实体名称定位目标；同名或相似名不能直接猜测。
+2. **列出影响范围**：读取目标 Wiki 页面、所有 `sources/raw/` 引用、简历配置中的 `emphasize`/`hide.items`，以及其他页面指向该实体的 relations/wikilinks。
+3. **确认操作**：向用户明确说明“将从 Wiki 知识库删除该实体，所有简历和图谱都不再读取；原始上传文件是否保留可另行选择”，用户确认后才能继续。
+4. **登记删除清单**：执行：
+
+   ```bash
+   node skills/wiki-engine/scripts/delete_entity.mjs \
+     --root <实际数据根目录> \
+     --entity project \
+     --path projects/{目标文件}.md \
+     --name "{目标名称}" \
+     --reason "用户明确要求从 Wiki 删除"
+   ```
+
+   `--root` 使用 env-init 写入 config 的实际数据根目录；省略时脚本会自动读取该配置。删除清单位置为 `<数据根目录>/.career-wiki-skill/deletions.json`。命令会立即移除对应的 Wiki 生成页，但默认保留 raw 和原始上传文件，保留审计证据；删除清单优先级高于普通 raw 输入。
+5. **更新源数据**：从 interview raw 或简历 raw 中移除目标实体的结构化条目/索引；如果用户选择保留原始材料，可保留 `sources/uploads/` 原文件，但 compile 仍必须遵守删除清单。
+6. **全量 compile**：清理旧 `wiki/` 后重新读取所有 raw，跳过删除清单中的实体，同时移除指向该实体的关系和 wikilink；不能只手动删除一个 `wiki/projects/*.md` 文件。
+7. **清理视图引用**：从所有简历配置的 `emphasize` 和 `hide.items` 中移除已删除实体的名称/路径，避免留下悬挂引用；不要因此删除整份简历。
+8. **完成验证**：确认删除清单存在，目标 Wiki 页面不存在，`GET /api/wiki` 和简历生成结果都不包含目标实体，相关关系不再指向目标路径。
+
+### 删除命令与编译的边界
+
+- `delete_entity.mjs` 只登记删除事实并移除精确的 Wiki 生成页，不负责猜测或修改任意 raw 文本。
+- Wiki 页面是编译产物；删除清单、raw 和全量 compile 共同决定最终 Wiki 状态。
+- 用户若要求“彻底忘记”或删除原始材料，必须在单独确认后删除对应 raw/上传文件；仅从 Wiki 删除默认不销毁原始证据。
 
 ---
 
@@ -567,6 +603,7 @@ npm install
 - [ ] `sources/raw/uploads/` 下的文件 raw 已作为正式输入完成解析
 - [ ] 简历中的项目描述、岗位职责已保存到对应 `wiki/projects/` 页面
 - [ ] 相关 Wiki 页面的 `sources` 包含对应文件 raw 路径
+- [ ] 删除清单中的实体未重新生成，相关关系和 wikilink 已清理
 
 ### Lint
 - [ ] 所有 wiki 页面 frontmatter 含 entity/confidence/sources

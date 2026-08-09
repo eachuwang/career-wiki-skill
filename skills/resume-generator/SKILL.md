@@ -479,17 +479,19 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 
 3. **强调名称或隐藏路径跟 Wiki 对不上。** `emphasize.items` 按实体名称匹配；`hide.items` 按 API 返回的 `_path`/`path` 精确匹配，配置应由 Web 编辑器从真实 Wiki 数据生成。
 
-4. **数据目录找不到。** `WIKI_ROOT` 环境变量没设、config.json 不存在、目录路径写错——API server 启动时应该 fallback 到 `~/.career_wiki/`，并在 `/api/health` 里返回实际用的路径让用户确认。
+4. **忽略 Wiki 删除清单。** API 会读取 `<数据根目录>/.career-wiki-skill/deletions.json`，按实体类型和精确路径过滤已删除实体；这与当前简历的 `hide.items` 不同，删除清单对所有简历和 Wiki 图谱生效。
 
-5. **wiki markdown 没有 frontmatter 或 frontmatter 不合规。** gray-matter 解析不出 fields，实体数据会是空的。应跳过并 warn，不 crash。
+5. **数据目录找不到。** `WIKI_ROOT` 环境变量没设、config.json 不存在、目录路径写错——API server 启动时应该 fallback 到 `~/.career_wiki/`，并在 `/api/health` 里返回实际用的路径让用户确认。
 
-6. **端口冲突。** 默认 3001，被占时启动失败。应提示用户设 `PORT` 环境变量换端口。
+6. **wiki markdown 没有 frontmatter 或 frontmatter 不合规。** gray-matter 解析不出 fields，实体数据会是空的。应跳过并 warn，不 crash。
 
-7. **PDF 导出依赖前端。** 不要在 Node 里装 puppeteer——太重。PDF 导出靠前端 `window.print()`，Node 只返回数据。
+7. **端口冲突。** 默认 3001，被占时启动失败。应提示用户设 `PORT` 环境变量换端口。
 
-8. **PUT /api/wiki/refresh 被误以为是同步编译。** 这个接口不编译 wiki，只返回提示。Wiki compile 是 Agent LLM 操作，必须用户在对话里触发 wiki-engine skill。
+8. **PDF 导出依赖前端。** 不要在 Node 里装 puppeteer——太重。PDF 导出靠前端 `window.print()`，Node 只返回数据。
 
-9. **正则提取 wikilink 漏了嵌套方括号。** wikilink 格式是 `[[path|name]]`，正则要正确处理可选的 `|name` 部分。参考 wiki-engine 的 okf_export.mjs 的正则。
+9. **PUT /api/wiki/refresh 被误以为是同步编译。** 这个接口不编译 wiki，只返回提示。Wiki compile 是 Agent LLM 操作，必须用户在对话里触发 wiki-engine skill。
+
+10. **正则提取 wikilink 漏了嵌套方括号。** wikilink 格式是 `[[path|name]]`，正则要正确处理可选的 `|name` 部分。参考 wiki-engine 的 okf_export.mjs 的正则。
 
 ---
 
@@ -506,6 +508,7 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 - [ ] `GET /api/templates` 返回模板列表
 - [ ] `POST /api/resume/generate` 能组装结构化简历 JSON
 - [ ] `hide.items` 在 generate/export 中都能按 Wiki 路径排除实体，且不修改 Wiki 文件
+- [ ] 删除清单中的实体不会出现在 health、Wiki 查询、单实体查询或简历生成结果中
 - [ ] `POST /api/resume/export` 对 json/html/pdf 三种格式正确响应
 - [ ] `POST /api/resume/save` 能保存配置文件
 - [ ] `PUT /api/wiki/refresh` 返回需要 Agent 的提示

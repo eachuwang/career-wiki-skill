@@ -31,6 +31,7 @@ Career-Wiki-Skill 的前端 React 应用，包含两个页面：
 - 用户说"导出 HTML" → 前端保存渲染的 HTML 到文件
 - 用户说"导出 JSON" → 调 API server 的 export 接口
 - 用户说"新建/复制/删除简历""切换简历" → 顶栏「简历」下拉 + 操作按钮，调 resumes API
+- 用户说"从当前简历隐藏项目" / "不在这份简历显示项目" → 当前简历的 `hide.items`；只影响当前简历，不删除 Wiki 实体
 - 用户说"复制/删除模板" → 顶栏模板下拉 + 操作按钮，调 templates API
 - 用户说"预览脱敏效果""隐藏敏感信息" → 隐私预览 6 个开关实时生效
 
@@ -138,7 +139,7 @@ skills/web-editor/
 1. **左侧模块库** — 10 个可拖拽模块（个人信息/工作经历/项目/技能/教育/证书/获奖/发表/活动/个人优势），每个模块从 wiki 拉取默认值
 2. **拖拽到编辑区** — 从左侧拖拽模块到中间编辑区，模块自动添加到列表末尾
 3. **编辑覆盖** — 点击模块展开，可编辑字段。覆盖值只存在简历配置里，**不回写 wiki**
-4. **子项隐藏/恢复** — 项目、经历等条目可从当前简历隐藏并恢复；保存为 `hide.items`，预览与导出同步生效，Wiki 数据不变
+4. **子项隐藏/恢复** — 项目、经历等条目可从当前简历隐藏并恢复；保存为 `hide.items`，预览与导出同步生效，Wiki 数据不变。要从知识库删除实体，必须退出编辑器并触发 wiki-engine 的删除流程。
 5. **排序** — 编辑区内拖拽模块卡片上下排序
 6. **删除** — 点击模块卡片右上角 ✕ 删除
 7. **右侧实时预览** — 按选中模板渲染，编辑改动实时反映到预览
@@ -231,17 +232,19 @@ npm run build    # 输出到 dist/
 
 2. **每次启动都重新安装依赖。** 停止 Vite 不会删除 `node_modules`。先检查 `node_modules/.bin/vite` 和锁文件状态，只有缺失或依赖声明变化时才安装。
 
-3. **vis-network 动态导入。** `GraphCanvas.tsx` 用 `import('vis-network/standalone')` 动态加载，避免首屏加载 vis-network 的重量级代码。如果看到图谱不渲染，检查浏览器控制台是否有动态 import 错误。
+3. **把删除编辑器模块当成删除 Wiki 实体。** 编辑区的删除只移除当前简历模块；项目仍会从 Wiki 读取。删除知识库实体必须使用 wiki-engine 的删除清单和全量 compile 流程。
 
-4. **dnd-kit 拖拽需同时有 Draggable + Droppable。** 模块库的卡片是 Draggable，编辑区是 Droppable。少了任一方拖拽都不生效。排序用的是 `SortableContext`。
+4. **vis-network 动态导入。** `GraphCanvas.tsx` 用 `import('vis-network/standalone')` 动态加载，避免首屏加载 vis-network 的重量级代码。如果看到图谱不渲染，检查浏览器控制台是否有动态 import 错误。
 
-5. **PDF 生成范围。** `html2pdf.js` 只接收 `.print-area`，不要传入预览工具栏或缩放容器，否则导出内容会带入界面控件或缩放比例。
+5. **dnd-kit 拖拽需同时有 Draggable + Droppable。** 模块库的卡片是 Draggable，编辑区是 Droppable。少了任一方拖拽都不生效。排序用的是 `SortableContext`。
 
-6. **覆盖不回写 wiki。** 编辑区的字段编辑只存到简历配置的 `overrides` 字段，不修改 wiki 源数据。这是设计意图——改简历不改 wiki，只改视角。
+6. **PDF 生成范围。** `html2pdf.js` 只接收 `.print-area`，不要传入预览工具栏或缩放容器，否则导出内容会带入界面控件或缩放比例。
 
-7. **预览与 HTML 样式分叉。** HTML 导出必须从当前文档样式表收集 CSS，并复用 `.print-area` 的同一渲染树；不要另写一套导出模板。
+7. **覆盖不回写 wiki。** 编辑区的字段编辑只存到简历配置的 `overrides` 字段，不修改 wiki 源数据。这是设计意图——改简历不改 wiki，只改视角。
 
-8. **TypeScript 严格模式。** `tsconfig.json` 开了 strict。API 返回的 `fields: Record<string, unknown>` 需要类型断言才能访问具体字段。不要用 `any` 绕过——用类型守卫或断言。
+8. **预览与 HTML 样式分叉。** HTML 导出必须从当前文档样式表收集 CSS，并复用 `.print-area` 的同一渲染树；不要另写一套导出模板。
+
+9. **TypeScript 严格模式。** `tsconfig.json` 开了 strict。API 返回的 `fields: Record<string, unknown>` 需要类型断言才能访问具体字段。不要用 `any` 绕过——用类型守卫或断言。
 
 ## Verification Checklist
 

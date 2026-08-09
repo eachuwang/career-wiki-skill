@@ -29,6 +29,10 @@ import { join, extname, basename, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import matter from 'gray-matter';
+import {
+  isEntityDeleted,
+  readDeletionManifest,
+} from '../../wiki-engine/scripts/delete_entity.mjs';
 
 // ── 常量 ──────────────────────────────────────────────
 
@@ -243,6 +247,7 @@ async function handleHealth(wikiRoot, res) {
   const wikiPath = join(wikiRoot, 'wiki');
   const resumesPath = join(wikiRoot, 'resumes');
   const templatesPath = join(wikiRoot, 'templates');
+  const deletions = await readDeletionManifest(wikiRoot);
 
   // 统计各实体目录文件数
   const entityCounts = {};
@@ -250,7 +255,17 @@ async function handleHealth(wikiRoot, res) {
     const fullDir = join(wikiPath, dir);
     try {
       const files = await readdir(fullDir);
-      entityCounts[dir] = files.filter((f) => f.endsWith('.md')).length;
+      const markdownFiles = files.filter((f) => f.endsWith('.md'));
+      entityCounts[dir] = 0;
+      for (const file of markdownFiles) {
+        const filePath = join(fullDir, file);
+        try {
+          const entity = await parseWikiFile(filePath, wikiPath);
+          if (!isEntityDeleted(entity, deletions)) entityCounts[dir] += 1;
+        } catch {
+          // 保持健康检查的兼容性，解析失败的文件仍不计入可用实体。
+        }
+      }
     } catch {
       entityCounts[dir] = 0;
     }
@@ -286,12 +301,13 @@ async function handleHealth(wikiRoot, res) {
 async function handleGetWiki(wikiRoot, res, query) {
   const wikiPath = join(wikiRoot, 'wiki');
   const files = await collectMarkdown(wikiPath);
+  const deletions = await readDeletionManifest(wikiRoot);
 
   let entities = [];
   for (const f of files) {
     try {
       const ent = await parseWikiFile(f, wikiPath);
-      entities.push(ent);
+      if (!isEntityDeleted(ent, deletions)) entities.push(ent);
     } catch {
       // 跳过解析失败的文件
     }
@@ -332,6 +348,10 @@ async function handleGetWikiEntity(wikiRoot, res, entityDir, id) {
 
   try {
     const ent = await parseWikiFile(filePath, join(wikiRoot, 'wiki'));
+    const deletions = await readDeletionManifest(wikiRoot);
+    if (isEntityDeleted(ent, deletions)) {
+      return sendJson(res, 404, { error: '实体已删除', path: `${entityDir}/${id}.md` });
+    }
     sendJson(res, 200, ent);
   } catch (e) {
     sendJson(res, 500, { error: '解析失败', message: e.message });
@@ -381,6 +401,7 @@ async function handleGetTemplates(wikiRoot, res) {
  */
 async function assembleResume(config, template, wikiRoot) {
   const wikiPath = join(wikiRoot, 'wiki');
+  const deletions = await readDeletionManifest(wikiRoot);
   const sections = [];
 
   // 简历配置的 modules 覆盖模板 sections 顺序
@@ -407,6 +428,7 @@ async function assembleResume(config, template, wikiRoot) {
     for (const f of mdFiles) {
       try {
         const ent = await parseWikiFile(f, wikiPath);
+        if (isEntityDeleted(ent, deletions)) continue;
         // 按 fields 配置抽取字段
         const sectionFields = [...(section.fields || [])];
         if (module === 'project') {
@@ -531,28 +553,30 @@ async function assembleResume(config, template, wikiRoot) {
   if (personFiles.length > 0) {
     try {
       const ent = await parseWikiFile(personFiles[0], wikiPath);
-      personData = { ...ent.fields };
-      personData._links = ent.links;
-      personData._path = ent.path;
+      if (!isEntityDeleted(ent, deletions)) {
+        personData = { ...ent.fields };
+        personData._links = ent.links;
+        personData._path = ent.path;
 
-      // person 也应用脱敏
-      const privacy = config.privacy || {};
-      if (privacy.mask_name && personData.name) {
-        personData.name = maskValue(personData.name, 'name');
-      }
-      if (privacy.mask_phone && personData.phone) {
-        personData.phone = maskValue(personData.phone, 'phone');
-      }
-      if (privacy.mask_email && personData.email) {
-        personData.email = maskValue(personData.email, 'email');
-      }
+        // person 也应用脱敏
+        const privacy = config.privacy || {};
+        if (privacy.mask_name && personData.name) {
+          personData.name = maskValue(personData.name, 'name');
+        }
+        if (privacy.mask_phone && personData.phone) {
+          personData.phone = maskValue(personData.phone, 'phone');
+        }
+        if (privacy.mask_email && personData.email) {
+          personData.email = maskValue(personData.email, 'email');
+        }
 
-      // person 隐藏字段
-      if (Array.isArray(config.hide)) {
-        const hideEntry = config.hide.find((h) => h.module === 'person');
-        if (hideEntry && Array.isArray(hideEntry.fields)) {
-          for (const f of hideEntry.fields) {
-            delete personData[f];
+        // person 隐藏字段
+        if (Array.isArray(config.hide)) {
+          const hideEntry = config.hide.find((h) => h.module === 'person');
+          if (hideEntry && Array.isArray(hideEntry.fields)) {
+            for (const f of hideEntry.fields) {
+              delete personData[f];
+            }
           }
         }
       }

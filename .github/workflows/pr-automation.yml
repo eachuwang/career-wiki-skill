@@ -74,7 +74,10 @@ jobs:
             if (names.some(name => name.startsWith('skills/resume-generator/'))) labels.add('area: resume-generator');
             if (names.some(name => name.startsWith('skills/web-editor/'))) labels.add('area: web-editor');
             if (names.some(name => name.startsWith('skills/wiki-engine/') || name.startsWith('skills/interview/'))) labels.add('area: wiki');
-            if (names.some(name => /(^|\/)(package-lock\.json|package\.json)$/.test(name))) labels.add('dependencies');
+            if (
+              pr.user.login === 'dependabot[bot]' ||
+              names.some(name => /(^|\/)(package-lock\.json|package\.json)$/.test(name))
+            ) labels.add('dependencies');
 
             const changedLines = pr.additions + pr.deletions;
             const size = changedLines < 10 ? 'XS'

@@ -15,9 +15,10 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getOrderedEntityFieldEntries } from '../resume/fields';
-import type { ModuleInstance, WikiEntity, EntityType } from '../types';
+import { getSelectedPolishFields } from '../resume/polish';
+import type { ModuleInstance, WikiEntity, EntityType, ResumePolishConfig, ResumePolishField } from '../types';
 import { ENTITY_LABELS } from '../types';
 import UiIcon from './UiIcon';
 
@@ -26,9 +27,12 @@ interface EditPanelProps {
   wikiEntities: WikiEntity[];
   onReorder: (oldIndex: number, newIndex: number) => void;
   onToggleExpand: (id: string) => void;
-  onOverrideField: (moduleId: string, field: string, value: unknown) => void;
+  onOverrideField: (moduleId: string, itemPath: string, field: string, value: unknown) => void;
   onToggleItemVisibility: (moduleId: string, itemId: string) => void;
   onRemoveModule: (id: string) => void;
+  polish?: ResumePolishConfig;
+  polishGeneratingKey?: string | null;
+  onRegeneratePolish?: (path: string, field: ResumePolishField) => void;
 }
 
 /** 获取某模块类型在 wiki 中的默认数据 */
@@ -50,6 +54,9 @@ function ModuleEditCard({
   onOverrideField,
   onToggleItemVisibility,
   onRemoveModule,
+  polish,
+  polishGeneratingKey,
+  onRegeneratePolish,
 }: {
   module: ModuleInstance;
   wikiData: WikiEntity[];
@@ -57,9 +64,12 @@ function ModuleEditCard({
   onReorder: (oldIndex: number, newIndex: number) => void;
   moduleIndex: number;
   moduleCount: number;
-  onOverrideField: (moduleId: string, field: string, value: unknown) => void;
+  onOverrideField: (moduleId: string, itemPath: string, field: string, value: unknown) => void;
   onToggleItemVisibility: (moduleId: string, itemId: string) => void;
   onRemoveModule: (id: string) => void;
+  polish?: ResumePolishConfig;
+  polishGeneratingKey?: string | null;
+  onRegeneratePolish?: (path: string, field: ResumePolishField) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: module.id });
@@ -76,7 +86,7 @@ function ModuleEditCard({
   }));
   for (const entity of mergedData) {
     if (module.overrides && Object.keys(module.overrides).length > 0) {
-      entity.fields = { ...entity.fields, ...module.overrides };
+      entity.fields = { ...entity.fields, ...(module.overrides[entity.path] || {}) };
     }
   }
 
@@ -158,6 +168,9 @@ function ModuleEditCard({
             wikiData={mergedData}
             onOverrideField={onOverrideField}
             onToggleItemVisibility={onToggleItemVisibility}
+            polish={polish}
+            polishGeneratingKey={polishGeneratingKey}
+            onRegeneratePolish={onRegeneratePolish}
           />
         </div>
       )}
@@ -171,15 +184,22 @@ function ModuleEditForm({
   wikiData,
   onOverrideField,
   onToggleItemVisibility,
+  polish,
+  polishGeneratingKey,
+  onRegeneratePolish,
 }: {
   module: ModuleInstance;
   wikiData: WikiEntity[];
-  onOverrideField: (moduleId: string, field: string, value: unknown) => void;
+  onOverrideField: (moduleId: string, itemPath: string, field: string, value: unknown) => void;
   onToggleItemVisibility: (moduleId: string, itemId: string) => void;
+  polish?: ResumePolishConfig;
+  polishGeneratingKey?: string | null;
+  onRegeneratePolish?: (path: string, field: ResumePolishField) => void;
 }) {
   const [expandedItemId, setExpandedItemId] = useState<string | null>(
     wikiData[0]?.path || null,
   );
+  const selectedPolishFields = getSelectedPolishFields(polish);
 
   if (wikiData.length === 0) {
     return (
@@ -245,8 +265,13 @@ function ModuleEditForm({
                     field={field}
                     value={value}
                     moduleId={module.id}
+                    itemPath={entity.path}
                     inputId={`${module.id}-${idx}-${field}`}
                     onOverride={onOverrideField}
+                    polishEntry={polish?.entries?.[entity.path]}
+                    polishSelectedFields={selectedPolishFields}
+                    polishGeneratingKey={polishGeneratingKey}
+                    onRegeneratePolish={onRegeneratePolish}
                   />
                 ))}
               </div>
@@ -263,34 +288,62 @@ function FieldEditor({
   field,
   value,
   moduleId,
+  itemPath,
   inputId,
   onOverride,
+  polishEntry,
+  polishSelectedFields,
+  polishGeneratingKey,
+  onRegeneratePolish,
 }: {
   field: string;
   value: unknown;
   moduleId: string;
+  itemPath: string;
   inputId: string;
-  onOverride: (moduleId: string, field: string, value: unknown) => void;
+  onOverride: (moduleId: string, itemPath: string, field: string, value: unknown) => void;
+  polishEntry?: { fields?: Partial<Record<ResumePolishField, string>> };
+  polishSelectedFields: ResumePolishField[];
+  polishGeneratingKey?: string | null;
+  onRegeneratePolish?: (path: string, field: ResumePolishField) => void;
 }) {
-  const [localVal, setLocalVal] = useState(String(value || ''));
+  const externalValue = String(value ?? '');
+  const [localVal, setLocalVal] = useState(externalValue);
+  useEffect(() => {
+    setLocalVal(externalValue);
+  }, [externalValue]);
   const fieldLabel = field === 'responsibilities'
     ? '岗位职责'
-    : field === 'tech_stack'
-      ? '技术栈'
-      : field;
+    : field === 'description'
+      ? '项目描述'
+      : field === 'content'
+        ? '个人优势'
+        : field === 'tech_stack'
+          ? '技术栈'
+          : field;
+  const isPolishField = field === 'description' || field === 'responsibilities' || field === 'content';
+  const polishField = isPolishField ? field as ResumePolishField : null;
+  const canRegenerate = Boolean(
+    polishField &&
+      polishSelectedFields.includes(polishField) &&
+      polishEntry?.fields?.[polishField],
+  );
+  const isRegenerating = polishField ? polishGeneratingKey === `${itemPath}:${polishField}` : false;
 
   return (
     <div className="field-editor">
       <label htmlFor={inputId} className="field-editor-label">
         {fieldLabel}
       </label>
-      {field === 'responsibilities' ? (
+      {field === 'responsibilities' || field === 'content' ? (
         <textarea
           id={inputId}
           rows={3}
           value={localVal}
-          onChange={(e) => setLocalVal(e.target.value)}
-          onBlur={() => onOverride(moduleId, field, localVal)}
+          onChange={(e) => {
+            setLocalVal(e.target.value);
+            onOverride(moduleId, itemPath, field, e.target.value);
+          }}
           className="field-editor-input resize-y"
         />
       ) : (
@@ -298,10 +351,22 @@ function FieldEditor({
           id={inputId}
           type="text"
           value={localVal}
-          onChange={(e) => setLocalVal(e.target.value)}
-          onBlur={() => onOverride(moduleId, field, localVal)}
+          onChange={(e) => {
+            setLocalVal(e.target.value);
+            onOverride(moduleId, itemPath, field, e.target.value);
+          }}
           className="field-editor-input"
         />
+      )}
+      {canRegenerate && polishField && onRegeneratePolish && (
+        <button
+          type="button"
+          className="polish-regenerate-button"
+          disabled={isRegenerating}
+          onClick={() => onRegeneratePolish(itemPath, polishField)}
+        >
+          {isRegenerating ? '生成中…' : '换一换'}
+        </button>
       )}
     </div>
   );
@@ -315,6 +380,9 @@ export default function EditPanel({
   onOverrideField,
   onToggleItemVisibility,
   onRemoveModule,
+  polish,
+  polishGeneratingKey,
+  onRegeneratePolish,
 }: EditPanelProps) {
   const { setNodeRef, isOver } = useDroppable({
     id: 'edit-area',
@@ -362,6 +430,9 @@ export default function EditPanel({
                 onOverrideField={onOverrideField}
                 onToggleItemVisibility={onToggleItemVisibility}
                 onRemoveModule={onRemoveModule}
+                polish={polish}
+                polishGeneratingKey={polishGeneratingKey}
+                onRegeneratePolish={onRegeneratePolish}
               />
             ))}
           </SortableContext>

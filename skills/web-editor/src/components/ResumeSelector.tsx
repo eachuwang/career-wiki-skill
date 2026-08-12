@@ -5,7 +5,7 @@
  * 删除仅删配置 JSON，wiki 源数据不受影响。
  */
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import type { ResumeConfig } from '../types';
 import UiIcon from './UiIcon';
@@ -32,6 +32,17 @@ export default function ResumeSelector({
   onNameChange,
 }: ResumeSelectorProps) {
   const [editingName, setEditingName] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    return () => document.removeEventListener('mousedown', closeOnOutsideClick);
+  }, [menuOpen]);
 
   /** 结束名称编辑，保留已经同步到父级的最新名称。 */
   const finishNameEditing = () => setEditingName(false);
@@ -42,7 +53,7 @@ export default function ResumeSelector({
   };
 
   return (
-    <div className="resume-selector" data-editing-name={editingName}>
+    <div className="resume-selector selector-with-menu" data-editing-name={editingName} ref={rootRef}>
       <label className="toolbar-field">
         <span>简历</span>
         <select
@@ -58,16 +69,6 @@ export default function ResumeSelector({
           ))}
         </select>
       </label>
-      <button
-        type="button"
-        onClick={() => setEditingName((value) => !value)}
-        className="toolbar-icon-button toolbar-icon-button-subtle"
-        title="编辑简历名称"
-        aria-label="编辑简历名称"
-        aria-pressed={editingName}
-      >
-        <UiIcon name="pencil" size={16} />
-      </button>
       {editingName && (
         <label className="toolbar-field resume-name-editor">
           <span>重命名</span>
@@ -85,32 +86,32 @@ export default function ResumeSelector({
       )}
       <button
         type="button"
-        onClick={onNew}
+        onClick={() => setMenuOpen((open) => !open)}
         className="toolbar-icon-button toolbar-icon-button-subtle"
-        title="新建简历"
-        aria-label="新建简历"
+        title="简历操作"
+        aria-label="打开简历操作菜单"
+        aria-expanded={menuOpen}
+        aria-haspopup="menu"
       >
-        <UiIcon name="plus" size={16} />
+        <UiIcon name="more" size={18} />
       </button>
-      <button
-        type="button"
-        onClick={onDuplicate}
-        className="toolbar-icon-button toolbar-icon-button-subtle"
-        title="复制当前简历"
-        aria-label="复制当前简历"
-      >
-        <UiIcon name="copy" size={16} />
-      </button>
-      <button
-        type="button"
-        onClick={onDelete}
-        disabled={resumes.length <= 1}
-        className="toolbar-icon-button toolbar-icon-button-subtle"
-        title={resumes.length <= 1 ? '至少保留一份简历' : '删除当前简历'}
-        aria-label="删除当前简历"
-      >
-        <UiIcon name="trash" size={16} />
-      </button>
+      {menuOpen && (
+        <div className="selector-action-menu" role="menu" aria-label="简历操作">
+          <button type="button" role="menuitem" onClick={() => { setEditingName(true); setMenuOpen(false); }}>
+            <UiIcon name="pencil" size={15} /> 重命名
+          </button>
+          <button type="button" role="menuitem" onClick={() => { onNew(); setMenuOpen(false); }}>
+            <UiIcon name="plus" size={15} /> 新建简历
+          </button>
+          <button type="button" role="menuitem" onClick={() => { onDuplicate(); setMenuOpen(false); }}>
+            <UiIcon name="copy" size={15} /> 创建副本
+          </button>
+          <div className="selector-action-separator" />
+          <button type="button" role="menuitem" className="destructive" disabled={resumes.length <= 1} onClick={() => { onDelete(); setMenuOpen(false); }}>
+            <UiIcon name="trash" size={15} /> 删除简历
+          </button>
+        </div>
+      )}
     </div>
   );
 }

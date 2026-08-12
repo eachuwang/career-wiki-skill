@@ -6,6 +6,7 @@
  * ~/.career_wiki/templates/ 下的副本，不影响 skill 包内预设文件）。
  */
 
+import { useEffect, useRef, useState } from 'react';
 import type { TemplateConfig } from '../types';
 import UiIcon from './UiIcon';
 
@@ -25,9 +26,20 @@ export default function TemplateSelector({
   onDelete,
 }: TemplateSelectorProps) {
   const deletable = templates.length > 1;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return undefined;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    return () => document.removeEventListener('mousedown', closeOnOutsideClick);
+  }, [menuOpen]);
 
   return (
-    <div className="template-selector">
+    <div className="template-selector selector-with-menu" ref={rootRef}>
       <label className="toolbar-field">
         <span>排版模板</span>
         <select
@@ -48,23 +60,26 @@ export default function TemplateSelector({
       </label>
       <button
         type="button"
-        onClick={onDuplicate}
+        onClick={() => setMenuOpen((open) => !open)}
         className="toolbar-icon-button toolbar-icon-button-subtle"
-        title="复制当前模板"
-        aria-label="复制当前模板"
+        title="模板操作"
+        aria-label="打开模板操作菜单"
+        aria-expanded={menuOpen}
+        aria-haspopup="menu"
       >
-        <UiIcon name="copy" size={16} />
+        <UiIcon name="more" size={18} />
       </button>
-      <button
-        type="button"
-        onClick={onDelete}
-        disabled={!deletable}
-        className="toolbar-icon-button toolbar-icon-button-subtle"
-        title={deletable ? '删除当前模板' : '至少保留一个模板'}
-        aria-label="删除当前模板"
-      >
-        <UiIcon name="trash" size={16} />
-      </button>
+      {menuOpen && (
+        <div className="selector-action-menu" role="menu" aria-label="模板操作">
+          <button type="button" role="menuitem" onClick={() => { onDuplicate(); setMenuOpen(false); }}>
+            <UiIcon name="copy" size={15} /> 复制模板
+          </button>
+          <div className="selector-action-separator" />
+          <button type="button" role="menuitem" className="destructive" disabled={!deletable} onClick={() => { onDelete(); setMenuOpen(false); }}>
+            <UiIcon name="trash" size={15} /> 删除模板
+          </button>
+        </div>
+      )}
     </div>
   );
 }

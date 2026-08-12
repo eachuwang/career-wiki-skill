@@ -1,6 +1,6 @@
 ---
 name: resume-generator
-description: 简历生成 skill。提供 Node API server（13 个 HTTP 接口），读 wiki markdown → gray-matter 解析 frontmatter → 正则提取 wikilink → 按模板 schema 组装结构化简历 JSON。用户说"生成简历""导出简历""启动 API server"时触发。纯确定性操作，不需要 LLM。PDF/HTML 导出由前端渲染。
+description: 简历生成 skill。提供 Node API server（16 个 HTTP 接口），读 wiki markdown → gray-matter 解析 frontmatter → 正则提取 wikilink → 按模板 schema 组装结构化简历 JSON，并提供项目描述/个人优势/岗位职责的 AI 润色上下文、生成和模型列表接口。用户说"生成简历""导出简历""启动 API server"时触发。数据组装与润色结果校验由 Node 完成，模型推理由用户配置的 OpenAI-compatible provider 完成。PDF/HTML 导出由前端渲染。
 version: 1.0.0
 author: career-wiki-skill
 license: MIT
@@ -17,7 +17,7 @@ metadata:
 
 career-wiki-skill 的简历生成层。提供 **Node HTTP API server**，从 wiki markdown 读数据、解析 frontmatter、按模板+简历配置组装结构化简历 JSON。Web 前端（F07）调用这些接口完成简历渲染和导出。
 
-**核心理念：** 简历生成是**纯确定性操作**（Node 做，不需要 LLM）。读 wiki → 解析 → 按模板 schema 组装 → 返回 JSON。数据组装、字段映射、排序、过滤全在 Node 脚本完成。简历润色是 LLM 操作（用户需要时在 Web 前端触发 Agent）。
+**核心理念：** Wiki 是事实源，简历是面向岗位的表达视角。Node 负责读取、组装、指纹校验和应用结果；润色可以由宿主 Agent 或已配置的服务端 provider 执行。润色结果写入当前简历配置的 `polish.entries`，不回写 Wiki；原文变化后旧结果自动失效。
 
 **模板格式：** JSON 配置（字段映射 + 布局参数）+ CSS 样式文件。预设 4 个模板（技术简约/商务侧栏/创意色块/学术纯文），由 web-editor 前端管理（复制/删除）。
 
@@ -38,6 +38,17 @@ career-wiki-skill 的简历生成层。提供 **Node HTTP API server**，从 wik
 - Web 前端简历编辑器调 `GET /api/resumes` + `GET /api/templates` 填充 UI
 
 **不用于：** 编译 wiki（用 wiki-engine skill）；多简历配置与模板管理已并入 web-editor 前端。
+
+### 生成简历时的 Agent 润色流程
+
+当用户通过 Agent 生成或导出简历，且当前简历包含 `experience` / `project` / `summary` 模块时，Agent 按以下顺序执行：
+
+1. 调用 `POST /api/resume/polish-context`，传入当前 `config` 或 `resume_id`。
+2. 阅读 `candidates.source`、`selected_fields` 与 `style_samples`。只对用户选择且存在的 `description` / `content` / `responsibilities` 生成简历版本；其他字段只作为事实和语气上下文，不直接改写。
+3. 使用同一候选项的 `source_hash` 原样填入 `polish.entries[path].source_hash`，把结果保存到当前 `config` 的 `polish.entries`，调用 `POST /api/resume/save`。
+4. 再调用 `POST /api/resume/generate` 或 `/api/resume/export`，把最终结果交给用户。
+
+如果某个候选项原文已经自然完整，允许只做极少量调整；如果信息不足，不得为了“看起来更像简历”而补写数字、技术、结果或职责。Agent 没有可用的推理能力时，直接跳过润色并保留原文。Web 编辑器调用 `/api/resume/polish` 时由 provider 完成同一规则的生成和校验。点击「换一换」时传入 `only: { path, field }`，只重做当前条目的当前字段，并保留其他已生成字段。
 
 ---
 
@@ -91,13 +102,14 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 环境变量：
 - `PORT` — 监听端口，默认 `3001`
 - `WIKI_ROOT` — 数据目录根路径，默认读 `~/.career_wiki/.career-wiki-skill/config.json` 的 `root`，再 fallback 到 `~/.career_wiki/`
+- `RESUME_POLISH_PROVIDER` — 设为 `mock` 仅用于测试；正常请求使用前端传入的 OpenAI-compatible provider。未传入时兼容读取 `RESUME_POLISH_BASE_URL`、`RESUME_POLISH_API_KEY`、`RESUME_POLISH_MODEL`（以及旧版 `ANTHROPIC_*` 环境变量）
 
 ### 依赖
 
 - `gray-matter` — 解析 markdown frontmatter（仓库根 package.json 声明）
 - Node 内置 `http` / `fs` / `path` — 不需要额外依赖
 
-### 13 个接口
+### 16 个接口
 
 | # | 方法 | 路径 | 说明 |
 |---|------|------|------|
@@ -107,13 +119,16 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 | 4 | GET | `/api/resumes` | 所有简历配置，读 resumes/ 目录下所有 .json |
 | 5 | GET | `/api/templates` | 所有模板，读 templates/ 目录下所有 .json |
 | 6 | POST | `/api/resume/generate` | 按模板 + 配置生成结构化简历 JSON |
-| 7 | POST | `/api/resume/export` | 导出 PDF/HTML/JSON（JSON 直接返回，HTML/PDF 由前端渲染） |
-| 8 | POST | `/api/resume/save` | 保存简历配置到 resumes/ |
-| 9 | PUT | `/api/wiki/refresh` | 触发 wiki 重新 compile（提示用户调 Agent） |
-| 10 | POST | `/api/resume/delete` | 删除简历配置（仅删 JSON，不删 wiki 数据） |
-| 11 | POST | `/api/template/save` | 创建/更新模板（JSON + 可选 CSS） |
-| 12 | POST | `/api/template/delete` | 删除模板（JSON + 同名 CSS） |
-| 13 | GET | `/api/template/css` | 读取模板 CSS 文本（供复制/预览） |
+| 7 | POST | `/api/resume/polish-context` | 为 Agent 准备原始事实、口吻样本和润色状态 |
+| 8 | POST | `/api/resume/polish` | 生成当前简历的润色结果并返回可保存配置 |
+| 9 | POST | `/api/resume/polish-models` | 拉取用户 OpenAI-compatible provider 的模型列表 |
+| 10 | POST | `/api/resume/export` | 导出 PDF/HTML/JSON（JSON 直接返回，HTML/PDF 由前端渲染） |
+| 11 | POST | `/api/resume/save` | 保存简历配置到 resumes/ |
+| 12 | PUT | `/api/wiki/refresh` | 触发 wiki 重新 compile（提示用户调 Agent） |
+| 13 | POST | `/api/resume/delete` | 删除简历配置（仅删 JSON，不删 wiki 数据） |
+| 14 | POST | `/api/template/save` | 创建/更新模板（JSON + 可选 CSS） |
+| 15 | POST | `/api/template/delete` | 删除模板（JSON + 同名 CSS） |
+| 16 | GET | `/api/template/css` | 读取模板 CSS 文本（供复制/预览） |
 
 ---
 
@@ -180,6 +195,8 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 2. 按 `fields` 配置抽取字段；project 固定补充 `responsibilities` 和 `tech_stack` 以兼容旧模板
 3. 应用简历配置的覆盖：
    - `modules` 过滤 — 只保留简历配置要的模块
+   - `polish.entries` — 原文指纹有效且开关开启时应用 AI 润色
+   - `content_overrides` — 按 Wiki 相对路径应用当前简历的手动字段覆盖，优先级高于 AI 润色；只读简历配置，不写 Wiki
    - `order` 排序 — 按时间 asc/desc 排序
    - `emphasize` — 强调的项排前面
    - `hide` — 按 Wiki 路径排除隐藏实体，再删掉隐藏字段
@@ -399,7 +416,48 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 **响应 404：** `{"error": "简历配置不存在", "id": "xxx"}`
 **响应 404：** `{"error": "模板不存在", "template": "xxx"}`
 
-### 7. POST /api/resume/export
+### 7. POST /api/resume/polish-context
+
+为 Agent 准备当前简历视角下的项目和工作经历润色上下文。接口只读，不调用模型，不写 Wiki。
+
+响应中的 `candidates` 每项包含：
+
+- `source` — 用户原始字段和可辅助理解的上下文（技术栈、困难、方案、结果等）
+- `source_hash` — 当前原始事实指纹，Agent 生成结果时必须原样回填
+- `selected_fields` — 用户选择的润色字段
+- `target_fields` — 当前存在且被选中的 `description` / `content` / `responsibilities`
+- `status` — `missing`、`applied`、`partial`、`stale` 或 `unverified`
+
+Agent 完成润色后，将结果保存到当前简历配置：
+
+```json
+{
+  "polish": {
+    "enabled": true,
+    "entries": {
+      "projects/data-agent.md": {
+        "source_hash": "候选项中的 source_hash",
+        "fields": {
+          "description": "轻量润色后的项目描述",
+          "content": "轻量润色后的个人优势",
+          "responsibilities": "轻量润色后的岗位职责"
+        },
+        "updated_at": "2026-08-12T00:00:00.000Z"
+      }
+    }
+  }
+}
+```
+
+润色规则：保留用户事实和常用词汇；短输入只做必要扩写；模仿同一用户已有文本的句式和语气；不补造数字、技术、结果；不使用空泛的 AI 套话。原始 Wiki 内容变化后，指纹不匹配，生成结果自动回退原文并标记 `stale`。
+
+### 8. POST /api/resume/polish
+
+点击 Web 编辑器的「AI 润色」开关时调用。服务端读取当前 Wiki、构造润色上下文，使用请求体中的 OpenAI-compatible provider 调用 `/v1/chat/completions`，并通过 `response_format: {"type":"json_object"}` 要求兼容服务返回标准 JSON，再严格过滤为当前候选项、当前 `source_hash`、用户选择的 `description` / `content` / `responsibilities` 字段。候选项每 2 条一批、最多同时请求 2 批；单批超时或遇到 408、429、5xx 时自动重试一次，避免长上下文或瞬时服务拥塞使整次润色失败。成功时返回 `{config, generated_count, candidate_count}`，其中 `config.polish.enabled` 为 `true`；前端保存成功后再更新预览。点击字段旁的「换一换」会使用 `only` 参数只生成一个字段，并合并回原配置。API Key 不写入简历配置。
+
+请求体中的 `provider` 格式为 `{ "base_url": "https://api.openai.com/v1", "api_key": "...", "model": "...", "timeout_ms": 60000 }`。`timeout_ms` 默认为 60 秒，可在 Web 编辑器配置为 10–180 秒。模型列表接口调用同一 provider 的 `/v1/models`，返回可供用户选择的模型 id；用户也可以直接填写模型名。
+
+### 8. POST /api/resume/export
 
 导出简历。**JSON 格式**由 Node 直接返回组装好的结构化 JSON（等同 `/api/resume/generate` 的输出）。**HTML/PDF 格式**由前端渲染——这个接口对 HTML/PDF 的角色是返回渲染所需的 JSON 数据，前端拿到后用模板 CSS 渲染成 HTML 页面，再用 `window.print()` 导出 PDF。
 
@@ -434,6 +492,8 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 保存简历配置到 `~/.career_wiki/resumes/{id}.json`。
 
 **请求体：** 完整的简历配置 JSON（由 web-editor 前端生成，格式见 `resumes/` 下现有配置）。
+
+内容编排中的手动修改保存在 `content_overrides[Wiki相对路径][字段名]`。保存接口只写 `resumes/{id}.json`，不会调用 Wiki 写入流程；generate/JSON export 在读取 Wiki 后将该覆盖应用到当前简历结果。
 
 **响应 200：**
 ```json
@@ -506,7 +566,10 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 - [ ] `GET /api/wiki/:entity/:id` 能查到单个实体
 - [ ] `GET /api/resumes` 返回简历配置列表
 - [ ] `GET /api/templates` 返回模板列表
-- [ ] `POST /api/resume/generate` 能组装结构化简历 JSON
+  - [ ] `POST /api/resume/generate` 能组装结构化简历 JSON
+- [ ] `POST /api/resume/polish-context` 能返回原始事实、口吻样本和指纹
+- [ ] `POST /api/resume/polish` 能生成并返回带指纹校验的润色配置
+  - [ ] generate/export 只应用指纹匹配的润色结果，原文变化后回退并标记 stale
 - [ ] `hide.items` 在 generate/export 中都能按 Wiki 路径排除实体，且不修改 Wiki 文件
 - [ ] 删除清单中的实体不会出现在 health、Wiki 查询、单实体查询或简历生成结果中
 - [ ] `POST /api/resume/export` 对 json/html/pdf 三种格式正确响应

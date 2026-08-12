@@ -20,16 +20,19 @@ import {
   Copy,
   Download,
   DotsSixVertical,
+  DotsThree,
   Envelope,
   Eye,
   EyeSlash,
   File,
   FloppyDisk,
   Folder,
+  FolderOpen,
   GithubLogo,
   Globe,
   GraduationCap,
   Graph,
+  GearSix,
   Lightning,
   Medal,
   Minus,
@@ -58,10 +61,13 @@ export type UiIconName =
   | 'code'
   | 'copy'
   | 'download'
+  | 'more'
   | 'eye'
   | 'eye-off'
   | 'file'
+  | 'folder-open'
   | 'graph'
+  | 'settings'
   | 'grip'
   | 'minus'
   | 'plus'
@@ -95,10 +101,13 @@ const ICONS: Record<UiIconName, Icon> = {
   code: Code,
   copy: Copy,
   download: Download,
+  more: DotsThree,
   eye: Eye,
   'eye-off': EyeSlash,
   file: File,
+  'folder-open': FolderOpen,
   graph: Graph,
+  settings: GearSix,
   grip: DotsSixVertical,
   minus: Minus,
   plus: Plus,

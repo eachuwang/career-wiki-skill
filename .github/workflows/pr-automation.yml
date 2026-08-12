@@ -1,0 +1,112 @@
+name: PR automation
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: pr-automation-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  triage:
+    name: Triage PR
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Label and route PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const pull_number = context.issue.number;
+            const pr = context.payload.pull_request;
+
+            const labelDefinitions = {
+              'area: ci': ['#5319e7', 'GitHub Actions and repository automation'],
+              'area: docs': ['#0075ca', 'Documentation changes'],
+              'area: resume-generator': ['#1d76db', 'Resume generator changes'],
+              'area: web-editor': ['#0e8a16', 'Web editor changes'],
+              'area: wiki': ['#fbca04', 'Wiki engine or interview changes'],
+              'dependencies': ['#0366d6', 'Dependency updates'],
+              'size: XS': ['#c2e0c6', '0-9 changed lines'],
+              'size: S': ['#7ae7c7', '10-49 changed lines'],
+              'size: M': ['#ffd33d', '50-199 changed lines'],
+              'size: L': ['#f9a825', '200-499 changed lines'],
+              'size: XL': ['#d73a4a', '500+ changed lines']
+            };
+
+            const existing = await github.paginate(github.rest.issues.listLabelsForRepo, {
+              owner,
+              repo,
+              per_page: 100
+            });
+            const existingNames = new Set(existing.map(label => label.name));
+
+            for (const [name, [color, description]] of Object.entries(labelDefinitions)) {
+              if (!existingNames.has(name)) {
+                await github.rest.issues.createLabel({
+                  owner,
+                  repo,
+                  name,
+                  color: color.slice(1),
+                  description
+                });
+              }
+            }
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner,
+              repo,
+              pull_number,
+              per_page: 100
+            });
+            const names = files.map(file => file.filename);
+            const labels = new Set();
+
+            if (names.some(name => name.startsWith('.github/'))) labels.add('area: ci');
+            if (names.some(name => /(^|\/)(README[^/]*|SKILL\.md)$/.test(name))) labels.add('area: docs');
+            if (names.some(name => name.startsWith('skills/resume-generator/'))) labels.add('area: resume-generator');
+            if (names.some(name => name.startsWith('skills/web-editor/'))) labels.add('area: web-editor');
+            if (names.some(name => name.startsWith('skills/wiki-engine/') || name.startsWith('skills/interview/'))) labels.add('area: wiki');
+            if (names.some(name => /(^|\/)(package-lock\.json|package\.json)$/.test(name))) labels.add('dependencies');
+
+            const changedLines = pr.additions + pr.deletions;
+            const size = changedLines < 10 ? 'XS'
+              : changedLines < 50 ? 'S'
+              : changedLines < 200 ? 'M'
+              : changedLines < 500 ? 'L'
+              : 'XL';
+            labels.add(`size: ${size}`);
+
+            const managedLabels = new Set(Object.keys(labelDefinitions));
+            const currentLabels = pr.labels.map(label => label.name);
+            const staleLabels = currentLabels.filter(label =>
+              managedLabels.has(label) && !labels.has(label)
+            );
+
+            for (const name of staleLabels) {
+              await github.rest.issues.removeLabel({ owner, repo, issue_number: pull_number, name });
+            }
+
+            await github.rest.issues.addLabels({
+              owner,
+              repo,
+              issue_number: pull_number,
+              labels: [...labels]
+            });
+
+            const isBot = pr.user.type === 'Bot' || pr.user.login.endsWith('[bot]');
+            if (!isBot && pr.user.login !== owner) {
+              await github.rest.pulls.requestReviewers({
+                owner,
+                repo,
+                pull_number,
+                reviewers: [owner]
+              });
+            }

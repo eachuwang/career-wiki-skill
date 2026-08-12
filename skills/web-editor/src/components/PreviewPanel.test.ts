@@ -49,9 +49,7 @@ async function renderPreview(overrides: Record<string, unknown> = {}): Promise<s
         template: null,
         privacy: {},
         resumeName: '测试简历',
-        onExportPDF: noOp,
-        onExportHTML: noOp,
-        onExportJSON: noOp,
+        onOpenExport: noOp,
         ...overrides,
       }),
     );
@@ -77,16 +75,63 @@ async function previewShowsContactIcons(): Promise<void> {
 
 test('预览区为每项联系方式渲染 SVG 图标', previewShowsContactIcons);
 
-/** 导出入口统一放在预览工具栏，并保证每种格式只出现一次。 */
+/** 预览工具栏只保留一个导出入口，格式选择延后到导出面板。 */
 async function previewOwnsSingleExportActionSet(): Promise<void> {
   const html = await renderPreview();
 
-  assert.equal(html.match(/>\s*HTML\s*</g)?.length, 1);
-  assert.equal(html.match(/>\s*JSON\s*</g)?.length, 1);
-  assert.equal(html.match(/导出 PDF/g)?.length, 2);
+  assert.equal(html.match(/>\s*导出\s*</g)?.length, 1);
+  assert.doesNotMatch(html, />\s*HTML\s*</);
+  assert.doesNotMatch(html, />\s*JSON\s*</);
 }
 
-test('预览工具栏独占一组导出按钮', previewOwnsSingleExportActionSet);
+test('预览工具栏只保留一个导出入口', previewOwnsSingleExportActionSet);
+
+test('内容编排中编辑项目字段后，预览立即显示该条目的覆盖值', async () => {
+  const html = await renderPreview({
+    modules: [
+      {
+        id: 'project-module',
+        type: 'project',
+        label: '项目经验',
+        expanded: true,
+        overrides: {
+          'projects/data-agent.md': { description: '用户编辑后的项目描述。' },
+        },
+        hiddenItemIds: [],
+      },
+    ],
+    wikiEntities: [
+      {
+        path: 'projects/data-agent.md',
+        entity: 'project',
+        confidence: 'verified',
+        sources: [],
+        relations: [],
+        links: [],
+        fields: {
+          name: '数据智能体',
+          description: 'Wiki 原始项目描述。',
+        },
+      },
+      {
+        path: 'projects/other.md',
+        entity: 'project',
+        confidence: 'verified',
+        sources: [],
+        relations: [],
+        links: [],
+        fields: {
+          name: '其他项目',
+          description: '其他项目保持原文。',
+        },
+      },
+    ],
+  });
+
+  assert.match(html, /用户编辑后的项目描述。/);
+  assert.doesNotMatch(html, /Wiki 原始项目描述。/);
+  assert.match(html, /其他项目保持原文。/);
+});
 
 /** 旧模板未声明新字段时，项目预览也应兼容显示岗位职责和技术栈。 */
 async function previewShowsProjectResponsibilities(): Promise<void> {

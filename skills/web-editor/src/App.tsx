@@ -83,7 +83,7 @@ export default function App() {
     <div className="h-full flex flex-col bg-ink-100">
       {/* 全局导航栏 */}
       <nav className="app-nav no-print" aria-label="主导航">
-        <span className="app-brand"><UiIcon name="book" size={18} /> Career-Wiki-Skill</span>
+        <span className="app-brand"><UiIcon name="book" size={18} /> Career Wiki</span>
         <div className="app-nav-tabs" role="tablist" aria-label="工作区">
           <button
             onClick={() => setPage('editor')}
@@ -95,7 +95,7 @@ export default function App() {
                 : ''
             }`}
           >
-            简历编辑器
+            简历
           </button>
           <button
             onClick={() => setPage('graph')}
@@ -107,7 +107,7 @@ export default function App() {
                 : ''
             }`}
           >
-            Wiki 图谱
+            图谱
           </button>
         </div>
         {error && (

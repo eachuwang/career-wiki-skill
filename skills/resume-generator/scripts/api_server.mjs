@@ -10,13 +10,15 @@
  *   PORT      — 监听端口，默认 3001
  *   WIKI_ROOT — 数据目录根路径，默认读 ~/.career_wiki/.career-wiki-skill/config.json 的 root，再 fallback 到 ~/.career_wiki/
  *
- * 9 个接口:
+ * 16 个接口:
  *   GET    /api/health              — 健康检查
  *   GET    /api/wiki                — 所有 wiki 实体
  *   GET    /api/wiki/:entity/:id    — 单个实体详情
  *   GET    /api/resumes             — 所有简历配置
  *   GET    /api/templates           — 所有模板
  *   POST   /api/resume/generate     — 按模板+配置生成结构化简历 JSON
+ *   POST   /api/resume/polish-context — 为 Agent 准备简历润色上下文
+ *   POST   /api/resume/polish         — 生成并返回当前简历的润色结果
  *   POST   /api/resume/export       — 导出 PDF/HTML/JSON
  *   POST   /api/resume/save         — 保存简历配置
  *   PUT    /api/wiki/refresh        — 触发 wiki 重新 compile（提示用户调 Agent）
@@ -33,6 +35,14 @@ import {
   isEntityDeleted,
   readDeletionManifest,
 } from '../../wiki-engine/scripts/delete_entity.mjs';
+import {
+  applyPolish,
+  buildPolishSourceHash,
+  getPolishStatus,
+  getSelectedPolishFields,
+  POLISH_FIELDS,
+} from './resume_polish.mjs';
+import { generatePolishEntries, listProviderModels } from './resume_polish_provider.mjs';
 
 // ── 常量 ──────────────────────────────────────────────
 
@@ -200,6 +210,225 @@ async function parseWikiFile(filePath, wikiRoot) {
     links,
     content,
   };
+}
+
+/** 读取请求中的简历配置；统一 generate/export/polish 三类接口的配置入口。 */
+async function resolveResumeConfig(wikiRoot, body) {
+  if (body.resume_id) {
+    const configPath = join(wikiRoot, 'resumes', `${body.resume_id}.json`);
+    try {
+      const raw = await readFile(configPath, 'utf-8');
+      return JSON.parse(raw);
+    } catch {
+      const error = new Error('简历配置不存在');
+      error.statusCode = 404;
+      error.id = body.resume_id;
+      throw error;
+    }
+  }
+  if (body.config && typeof body.config === 'object') return body.config;
+  const error = new Error('缺少 resume_id 或 config');
+  error.statusCode = 400;
+  throw error;
+}
+
+/** 读取一个实体类型的 Wiki 页面，跳过删除清单中的实体。 */
+async function collectWikiEntities(wikiRoot, module) {
+  const dirName = ENTITY_DIRS[module];
+  if (!dirName) return [];
+  const wikiPath = join(wikiRoot, 'wiki');
+  const deletions = await readDeletionManifest(wikiRoot);
+  const files = await collectMarkdown(join(wikiPath, dirName));
+  const entities = [];
+  for (const file of files) {
+    try {
+      const entity = await parseWikiFile(file, wikiPath);
+      if (!isEntityDeleted(entity, deletions)) entities.push(entity);
+    } catch {
+      // 单个损坏页面不应阻断 Agent 的润色准备流程。
+    }
+  }
+  return entities;
+}
+
+/** 将简历配置中的 hide.items 应用到 Agent 要处理的实体集合。 */
+function filterHiddenEntities(entities, config, module) {
+  const hidden = new Set(
+    (config.hide || [])
+      .filter((entry) => entry.module === module)
+      .flatMap((entry) => (Array.isArray(entry.items) ? entry.items.map(String) : [])),
+  );
+  return entities.filter((entity) => !hidden.has(String(entity.path)));
+}
+
+/** 构造润色候选、原始事实、口吻样本和指纹；only 用于“换一换”。 */
+async function buildPolishContext(wikiRoot, config, only = null) {
+  const modules = Array.isArray(config.modules) && config.modules.length > 0
+    ? config.modules
+    : ['experience', 'project'];
+  const targetModules = modules.filter((module) =>
+    ['experience', 'project', 'summary'].includes(module),
+  );
+  const candidates = [];
+  const styleSamples = [];
+  const selectedFields = only?.field
+    ? [only.field]
+    : getSelectedPolishFields(config);
+
+  for (const module of targetModules) {
+    const entities = filterHiddenEntities(
+      await collectWikiEntities(wikiRoot, module),
+      config,
+      module,
+    );
+    for (const entity of entities) {
+      const source = {};
+      for (const field of [
+        'description',
+        'responsibilities',
+        'role',
+        'tech_stack',
+        'challenges',
+        'solutions',
+        'outcomes',
+        'learnings',
+        'content',
+      ]) {
+        if (entity.fields[field] !== undefined) source[field] = entity.fields[field];
+      }
+      if (only?.path && entity.path !== only.path) continue;
+      const status = getPolishStatus(entity.fields, entity.path, {
+        ...config,
+        polish: { ...(config.polish || {}), selected_fields: selectedFields },
+      });
+      candidates.push({
+        path: entity.path,
+        entity: module,
+        name: entity.fields.name || entity.fields.company || '',
+        source,
+        source_hash: buildPolishSourceHash(entity.fields),
+        target_fields: selectedFields.filter((field) => source[field]),
+        status,
+      });
+
+      for (const field of selectedFields) {
+        const value = entity.fields[field];
+        if (typeof value === 'string' && value.trim()) {
+          styleSamples.push({ entity: module, field, text: value });
+        }
+      }
+    }
+  }
+
+  return {
+    resume: {
+      id: config.id || '',
+      name: config.name || '',
+      target: config.target || null,
+    },
+    candidates,
+    selected_fields: selectedFields,
+    style_samples: styleSamples,
+    instructions: {
+      output_path: 'polish.entries[<wiki path>]',
+      output_shape: {
+        source_hash: 'candidate.source_hash',
+        fields: {
+          description: '润色后的项目描述',
+          content: '润色后的个人优势',
+          responsibilities: '润色后的岗位职责',
+        },
+      },
+      rules: [
+        '只基于 source 和 style_samples 改写，不补造事实、数字、技术或结果。',
+        '可以结合 resume.target 调整信息排序和表达重点，但不能改变事实内容。',
+        '优先保留用户原有词汇、句式和语气；短输入只做必要的语义补全。',
+        '项目描述和岗位职责分别处理，不把职责改成项目介绍。',
+        '如果原文已经完整，只做语病、结构和简历可读性调整。',
+        '输出简洁、自然、像用户自己写的中文，不使用空泛的 AI 套话。',
+      ],
+    },
+  };
+}
+
+/**
+ * 为 Agent 准备简历专用润色上下文。
+ * 该接口只读，不调用模型，也不写入 Wiki。
+ */
+async function handlePolishContext(wikiRoot, res, body) {
+  let config;
+  try {
+    config = await resolveResumeConfig(wikiRoot, body);
+    return sendJson(res, 200, await buildPolishContext(wikiRoot, config));
+  } catch (e) {
+    return sendJson(res, e.statusCode || 500, {
+      error: e.message,
+      ...(e.id ? { id: e.id } : {}),
+    });
+  }
+}
+
+/**
+ * 点击「AI 润色」时生成当前简历视角的润色结果，并返回可直接保存的配置。
+ * 生成失败不会修改 Wiki，也不会返回半成品配置。
+ */
+async function handlePolish(wikiRoot, res, body) {
+  let config;
+  try {
+    config = await resolveResumeConfig(wikiRoot, body);
+    const only = body.only && typeof body.only === 'object' ? body.only : null;
+    if (only && (!POLISH_FIELDS.includes(String(only.field)) || typeof only.path !== 'string')) {
+      const error = new Error('换一换参数无效');
+      error.statusCode = 400;
+      throw error;
+    }
+    const context = await buildPolishContext(wikiRoot, config, only);
+    const entries = await generatePolishEntries(context, body.provider);
+    const existingEntries = config.polish?.entries || {};
+    const mergedEntries = { ...existingEntries };
+    for (const entry of entries) {
+      mergedEntries[entry.path] = {
+        source_hash: entry.source_hash,
+        fields: {
+          ...(existingEntries[entry.path]?.fields || {}),
+          ...entry.fields,
+        },
+        updated_at: new Date().toISOString(),
+      };
+    }
+
+    const nextConfig = {
+      ...config,
+      polish: {
+        ...(config.polish || {}),
+        enabled: true,
+        entries: mergedEntries,
+      },
+    };
+    return sendJson(res, 200, {
+      config: nextConfig,
+      generated_count: entries.length,
+      candidate_count: context.candidates.length,
+    });
+  } catch (e) {
+    return sendJson(res, e.statusCode || 502, {
+      error: 'AI 润色失败',
+      message: e.message,
+    });
+  }
+}
+
+/** POST /api/resume/polish-models — 读取用户 OpenAI-compatible provider 的模型列表。 */
+async function handlePolishModels(res, body) {
+  try {
+    const models = await listProviderModels(body.provider || {});
+    return sendJson(res, 200, { models });
+  } catch (e) {
+    return sendJson(res, e.statusCode || 502, {
+      error: '读取模型列表失败',
+      message: e.message,
+    });
+  }
 }
 
 // ── 请求处理辅助 ──────────────────────────────────────
@@ -436,15 +665,24 @@ async function assembleResume(config, template, wikiRoot) {
             if (!sectionFields.includes(field)) sectionFields.push(field);
           }
         }
+        const polishEnabled = module === 'project' || module === 'experience';
+        const polished = polishEnabled
+          ? applyPolish(ent.fields, ent.path, config)
+          : { fields: ent.fields, status: null };
+        const contentOverride = config.content_overrides?.[ent.path];
+        const displayFields = contentOverride && typeof contentOverride === 'object'
+          ? { ...polished.fields, ...contentOverride }
+          : polished.fields;
         const item = {};
         for (const field of sectionFields) {
-          if (ent.fields[field] !== undefined) {
-            item[field] = ent.fields[field];
+          if (displayFields[field] !== undefined) {
+            item[field] = displayFields[field];
           }
         }
         // 保留 wikilink 供前端展示关系
         item._links = ent.links;
         item._path = ent.path;
+        if (polished.status) item._polish = polished.status;
         items.push(item);
       } catch {}
     }
@@ -554,7 +792,10 @@ async function assembleResume(config, template, wikiRoot) {
     try {
       const ent = await parseWikiFile(personFiles[0], wikiPath);
       if (!isEntityDeleted(ent, deletions)) {
-        personData = { ...ent.fields };
+        personData = {
+          ...ent.fields,
+          ...(config.content_overrides?.[ent.path] || {}),
+        };
         personData._links = ent.links;
         personData._path = ent.path;
 
@@ -591,6 +832,21 @@ async function assembleResume(config, template, wikiRoot) {
       : s.items.length;
   }
 
+  const polishSummary = sections.reduce(
+    (summary, section) => {
+      for (const item of section.grouped
+        ? section.groups.flatMap((group) => group.items)
+        : section.items) {
+        const status = item._polish?.status;
+        if (!status) continue;
+        summary.total += 1;
+        summary[status] = (summary[status] || 0) + 1;
+      }
+      return summary;
+    },
+    { enabled: config.polish?.enabled !== false, total: 0 },
+  );
+
   return {
     resume: {
       name: config.name || '',
@@ -604,6 +860,7 @@ async function assembleResume(config, template, wikiRoot) {
       entity_count: entityCount,
       template: template.id,
       resume_config: config.id || '',
+      polish: polishSummary,
     },
   };
 }
@@ -751,7 +1008,14 @@ async function handleSave(wikiRoot, res, body) {
       id: config.id,
     });
   } catch (e) {
-    sendJson(res, 500, { error: '保存失败', message: e.message });
+    const permissionDenied = e?.code === 'EACCES' || e?.code === 'EPERM';
+    sendJson(res, 500, {
+      error: '保存失败',
+      message: permissionDenied
+        ? '数据目录不可写，请确认 API 服务拥有简历目录的写入权限后重试。'
+        : e.message,
+      code: e?.code,
+    });
   }
 }
 
@@ -903,6 +1167,9 @@ async function handleRequest(req, wikiRoot, res) {
           'GET /api/resumes',
           'GET /api/templates',
           'POST /api/resume/generate',
+          'POST /api/resume/polish-context',
+          'POST /api/resume/polish',
+          'POST /api/resume/polish-models',
           'POST /api/resume/export',
           'POST /api/resume/save',
           'POST /api/resume/delete',
@@ -951,6 +1218,24 @@ async function handleRequest(req, wikiRoot, res) {
     if (method === 'POST' && segs[1] === 'resume' && segs[2] === 'generate') {
       const body = await readBody(req);
       return await handleGenerate(wikiRoot, res, body);
+    }
+
+    // /api/resume/polish-context
+    if (method === 'POST' && segs[1] === 'resume' && segs[2] === 'polish-context') {
+      const body = await readBody(req);
+      return await handlePolishContext(wikiRoot, res, body);
+    }
+
+    // /api/resume/polish
+    if (method === 'POST' && segs[1] === 'resume' && segs[2] === 'polish') {
+      const body = await readBody(req);
+      return await handlePolish(wikiRoot, res, body);
+    }
+
+    // /api/resume/polish-models
+    if (method === 'POST' && segs[1] === 'resume' && segs[2] === 'polish-models') {
+      const body = await readBody(req);
+      return await handlePolishModels(res, body);
     }
 
     // /api/resume/export
@@ -1020,6 +1305,9 @@ async function start() {
     console.log(`  GET  /api/resumes`);
     console.log(`  GET  /api/templates`);
     console.log(`  POST /api/resume/generate`);
+    console.log(`  POST /api/resume/polish-context`);
+    console.log(`  POST /api/resume/polish`);
+    console.log(`  POST /api/resume/polish-models`);
     console.log(`  POST /api/resume/export`);
     console.log(`  POST /api/resume/save`);
     console.log(`  POST /api/resume/delete`);

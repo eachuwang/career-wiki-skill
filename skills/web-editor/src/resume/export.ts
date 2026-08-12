@@ -29,17 +29,74 @@ export interface PdfLike {
     height: number,
   ): void;
   save(filename: string): void;
+  output?(type: 'blob'): Blob;
 }
 
-interface DownloadResumePdfInput {
+interface ResumePdfInput {
   element: HTMLElement;
-  filename: string;
   deps?: {
     /** 渲染单个 A4 页面为 canvas；默认使用 html2canvas */
     renderPage?: (element: HTMLElement) => Promise<HTMLCanvasElement>;
     /** 创建 jsPDF 文档；默认使用 jspdf */
     createPdf?: () => PdfLike;
   };
+}
+
+interface DownloadResumePdfInput extends ResumePdfInput {
+  filename: string;
+}
+
+export interface SaveExportBlobInput {
+  blob: Blob;
+  filename: string;
+  description: string;
+  mimeType: string;
+  extension: string;
+}
+
+type SaveFilePicker = (options: {
+  suggestedName: string;
+  types: Array<{
+    description: string;
+    accept: Record<string, string[]>;
+  }>;
+}) => Promise<FileSystemFileHandle>;
+
+/**
+ * 优先使用浏览器原生“另存为”窗口，让用户选择目录与文件名；
+ * 不支持 File System Access API 时退回标准浏览器下载。
+ */
+export async function saveExportBlob({
+  blob,
+  filename,
+  description,
+  mimeType,
+  extension,
+}: SaveExportBlobInput): Promise<'saved' | 'cancelled'> {
+  const picker = (window as Window & { showSaveFilePicker?: SaveFilePicker }).showSaveFilePicker;
+  if (picker) {
+    try {
+      const handle = await picker({
+        suggestedName: filename,
+        types: [{ description, accept: { [mimeType]: [extension] } }],
+      });
+      const writable = await handle.createWritable();
+      await writable.write(blob);
+      await writable.close();
+      return 'saved';
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') return 'cancelled';
+      throw error;
+    }
+  }
+
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  return 'saved';
 }
 
 /** 转义文档标题，避免用户输入破坏导出 HTML 结构。 */
@@ -99,11 +156,10 @@ export function collectDocumentCss(): string {
  * 每个 `.a4-page` 独立渲染为图片后按顺序写入 jsPDF，
  * 一页对一页，不依赖系统打印机或打印对话框。
  */
-export async function downloadResumePdf({
+async function renderResumePdf({
   element,
-  filename,
   deps = {},
-}: DownloadResumePdfInput): Promise<void> {
+}: ResumePdfInput): Promise<PdfLike> {
   const renderPage =
     deps.renderPage ??
     (async (pageElement: HTMLElement) =>
@@ -154,7 +210,7 @@ export async function downloadResumePdf({
       // 图片铺满整张 A4 页面；保护区域由页面自身的 padding 保证
       pdf.addImage(imageData, 'JPEG', 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
     }
-    pdf.save(filename);
+    return pdf;
   } finally {
     // 无论成败都恢复预览缩放，避免影响用户界面
     if (shell) {
@@ -172,4 +228,19 @@ export async function downloadResumePdf({
       }
     });
   }
+}
+
+export async function createResumePdfBlob(input: ResumePdfInput): Promise<Blob> {
+  const pdf = await renderResumePdf(input);
+  if (!pdf.output) throw new Error('当前 PDF 生成器不支持文件保存');
+  return pdf.output('blob');
+}
+
+export async function downloadResumePdf({
+  element,
+  filename,
+  deps,
+}: DownloadResumePdfInput): Promise<void> {
+  const pdf = await renderResumePdf({ element, deps });
+  pdf.save(filename);
 }

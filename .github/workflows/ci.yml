@@ -1,0 +1,79 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  merge_group:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  skill-tests:
+    name: Skill tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: skills/resume-generator/package-lock.json
+
+      - name: Install resume generator dependencies
+        working-directory: skills/resume-generator
+        run: npm ci
+
+      - name: Test resume generator
+        working-directory: skills/resume-generator
+        run: npm test
+
+      - name: Test wiki engine
+        run: node --test skills/wiki-engine/tests/**/*.test.mjs
+
+      - name: Test interview skill
+        run: node --test skills/interview/tests/**/*.test.mjs
+
+  web-editor:
+    name: Web editor
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: skills/web-editor/package-lock.json
+
+      - name: Install dependencies
+        working-directory: skills/web-editor
+        run: npm ci
+
+      - name: Type-check
+        working-directory: skills/web-editor
+        run: npm run lint
+
+      - name: Test
+        working-directory: skills/web-editor
+        run: npm test
+
+      - name: Build
+        working-directory: skills/web-editor
+        run: npm run build

@@ -1,14 +1,14 @@
-/**
- * PrivacyControls — 脱敏设置面板
- *
- * 6 个字段开关，实时控制预览脱敏效果（原 privacy-filter 能力并入编辑器）。
- */
+/** 隐私预览设置：顶栏显示摘要，具体选项收进弹出面板。 */
 
+import { useEffect, useRef } from 'react';
 import type { PrivacyConfig } from '../types';
+import UiIcon from './UiIcon';
 
 interface PrivacyControlsProps {
   config: PrivacyConfig;
+  open: boolean;
   onChange: (config: PrivacyConfig) => void;
+  onOpenChange: (open: boolean) => void;
 }
 
 interface ToggleItem {
@@ -26,33 +26,61 @@ const TOGGLES: ToggleItem[] = [
   { key: 'mask_github', label: 'GitHub', description: '[GitHub已隐藏]' },
 ];
 
-export default function PrivacyControls({
-  config,
-  onChange,
-}: PrivacyControlsProps) {
-  /** 仅更新当前简历的脱敏配置，保持其他选项不变。 */
+export default function PrivacyControls({ config, open, onChange, onOpenChange }: PrivacyControlsProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const enabledCount = TOGGLES.filter((toggle) => !!config[toggle.key]).length;
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) onOpenChange(false);
+    };
+    document.addEventListener('mousedown', closeOnOutsideClick);
+    return () => document.removeEventListener('mousedown', closeOnOutsideClick);
+  }, [onOpenChange, open]);
+
   const toggle = (key: keyof PrivacyConfig) => {
     onChange({ ...config, [key]: !config[key] });
   };
 
   return (
-    <div className="flex items-center gap-3 no-print">
-      <span className="text-xs font-medium text-ink-500">隐私预览</span>
-      {TOGGLES.map((t) => (
-        <label
-          key={t.key}
-          className="privacy-toggle"
-          title={`脱敏效果: ${t.description}`}
-        >
-          <input
-            type="checkbox"
-            checked={!!config[t.key]}
-            onChange={() => toggle(t.key)}
-            className="rounded text-brand-500 focus:ring-brand-300"
-          />
-          {t.label}
-        </label>
-      ))}
+    <div className="privacy-controls no-print" ref={rootRef}>
+      <button
+        type="button"
+        className="privacy-summary-button"
+        aria-expanded={open}
+        aria-haspopup="menu"
+        onClick={() => onOpenChange(!open)}
+      >
+        <UiIcon name={enabledCount > 0 ? 'eye-off' : 'eye'} size={16} />
+        <span>隐私</span>
+        <span className="privacy-summary-count">{enabledCount}/6</span>
+        <UiIcon name="chevron-down" size={13} />
+      </button>
+
+      {open && (
+        <div className="privacy-popover" role="menu" aria-label="隐私预览设置">
+          <div className="privacy-popover-header">
+            <strong>隐私预览</strong>
+            <span>只影响预览与导出</span>
+          </div>
+          <div className="privacy-option-grid">
+            {TOGGLES.map((item) => (
+              <label key={item.key} className="privacy-option" title={`脱敏效果: ${item.description}`}>
+                <span>
+                  <strong>{item.label}</strong>
+                  <small>{item.description}</small>
+                </span>
+                <input
+                  type="checkbox"
+                  checked={!!config[item.key]}
+                  onChange={() => toggle(item.key)}
+                />
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

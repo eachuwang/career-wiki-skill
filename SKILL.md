@@ -1,6 +1,6 @@
 ---
 name: career-wiki-skill
-description: "用 AI Agent 采访采集信息，自动生成结构化 Wiki 知识库，从 Wiki 一键生成多份简历，Web 可视化编辑导出。当用户说'开始采访''录入信息''补充经历''解析简历文件''编译 wiki''检查 wiki''从 Wiki 删除项目''从知识库删除经历''导出 OKF''生成简历''打开编辑器''看看简历预览''创建模板''创建字节版简历''预览脱敏效果'时使用。跨 Agent 兼容，纯本地数据，支持 Claude Code/Codex/Hermes/OpenClaw 等所有支持 Skill 的 Agent。"
+description: "用 AI Agent 采访采集信息，自动生成结构化 Wiki 知识库，从 Wiki 一键生成多份简历，Web 可视化编辑导出。当用户说'开始采访''录入信息''补充经历''解析简历文件''编译 wiki''检查 wiki''从 Wiki 删除项目''从知识库删除经历''导出 OKF''生成简历''打开编辑器''看看简历预览''创建模板''创建字节版简历''预览脱敏效果'时使用。跨 Agent 兼容，用户数据默认纯本地存储，模型 provider 可配置，支持 Claude Code/Codex/Hermes/OpenClaw 等所有支持 Skill 的 Agent。"
 version: 1.0.0
 author: eachuwang
 license: MIT
@@ -25,7 +25,7 @@ license: MIT
 | "检查 wiki" / "lint" | wiki-engine | 孤儿/断链/重复/过期检查 |
 | "删除项目经历" / "从 Wiki 删除项目" / "从知识库删除经历" / "删除知识库实体" | wiki-engine | 先确认是删除当前简历视图还是 Wiki 知识；确认删除 Wiki 后登记删除清单并全量重建 |
 | "导出 OKF" / "导入 OKF" | wiki-engine | Node 脚本，OKF JSON 双向转换 |
-| "生成简历" / "导出简历" / "启动 API server" | resume-generator | Node API server，查询 wiki + 组装简历 |
+| "生成简历" / "导出简历" / "启动 API server" | resume-generator | Node 查询 wiki + 组装简历；可由 Agent 或已配置的 provider 轻量润色项目描述/岗位职责 |
 | "打开编辑器" / "启动前端" / "看看简历预览" | web-editor | React 前端，拖拽编辑 + 实时预览 + 导出；含多简历/模板管理/隐私脱敏 |
 | "从当前简历隐藏项目" / "不在这份简历显示项目" | web-editor | 只修改当前简历配置的 hide.items，不删除 Wiki 知识 |
 
@@ -42,6 +42,12 @@ file-parser ──→ wiki-engine（提取完自动 compile）
 wiki-engine ──→ resume-generator（提供 wiki 数据）
 resume-generator ──→ web-editor（前端调 API，含模板/多简历/脱敏数据）
 ```
+
+### 简历润色边界
+
+简历生成时，Agent 可按“调用 `POST /api/resume/polish-context` → 根据 `selected_fields` 阅读原始字段和同一用户口吻样本 → 轻量润色 → 用原 `source_hash` 写入 `polish.entries` → 保存 → 再调用 generate/export”的顺序执行；Web 编辑器则由用户配置 OpenAI-compatible provider 和润色内容后调用 `POST /api/resume/polish`，生成后再保存。支持项目描述、个人优势和岗位职责；字段旁的「换一换」使用 `only: { path, field }` 只重新生成当前字段。API Key 仅保存在浏览器本地设置，不写入简历 JSON；没有可用推理能力时保留原文，不做伪润色。
+
+润色必须遵守：保留用户事实和词汇；短输入只做必要扩写；参考用户已有表达模仿句式；不补造数字、技术、结果；避免空泛的 AI 套话。Wiki 永远是事实源，润色只属于当前简历视角。Node 会校验 `source_hash`，原始 Wiki 变化后自动回退原文。
 
 ---
 

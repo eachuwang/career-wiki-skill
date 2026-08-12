@@ -11,6 +11,8 @@ import type {
   TemplateConfig,
   ResumeConfig,
   GapAnalysis,
+  ResumePolishField,
+  ResumePolishProviderConfig,
 } from '../types';
 
 const BASE_URL = import.meta.env.VITE_API_URL || '';
@@ -136,6 +138,42 @@ export async function generateResume(
     method: 'POST',
     body: JSON.stringify(config),
   });
+}
+
+/** 获取 Agent 进行简历润色所需的原始事实和用户口吻样本。 */
+export async function getResumePolishContext(
+  config: ResumeConfig,
+): Promise<Record<string, unknown>> {
+  return request<Record<string, unknown>>('/api/resume/polish-context', {
+    method: 'POST',
+    body: JSON.stringify({ config }),
+  });
+}
+
+/** 点击 AI 润色后生成当前简历视角的润色结果。 */
+export async function polishResume(
+  config: ResumeConfig,
+  provider: ResumePolishProviderConfig,
+  options?: { only?: { path: string; field: ResumePolishField } },
+): Promise<{ config: ResumeConfig; generated_count: number; candidate_count: number }> {
+  return request<{ config: ResumeConfig; generated_count: number; candidate_count: number }>(
+    '/api/resume/polish',
+    {
+      method: 'POST',
+      body: JSON.stringify({ config, provider, ...options }),
+    },
+  );
+}
+
+/** 从 OpenAI-compatible provider 拉取模型列表。 */
+export async function getPolishModels(
+  provider: ResumePolishProviderConfig,
+): Promise<string[]> {
+  const result = await request<{ models: string[] }>('/api/resume/polish-models', {
+    method: 'POST',
+    body: JSON.stringify({ provider }),
+  });
+  return result.models ?? [];
 }
 
 /** 导出简历（json 格式直接下载，html/pdf 由前端处理） */

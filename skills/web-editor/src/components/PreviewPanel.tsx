@@ -35,9 +35,7 @@ interface PreviewPanelProps {
   template: TemplateConfig | null;
   privacy: PrivacyConfig;
   resumeName: string;
-  onExportPDF: () => void;
-  onExportHTML: () => void;
-  onExportJSON: () => void;
+  onOpenExport: () => void;
 }
 
 /** 单页内容区高度（px），留 1px 余量防止块恰好溢出页面 */
@@ -294,9 +292,7 @@ export default function PreviewPanel({
   template,
   privacy,
   resumeName,
-  onExportPDF,
-  onExportHTML,
-  onExportJSON,
+  onOpenExport,
 }: PreviewPanelProps) {
   const [zoom, setZoom] = useState(getInitialZoom);
 
@@ -321,7 +317,7 @@ export default function PreviewPanel({
       // 应用用户覆盖
       const merged = data.map((e) => ({
         ...e,
-        fields: { ...e.fields, ...m.overrides },
+        fields: { ...e.fields, ...(m.overrides[e.path] || {}) },
       }));
       return { module: m, data: merged };
     });
@@ -416,11 +412,9 @@ export default function PreviewPanel({
     <div className="h-full flex flex-col">
       {/* 预览工具栏 */}
       <div className="preview-toolbar no-print">
-        <div>
-          <div className="text-sm font-semibold text-ink-800">实时预览</div>
-          <div className="text-[11px] text-ink-400">
-            A4 · 共 {pageCount} 页 · 导出与当前内容一致
-          </div>
+        <div className="preview-heading">
+          <div className="text-sm font-semibold text-ink-800">预览</div>
+          <div className="preview-meta">A4 · {pageCount} 页</div>
         </div>
         <div className="preview-toolbar-spacer" />
         <div className="zoom-controls" role="group" aria-label="预览缩放">
@@ -442,27 +436,12 @@ export default function PreviewPanel({
             <UiIcon name="plus" size={17} />
           </button>
         </div>
-        <div className="preview-toolbar-divider" />
         <button
-          onClick={onExportJSON}
-          className="toolbar-button ghost compact"
-          title="导出 JSON"
-        >
-          <UiIcon name="file" size={16} /> JSON
-        </button>
-        <button
-          onClick={onExportHTML}
-          className="toolbar-button ghost compact"
-          title="导出 HTML"
-        >
-          <UiIcon name="code" size={16} /> HTML
-        </button>
-        <button
-          onClick={onExportPDF}
+          onClick={onOpenExport}
           className="toolbar-button primary"
-          title="导出 PDF"
+          title="导出简历"
         >
-          <UiIcon name="download" size={16} /> 导出 PDF
+          <UiIcon name="download" size={16} /> 导出
         </button>
       </div>
 

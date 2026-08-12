@@ -131,6 +131,33 @@ export interface PrivacyConfig {
   custom?: unknown[];
 }
 
+export type ResumePolishField = 'description' | 'responsibilities' | 'content';
+
+/** Agent 为当前简历生成的轻量润色缓存，不回写 Wiki。 */
+export interface ResumePolishEntry {
+  source_hash: string;
+  fields: Partial<Record<ResumePolishField, string>>;
+  updated_at?: string;
+}
+
+export interface ResumePolishConfig {
+  enabled?: boolean;
+  /** 用户选择要生成的内容字段；缺失时兼容旧配置，默认生成全部支持的字段。 */
+  selected_fields?: ResumePolishField[];
+  entries?: Record<string, ResumePolishEntry>;
+}
+
+/** 当前简历对 Wiki 条目字段的展示覆盖；key 为 Wiki 相对路径，不回写 Wiki。 */
+export type ResumeContentOverrides = Record<string, Record<string, unknown>>;
+
+/** 用户在浏览器中配置的 OpenAI-compatible 模型连接信息；不会写入简历 JSON。 */
+export interface ResumePolishProviderConfig {
+  base_url: string;
+  api_key: string;
+  model: string;
+  timeout_ms: number;
+}
+
 export interface ResumeConfig {
   name: string;
   id: string;
@@ -146,6 +173,8 @@ export interface ResumeConfig {
   hide?: ResumeHide[];
   order?: Record<string, 'asc' | 'desc'>;
   privacy?: PrivacyConfig;
+  polish?: ResumePolishConfig;
+  content_overrides?: ResumeContentOverrides;
   notes?: string;
 }
 
@@ -165,7 +194,7 @@ export interface ModuleInstance {
   label: string;
   expanded: boolean;
   /** 用户覆盖的字段值（不回写 wiki，只存在简历配置里） */
-  overrides: Record<string, unknown>;
+  overrides: ResumeContentOverrides;
   /** 该模块从 wiki 拉取的实体数据 */
   wikiData?: WikiEntity[];
   /** 当前简历中隐藏的 Wiki 子项路径 */

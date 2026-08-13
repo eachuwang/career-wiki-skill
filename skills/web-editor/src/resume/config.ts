@@ -44,6 +44,27 @@ export function getModuleContentOverrides(
 }
 
 /**
+ * 将模块选择器的勾选结果同步到当前简历编排。
+ * 已存在的模块实例会被保留，以免丢失编辑内容、隐藏项和排序；
+ * 取消勾选只移除当前简历视角中的模块，不触碰 Wiki 数据。
+ */
+export function reconcileModuleSelection(
+  currentModules: ModuleInstance[],
+  selectedTypes: EntityType[],
+  createModule: (type: EntityType) => ModuleInstance,
+): ModuleInstance[] {
+  const uniqueSelectedTypes = [...new Set(selectedTypes)];
+  const selectedTypeSet = new Set(uniqueSelectedTypes);
+  const retainedModules = currentModules.filter((module) => selectedTypeSet.has(module.type));
+  const retainedTypes = new Set(retainedModules.map((module) => module.type));
+  const addedModules = uniqueSelectedTypes
+    .filter((type) => !retainedTypes.has(type))
+    .map(createModule);
+
+  return [...retainedModules, ...addedModules];
+}
+
+/**
  * 写入条目级手动覆盖；恢复为当前继承值时移除冗余覆盖。
  * 继承值已经包含有效 AI 润色，因此手动撤销后会自然回到“AI 润色或 Wiki 原文”。
  */

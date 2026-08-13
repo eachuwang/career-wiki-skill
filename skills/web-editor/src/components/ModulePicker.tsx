@@ -82,8 +82,9 @@ export default function ModulePicker({ addedTypes, onAdd }: ModulePickerProps) {
         aria-expanded={open}
         aria-haspopup="dialog"
         onClick={() => {
-          setOpen((current) => !current);
-          setSelectedTypes(open ? [] : addedTypes);
+          const nextOpen = !open;
+          setOpen(nextOpen);
+          setSelectedTypes(nextOpen ? [...addedTypes] : []);
         }}
       >
         <UiIcon name="plus" size={16} />
@@ -91,11 +92,11 @@ export default function ModulePicker({ addedTypes, onAdd }: ModulePickerProps) {
       </button>
 
       {open && (
-        <div className="module-picker-popover" role="dialog" aria-label="添加模块">
+        <div className="module-picker-popover" role="dialog" aria-label="选择简历模块">
           <div className="module-picker-heading">
             <div>
-              <h3>选择要添加的模块</h3>
-              <p>勾选需要保留的模块，确认后同步编排区。</p>
+              <h3>选择简历中要保留的模块</h3>
+              <p>勾选需要出现在预览和导出的模块，应用后立即同步。</p>
             </div>
             <button
               type="button"

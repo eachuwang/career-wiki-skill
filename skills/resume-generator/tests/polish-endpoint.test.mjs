@@ -226,6 +226,7 @@ test('换一换只请求并更新指定条目的指定字段', async (t) => {
   const baseUrl = `http://127.0.0.1:${apiPort}`;
   await waitForServer(baseUrl);
   const provider = {
+    protocol: 'openai',
     base_url: `http://127.0.0.1:${providerPort}/v1`,
     api_key: 'test-key',
     model: 'local-model',
@@ -315,6 +316,7 @@ test('OpenAI-compatible provider 支持拉取模型并生成润色', async (t) =
   const baseUrl = `http://127.0.0.1:${apiPort}`;
   await waitForServer(baseUrl);
   const provider = {
+    protocol: 'openai',
     base_url: `http://127.0.0.1:${providerPort}/v1`,
     api_key: 'test-key',
     model: 'local-model',
@@ -346,6 +348,77 @@ test('OpenAI-compatible provider 支持拉取模型并生成润色', async (t) =
   assert.equal(received[0].authorization, 'Bearer test-key');
   assert.equal(received[1].path, '/v1/chat/completions');
   assert.equal(received[1].authorization, 'Bearer test-key');
+});
+
+test('OpenAI-compatible 响应包含思考和代码围栏时仍能解析 JSON', async (t) => {
+  const root = await createFixture();
+  const providerPort = 47000 + Math.floor(Math.random() * 500);
+  const apiPort = providerPort + 500;
+  const providerServer = createServer(async (req, res) => {
+    if (req.url !== '/v1/chat/completions') {
+      res.statusCode = 404;
+      return res.end();
+    }
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const requestBody = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    const prompt = requestBody.messages?.find((message) => message.role === 'user')?.content || '';
+    const context = JSON.parse(prompt.split('\n').at(-1));
+    const candidate = context.candidates[0];
+    const responseText = [
+      '<think>先检查事实，再输出结果。</think>',
+      '```json',
+      JSON.stringify({
+        entries: [{
+          path: candidate.path,
+          source_hash: candidate.source_hash,
+          fields: { description: '项目围绕自动生成数据接入脚本展开。' },
+        }],
+      }),
+      '```',
+    ].join('\n');
+    res.setHeader('Content-Type', 'application/json');
+    return res.end(JSON.stringify({
+      choices: [{ message: { content: responseText } }],
+    }));
+  });
+  await new Promise((resolve) => providerServer.listen(providerPort, '127.0.0.1', resolve));
+
+  const server = spawn(process.execPath, ['scripts/api_server.mjs'], {
+    cwd: new URL('..', import.meta.url),
+    env: { ...process.env, WIKI_ROOT: root, PORT: String(apiPort) },
+    stdio: 'ignore',
+  });
+  t.after(async () => {
+    server.kill('SIGTERM');
+    await new Promise((resolve) => providerServer.close(resolve));
+    await rm(root, { recursive: true, force: true });
+  });
+  const baseUrl = `http://127.0.0.1:${apiPort}`;
+  await waitForServer(baseUrl);
+
+  const response = await fetch(`${baseUrl}/api/resume/polish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      provider: {
+        protocol: 'openai',
+        base_url: `http://127.0.0.1:${providerPort}/v1`,
+        api_key: 'test-key',
+        model: 'local-model',
+      },
+      config: {
+        id: 'reasoning-response-resume',
+        name: '思考响应简历',
+        template: 'tech-minimal',
+        modules: ['project'],
+      },
+    }),
+  });
+  const result = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(result.generated_count, 1);
 });
 
 test('多个润色候选会分批请求模型并合并结果', async (t) => {
@@ -396,6 +469,7 @@ test('多个润色候选会分批请求模型并合并结果', async (t) => {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       provider: {
+        protocol: 'openai',
         base_url: `http://127.0.0.1:${providerPort}/v1`,
         api_key: 'test-key',
         model: 'local-model',
@@ -466,6 +540,7 @@ test('单批请求超时后自动重试一次并保留完整结果', async (t) =
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       provider: {
+        protocol: 'openai',
         base_url: `http://127.0.0.1:${providerPort}/v1`,
         api_key: 'test-key',
         model: 'local-model',
@@ -484,4 +559,168 @@ test('单批请求超时后自动重试一次并保留完整结果', async (t) =
   assert.equal(response.status, 200);
   assert.equal(requestCount, 2);
   assert.equal(result.generated_count, 1);
+});
+
+test('AI 服务网络不可达时返回可定位的错误，而不是 fetch failed', async (t) => {
+  const root = await createFixture();
+  const apiPort = 49500 + Math.floor(Math.random() * 250);
+  const server = spawn(process.execPath, ['scripts/api_server.mjs'], {
+    cwd: new URL('..', import.meta.url),
+    env: { ...process.env, WIKI_ROOT: root, PORT: String(apiPort) },
+    stdio: 'ignore',
+  });
+  t.after(async () => {
+    server.kill('SIGTERM');
+    await rm(root, { recursive: true, force: true });
+  });
+  const baseUrl = `http://127.0.0.1:${apiPort}`;
+  await waitForServer(baseUrl);
+
+  const response = await fetch(`${baseUrl}/api/resume/polish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      provider: {
+        protocol: 'openai',
+        base_url: 'http://127.0.0.1:9/v1',
+        api_key: 'test-key',
+        model: 'local-model',
+        timeout_ms: 100,
+      },
+      config: {
+        id: 'unreachable-provider-resume',
+        name: '不可达服务简历',
+        template: 'tech-minimal',
+        modules: ['project'],
+      },
+    }),
+  });
+  const result = await response.json();
+
+  assert.equal(response.status, 502);
+  assert.match(result.message, /无法连接 AI 润色服务/);
+  assert.doesNotMatch(result.message, /fetch failed/);
+});
+
+test('未显式选择协议时拒绝请求，不根据 Base URL 猜测', async (t) => {
+  const root = await createFixture();
+  const apiPort = 49700 + Math.floor(Math.random() * 200);
+  const server = spawn(process.execPath, ['scripts/api_server.mjs'], {
+    cwd: new URL('..', import.meta.url),
+    env: { ...process.env, WIKI_ROOT: root, PORT: String(apiPort) },
+    stdio: 'ignore',
+  });
+  t.after(async () => {
+    server.kill('SIGTERM');
+    await rm(root, { recursive: true, force: true });
+  });
+  const baseUrl = `http://127.0.0.1:${apiPort}`;
+  await waitForServer(baseUrl);
+
+  const response = await fetch(`${baseUrl}/api/resume/polish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      provider: {
+        base_url: 'http://127.0.0.1:9/apps/anthropic',
+        api_key: 'test-key',
+        model: 'local-model',
+      },
+      config: {
+        id: 'missing-protocol-resume',
+        name: '缺少协议简历',
+        template: 'tech-minimal',
+        modules: ['project'],
+      },
+    }),
+  });
+  const result = await response.json();
+
+  assert.equal(response.status, 400);
+  assert.match(result.message, /请选择 AI 润色协议/);
+});
+
+test('显式选择 Anthropic 协议时调用 Messages API', async (t) => {
+  const root = await createFixture();
+  const providerPort = 49600 + Math.floor(Math.random() * 200);
+  const apiPort = providerPort + 200;
+  const received = [];
+  const providerServer = createServer(async (req, res) => {
+    received.push({
+      path: req.url,
+      apiKey: req.headers['x-api-key'],
+      version: req.headers['anthropic-version'],
+    });
+    if (req.url !== '/apps/anthropic/v1/messages') {
+      res.statusCode = 404;
+      return res.end();
+    }
+    const chunks = [];
+    for await (const chunk of req) chunks.push(chunk);
+    const requestBody = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    const prompt = requestBody.messages?.[0]?.content || '';
+    const context = JSON.parse(prompt.split('\n').at(-1));
+    const candidate = context.candidates[0];
+    res.setHeader('Content-Type', 'application/json');
+    return res.end(JSON.stringify({
+      content: [{
+        type: 'text',
+        text: JSON.stringify({
+          entries: [{
+            path: candidate.path,
+            source_hash: candidate.source_hash,
+            fields: { description: '项目围绕自动生成数据接入脚本展开。' },
+          }],
+        }),
+      }],
+    }));
+  });
+  await new Promise((resolve) => providerServer.listen(providerPort, '127.0.0.1', resolve));
+
+  const server = spawn(process.execPath, ['scripts/api_server.mjs'], {
+    cwd: new URL('..', import.meta.url),
+    env: {
+      ...process.env,
+      WIKI_ROOT: root,
+      PORT: String(apiPort),
+      RESUME_POLISH_BASE_URL: '',
+      RESUME_POLISH_API_KEY: '',
+      RESUME_POLISH_MODEL: '',
+      RESUME_POLISH_PROTOCOL: '',
+    },
+    stdio: 'ignore',
+  });
+  t.after(async () => {
+    server.kill('SIGTERM');
+    await new Promise((resolve) => providerServer.close(resolve));
+    await rm(root, { recursive: true, force: true });
+  });
+  const baseUrl = `http://127.0.0.1:${apiPort}`;
+  await waitForServer(baseUrl);
+
+  const response = await fetch(`${baseUrl}/api/resume/polish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      provider: {
+        protocol: 'anthropic',
+        base_url: `http://127.0.0.1:${providerPort}/apps/anthropic`,
+        api_key: 'explicit-key',
+        model: 'explicit-model',
+      },
+      config: {
+        id: 'environment-provider-resume',
+        name: '环境配置简历',
+        template: 'tech-minimal',
+        modules: ['project'],
+      },
+    }),
+  });
+  const result = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(result.generated_count, 1);
+  assert.equal(received[0].path, '/apps/anthropic/v1/messages');
+  assert.equal(received[0].apiKey, 'explicit-key');
+  assert.equal(received[0].version, '2023-06-01');
 });

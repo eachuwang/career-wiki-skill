@@ -102,7 +102,7 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 环境变量：
 - `PORT` — 监听端口，默认 `3001`
 - `WIKI_ROOT` — 数据目录根路径，默认读 `~/.career_wiki/.career-wiki-skill/config.json` 的 `root`，再 fallback 到 `~/.career_wiki/`
-- `RESUME_POLISH_PROVIDER` — 设为 `mock` 仅用于测试；正常请求使用前端传入的 OpenAI-compatible provider。未传入时兼容读取 `RESUME_POLISH_BASE_URL`、`RESUME_POLISH_API_KEY`、`RESUME_POLISH_MODEL`（以及旧版 `ANTHROPIC_*` 环境变量）
+- `RESUME_POLISH_PROVIDER` — 设为 `mock` 仅用于测试；正常请求优先使用前端传入的 provider。没有前端 provider 时，只有在同时配置 `RESUME_POLISH_PROTOCOL`、`RESUME_POLISH_BASE_URL`、`RESUME_POLISH_API_KEY`、`RESUME_POLISH_MODEL` 后才使用服务端环境配置；不再读取或猜测 `ANTHROPIC_*` 环境变量。
 
 ### 依赖
 
@@ -453,9 +453,9 @@ Agent 完成润色后，将结果保存到当前简历配置：
 
 ### 8. POST /api/resume/polish
 
-点击 Web 编辑器的「AI 润色」开关时调用。服务端读取当前 Wiki、构造润色上下文，使用请求体中的 OpenAI-compatible provider 调用 `/v1/chat/completions`，并通过 `response_format: {"type":"json_object"}` 要求兼容服务返回标准 JSON，再严格过滤为当前候选项、当前 `source_hash`、用户选择的 `description` / `content` / `responsibilities` 字段。候选项每 2 条一批、最多同时请求 2 批；单批超时或遇到 408、429、5xx 时自动重试一次，避免长上下文或瞬时服务拥塞使整次润色失败。成功时返回 `{config, generated_count, candidate_count}`，其中 `config.polish.enabled` 为 `true`；前端保存成功后再更新预览。点击字段旁的「换一换」会使用 `only` 参数只生成一个字段，并合并回原配置。API Key 不写入简历配置。
+点击 Web 编辑器的「AI 润色」开关时调用。服务端读取当前 Wiki、构造润色上下文，使用请求体中显式选择的 `provider.protocol` 调用 OpenAI-compatible `/v1/chat/completions` 或 Anthropic `/v1/messages`，并使用同一协议对应的响应 JSON 提取器，再严格过滤为当前候选项、当前 `source_hash`、用户选择的 `description` / `content` / `responsibilities` 字段。候选项每 2 条一批、最多同时请求 2 批；单批超时或遇到 408、429、5xx 时自动重试一次，避免长上下文或瞬时服务拥塞使整次润色失败。网络不可达时返回包含服务 origin 的可操作错误，不暴露 API Key。成功时返回 `{config, generated_count, candidate_count}`，其中 `config.polish.enabled` 为 `true`；前端保存成功后再更新预览。点击字段旁的「换一换」会使用 `only` 参数只生成一个字段，并合并回原配置。API Key 不写入简历配置。
 
-请求体中的 `provider` 格式为 `{ "base_url": "https://api.openai.com/v1", "api_key": "...", "model": "...", "timeout_ms": 60000 }`。`timeout_ms` 默认为 60 秒，可在 Web 编辑器配置为 10–180 秒。模型列表接口调用同一 provider 的 `/v1/models`，返回可供用户选择的模型 id；用户也可以直接填写模型名。
+请求体中的 `provider` 格式为 `{ "protocol": "openai", "base_url": "https://api.openai.com/v1", "api_key": "...", "model": "...", "timeout_ms": 60000 }`。`protocol` 必须明确填写为 `openai` 或 `anthropic`，请求端点、请求格式和响应 JSON 提取方式由它统一决定。使用 Anthropic-compatible provider 时，Base URL 例如 `https://dashscope.aliyuncs.com/apps/anthropic`，模型需手动填写，模型列表接口不适用。`timeout_ms` 默认为 60 秒，可在 Web 编辑器配置为 10–180 秒。OpenAI-compatible provider 的模型列表接口调用同一 provider 的 `/v1/models`，返回可供用户选择的模型 id；用户也可以直接填写模型名。
 
 ### 9. POST /api/resume/export
 

@@ -1,6 +1,7 @@
 node_modules/
 .DS_Store
 *.log
+dev_log/
 dist/
 .wayfinder/
 docs/

@@ -6,7 +6,7 @@
  * 顶栏：简历名称 | 模板选择 | 脱敏设置 | 导出PDF | 导出HTML | 导出JSON | 保存
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   DndContext,
   type DragEndEvent,
@@ -39,6 +39,7 @@ import type {
   EntityType,
   ResumePolishConfig,
   ResumePolishField,
+  ResumePolishProtocol,
   ResumePolishProviderConfig,
 } from '../types';
 import { MODULE_LIBRARY } from '../types';
@@ -48,6 +49,7 @@ import {
   createResumeConfig,
   getHiddenItemIds,
   getModuleContentOverrides,
+  reconcileModuleSelection,
   updateContentOverride,
 } from '../resume/config';
 import { toggleHiddenItem } from '../resume/visibility';
@@ -62,6 +64,7 @@ import {
 let moduleIdCounter = 0;
 const POLISH_PROVIDER_STORAGE_KEY = 'career-wiki.resume-polish-provider';
 const DEFAULT_POLISH_PROVIDER: ResumePolishProviderConfig = {
+  protocol: 'openai',
   base_url: 'https://api.openai.com/v1',
   api_key: '',
   model: '',
@@ -75,6 +78,7 @@ function loadPolishProvider(): ResumePolishProviderConfig {
     if (!raw) return DEFAULT_POLISH_PROVIDER;
     const parsed = JSON.parse(raw) as Partial<ResumePolishProviderConfig>;
     return {
+      protocol: parsed.protocol === 'anthropic' ? 'anthropic' : 'openai',
       base_url: typeof parsed.base_url === 'string' ? parsed.base_url : DEFAULT_POLISH_PROVIDER.base_url,
       api_key: typeof parsed.api_key === 'string' ? parsed.api_key : '',
       model: typeof parsed.model === 'string' ? parsed.model : '',
@@ -133,6 +137,28 @@ export default function ResumeEditor({
   const [polishModels, setPolishModels] = useState<string[]>([]);
   const [polishModelsLoading, setPolishModelsLoading] = useState(false);
   const [polishProviderError, setPolishProviderError] = useState('');
+  const polishProviderAnchorRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!polishSettingsOpen) return undefined;
+
+    const handlePointerDownOutside = (event: PointerEvent) => {
+      const anchor = polishProviderAnchorRef.current;
+      if (anchor && !anchor.contains(event.target as Node)) {
+        setPolishSettingsOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDownOutside);
+    return () => document.removeEventListener('pointerdown', handlePointerDownOutside);
+  }, [polishSettingsOpen]);
+
+  useEffect(() => {
+    if (!polishProviderError) return undefined;
+
+    const timeout = window.setTimeout(() => setPolishProviderError(''), 6000);
+    return () => window.clearTimeout(timeout);
+  }, [polishProviderError]);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
 
   // 加载简历配置
@@ -378,26 +404,20 @@ export default function ResumeEditor({
     }
   };
 
-  const handleModuleSelection = (types: EntityType[]) => {
-    const selectedTypes = new Set(types);
-    setModules((prev) => {
-      const retainedModules = prev.filter((module) => selectedTypes.has(module.type));
-      const existingTypes = new Set(retainedModules.map((module) => module.type));
-      const newModules = types
-        .filter((type) => !existingTypes.has(type))
-        .map((type) => {
-          const def = MODULE_LIBRARY.find((module) => module.type === type);
-          return {
-            id: genId(),
-            type,
-            label: def?.label || type,
-            expanded: false,
-            overrides: {},
-            hiddenItemIds: [],
-          };
-        });
-      return [...retainedModules, ...newModules];
+  const handleModuleSelection = async (types: EntityType[]) => {
+    const nextModules = reconcileModuleSelection(modules, types, (type) => {
+      const def = MODULE_LIBRARY.find((module) => module.type === type);
+      return {
+        id: genId(),
+        type,
+        label: def?.label || type,
+        expanded: false,
+        overrides: {},
+        hiddenItemIds: [],
+      };
     });
+    setModules(nextModules);
+    await handleSave(nextModules, '编排已更新');
   };
 
   // ---------- 模块操作 ----------
@@ -436,8 +456,7 @@ export default function ResumeEditor({
   };
 
   const handleRemoveModule = async (id: string) => {
-    // 用删除后的模块列表更新界面，并立即保存，
-    // 保证刷新后被删组件不会重新出现。
+    // 仅从当前简历的预览/导出编排中移除，并立即保存简历配置；不触碰 Wiki。
     const nextModules = modules.filter((m) => m.id !== id);
     setModules(nextModules);
     await handleSave(nextModules);
@@ -481,7 +500,10 @@ export default function ResumeEditor({
     });
   };
 
-  const handleSave = async (modulesOverride?: ModuleInstance[]) => {
+  const handleSave = async (
+    modulesOverride?: ModuleInstance[],
+    successMessage = modulesOverride ? '已删除并保存' : '已保存',
+  ) => {
     setSaving(true);
     setSaveMsg('');
     try {
@@ -490,8 +512,7 @@ export default function ResumeEditor({
       setResumeList((current) =>
         current.map((resume) => (resume.id === config.id ? config : resume)),
       );
-      setSaveMsg(modulesOverride ? '已删除并保存' : '已保存');
-      setTimeout(() => setSaveMsg(''), 3000);
+      setSaveMsg(successMessage);
     } catch (e) {
       setSaveMsg(`保存失败：${e instanceof Error ? e.message : e}`);
     } finally {
@@ -521,7 +542,10 @@ export default function ResumeEditor({
 
     const hasCachedPolish = Object.keys(polish?.entries || {}).length > 0;
     const providerConfigured = Boolean(
-      polishProvider.base_url.trim() && polishProvider.api_key.trim() && polishProvider.model.trim(),
+      polishProvider.protocol &&
+        polishProvider.base_url.trim() &&
+        polishProvider.api_key.trim() &&
+        polishProvider.model.trim(),
     );
     if (!providerConfigured && hasCachedPolish) {
       const nextPolish = { ...(polish || {}), enabled: true };
@@ -541,11 +565,10 @@ export default function ResumeEditor({
     }
     if (!providerConfigured) {
       setPolishSettingsOpen(true);
-      setPolishProviderError('请先配置 Base URL、API Key 和模型');
-      setSaveMsg('请先配置 AI 润色模型');
+      setPolishProviderError('请先选择协议并配置 Base URL、API Key 和模型');
+      setSaveMsg('请先配置 AI 润色协议和模型');
       return;
     }
-
     setPolishGenerating(true);
     setSaveMsg('');
     try {
@@ -562,7 +585,10 @@ export default function ResumeEditor({
           : '没有可润色的项目或经历，已保留原文',
       );
     } catch (e) {
-      setSaveMsg(`AI 润色失败：${e instanceof Error ? e.message : e}`);
+      const message = e instanceof Error ? e.message : String(e);
+      setPolishProviderError(message);
+      setPolishSettingsOpen(true);
+      setSaveMsg(`AI 润色失败：${message}`);
     } finally {
       setPolishGenerating(false);
     }
@@ -605,14 +631,16 @@ export default function ResumeEditor({
   /** 只重新生成当前条目的一个字段，供字段旁的“换一换”使用。 */
   const handleRegeneratePolish = async (path: string, field: ResumePolishField) => {
     const providerConfigured = Boolean(
-      polishProvider.base_url.trim() && polishProvider.api_key.trim() && polishProvider.model.trim(),
+      polishProvider.protocol &&
+        polishProvider.base_url.trim() &&
+        polishProvider.api_key.trim() &&
+        polishProvider.model.trim(),
     );
     if (!providerConfigured) {
       setPolishSettingsOpen(true);
-      setPolishProviderError('请先配置 Base URL、API Key 和模型');
+      setPolishProviderError('请先选择协议并配置 Base URL、API Key 和模型');
       return;
     }
-
     const generatingKey = `${path}:${field}`;
     setPolishGeneratingKey(generatingKey);
     setSaveMsg('');
@@ -630,7 +658,10 @@ export default function ResumeEditor({
       );
       setSaveMsg(result.generated_count > 0 ? '已换一版润色内容' : '未生成新的内容，请稍后重试');
     } catch (error) {
-      setSaveMsg(`重新生成失败：${error instanceof Error ? error.message : error}`);
+      const message = error instanceof Error ? error.message : String(error);
+      setPolishProviderError(message);
+      setPolishSettingsOpen(true);
+      setSaveMsg(`重新生成失败：${message}`);
     } finally {
       setPolishGeneratingKey(null);
     }
@@ -701,6 +732,13 @@ export default function ResumeEditor({
 
   const saveMsgIsError = /失败|无法|未保存/.test(saveMsg);
 
+  useEffect(() => {
+    if (!saveMsg) return undefined;
+
+    const timeout = window.setTimeout(() => setSaveMsg(''), saveMsgIsError ? 6000 : 3000);
+    return () => window.clearTimeout(timeout);
+  }, [saveMsg, saveMsgIsError]);
+
   return (
     <DndContext
       sensors={sensors}
@@ -730,14 +768,17 @@ export default function ResumeEditor({
             />
           </div>
           <div className="toolbar-utilities-group">
-            <div className="polish-provider-anchor">
+            <div className="polish-provider-anchor" ref={polishProviderAnchorRef}>
               <PolishControls
                 enabled={polishEnabled}
                 hasEntries={Object.keys(polish?.entries || {}).length > 0}
                 generating={polishGenerating}
                 selectedFieldCount={selectedPolishFields.length}
                 providerConfigured={Boolean(
-                  polishProvider.base_url.trim() && polishProvider.api_key.trim() && polishProvider.model.trim(),
+                  polishProvider.protocol &&
+                    polishProvider.base_url.trim() &&
+                    polishProvider.api_key.trim() &&
+                    polishProvider.model.trim(),
                 )}
                 settingsOpen={polishSettingsOpen}
                 onChange={handlePolishChange}
@@ -802,7 +843,7 @@ export default function ResumeEditor({
               <UiIcon name="refresh" size={18} />
             </button>
           </div>
-          {saveMsg && (
+          {saveMsg && !polishSettingsOpen && (
             <span
               className={`save-status ${saveMsgIsError ? 'is-error' : ''}`}
               role={saveMsgIsError ? 'alert' : 'status'}

@@ -15,7 +15,6 @@ import {
   useSensors,
   closestCorners,
 } from '@dnd-kit/core';
-import { arrayMove } from '@dnd-kit/sortable';
 
 import EditPanel from '../components/EditPanel';
 import PreviewPanel from '../components/PreviewPanel';
@@ -43,15 +42,12 @@ import type {
 import { MODULE_LIBRARY } from '../types';
 
 import * as api from '../api/client';
-import {
-  createResumeConfig,
-  getModuleDraftPatch,
-  projectResumeModules,
-  reconcileModuleSelection,
-  updateContentOverride,
-} from '../resume/config';
+import { createResumeConfig } from '../resume/config';
 import { createResumeEditingSession } from '../resume/editingSession';
-import { toggleHiddenItem } from '../resume/visibility';
+import {
+  createResumeContentOrchestration,
+  type ResumeContentOrchestrationResult,
+} from '../resume/contentOrchestration';
 import { applyPolishToEntities, getSelectedPolishFields } from '../resume/polish';
 import {
   createResumePolishWorkflow,
@@ -111,7 +107,6 @@ export default function ResumeEditor({
     polishWorkflow.getSnapshot,
   );
   const [templateList, setTemplateList] = useState<TemplateConfig[]>(templates);
-  const [expandedModuleTypes, setExpandedModuleTypes] = useState<Set<EntityType>>(new Set());
   const draft = session.draft;
   const currentResumeId = session.currentResumeId;
   const resumeList = session.resumes;
@@ -119,7 +114,24 @@ export default function ResumeEditor({
   const templateId = draft?.template || templates[0]?.id || '';
   const privacy = draft?.privacy || DEFAULT_PRIVACY;
   const polish = draft?.polish;
-  const modules = projectResumeModules(draft, wikiEntities, expandedModuleTypes);
+  const polishEnabled = polish?.enabled === true;
+  const resumeWikiEntities = useMemo(
+    () => applyPolishToEntities(
+      wikiEntities,
+      polishEnabled ? polish : { ...(polish || {}), enabled: false },
+    ),
+    [polish, polishEnabled, wikiEntities],
+  );
+  const [contentOrchestration] = useState(() => createResumeContentOrchestration({
+    session: editingSession,
+    wikiEntities: resumeWikiEntities,
+  }));
+  const contentSnapshot = useSyncExternalStore(
+    contentOrchestration.subscribe,
+    contentOrchestration.getSnapshot,
+    contentOrchestration.getSnapshot,
+  );
+  const modules = contentSnapshot.modules;
   const saving = session.saveStatus === 'saving';
   const [saveMsg, setSaveMsg] = useState('');
   const [workspaceView, setWorkspaceView] = useState<'edit' | 'preview'>('edit');
@@ -164,7 +176,6 @@ export default function ResumeEditor({
       if (!window.confirm('当前简历有未保存修改，切换后这些修改会丢失。确定继续吗？')) return;
       await editingSession.dispatch({ type: 'switch-resume', resumeId: id, discardDirty: true });
     }
-    setExpandedModuleTypes(new Set());
   };
 
   /** 新建简历：默认模板 + 常用模块，保存后立即加载 */
@@ -203,7 +214,6 @@ export default function ResumeEditor({
     try {
       const result = await editingSession.dispatch({ type: 'create-resume', config });
       if (result.status === 'failed') throw new Error(result.error);
-      setExpandedModuleTypes(new Set());
     } catch (e) {
       alert(`新建简历失败: ${e instanceof Error ? e.message : e}`);
     }
@@ -228,7 +238,6 @@ export default function ResumeEditor({
     try {
       const result = await editingSession.dispatch({ type: 'create-resume', config: copy });
       if (result.status === 'failed') throw new Error(result.error);
-      setExpandedModuleTypes(new Set());
     } catch (e) {
       alert(`复制简历失败: ${e instanceof Error ? e.message : e}`);
     }
@@ -246,7 +255,6 @@ export default function ResumeEditor({
     try {
       const result = await editingSession.dispatch({ type: 'delete-current-resume' });
       if (result.status === 'failed') throw new Error(result.error);
-      setExpandedModuleTypes(new Set());
     } catch (e) {
       alert(`删除简历失败: ${e instanceof Error ? e.message : e}`);
     }
@@ -254,12 +262,7 @@ export default function ResumeEditor({
 
   // 当前模板对象
   const currentTemplate = templateList.find((t) => t.id === templateId) || null;
-  const polishEnabled = polish?.enabled === true;
   const selectedPolishFields = getSelectedPolishFields(polish);
-  const resumeWikiEntities = applyPolishToEntities(
-    wikiEntities,
-    polishEnabled ? polish : { ...(polish || {}), enabled: false },
-  );
   const resumeView = useMemo(
     () => draft
       ? projectResume({ wiki: wikiEntities, config: draft, template: currentTemplate })
@@ -307,7 +310,11 @@ export default function ResumeEditor({
     }
   };
 
-  // ---------- dnd-kit handlers ----------
+  useEffect(() => {
+    contentOrchestration.setWikiEntities(resumeWikiEntities);
+  }, [contentOrchestration, resumeWikiEntities]);
+
+  // ---------- 内容编排工作流 ----------
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -317,51 +324,29 @@ export default function ResumeEditor({
     const { active, over } = e;
     if (!over) return;
 
-    // 编辑区内排序
     if (active.id !== over.id) {
-      const oldIndex = modules.findIndex((m) => m.id === active.id);
-      const newIndex = modules.findIndex((m) => m.id === over.id);
-      if (oldIndex >= 0 && newIndex >= 0) {
-        void updateDraftModules(arrayMove(modules, oldIndex, newIndex));
-      }
+      void contentOrchestration
+        .moveModuleBefore(String(active.id), String(over.id))
+        .then(reportContentResult);
     }
   };
 
-  const updateDraftModules = async (nextModules: ModuleInstance[]) => {
-    if (!draft) return;
-    await editingSession.dispatch({
-      type: 'edit-draft',
-      patch: getModuleDraftPatch(draft, nextModules),
-    });
+  const reportContentResult = (result: ResumeContentOrchestrationResult) => {
+    if (result.status === 'saved') setSaveMsg(result.message);
+    if (result.status === 'unchanged') setSaveMsg(result.message);
+    if (result.status === 'failed') setSaveMsg(`编排更新失败：${result.error}`);
   };
 
-  const handleModuleSelection = async (types: EntityType[]) => {
-    const nextModules = reconcileModuleSelection(modules, types, (type) => {
-      const def = MODULE_LIBRARY.find((module) => module.type === type);
-      return {
-        id: `module-${type}`,
-        type,
-        label: def?.label || type,
-        expanded: false,
-        overrides: {},
-        hiddenItemIds: [],
-      };
-    });
-    await updateDraftModules(nextModules);
-    await handleSave('编排已更新');
+  const handleModuleSelection = async (types: EntityType[]): Promise<boolean> => {
+    const result = await contentOrchestration.selectModules(types);
+    reportContentResult(result);
+    return result.status !== 'failed';
   };
 
   // ---------- 模块操作 ----------
 
   const handleToggleExpand = (id: string) => {
-    const type = modules.find((module) => module.id === id)?.type;
-    if (!type) return;
-    setExpandedModuleTypes((current) => {
-      const next = new Set(current);
-      if (next.has(type)) next.delete(type);
-      else next.add(type);
-      return next;
-    });
+    contentOrchestration.toggleExpanded(id);
   };
 
   const handleOverrideField = (
@@ -370,52 +355,27 @@ export default function ResumeEditor({
     field: string,
     value: unknown,
   ) => {
-    const inheritedValue = resumeWikiEntities
-      .find((entity) => entity.path === itemPath)
-      ?.fields[field];
-    void updateDraftModules(
-      modules.map((m) =>
-        m.id === moduleId
-          ? {
-              ...m,
-              overrides: updateContentOverride(
-                m.overrides,
-                itemPath,
-                field,
-                value,
-                inheritedValue,
-              ),
-            }
-          : m,
-      ),
-    );
+    void contentOrchestration
+      .overrideField(moduleId, itemPath, field, value)
+      .then(reportContentResult);
   };
 
   const handleRemoveModule = async (id: string) => {
-    // 仅从当前简历的预览/导出编排中移除，并立即保存简历配置；不触碰 Wiki。
-    const nextModules = modules.filter((m) => m.id !== id);
-    await updateDraftModules(nextModules);
-    await handleSave('已删除并保存');
+    reportContentResult(await contentOrchestration.removeModule(id));
   };
 
-  /** 为键盘用户提供确定性的模块排序入口，并限制索引不越界。 */
-  const handleReorderModule = (oldIndex: number, newIndex: number) => {
-    if (newIndex < 0 || newIndex >= modules.length || oldIndex === newIndex) return;
-    void updateDraftModules(arrayMove(modules, oldIndex, newIndex));
+  /** 为键盘用户提供确定性的模块排序入口。 */
+  const handleMoveModule = (moduleId: string, direction: 'up' | 'down') => {
+    void contentOrchestration
+      .moveModule(moduleId, direction)
+      .then(reportContentResult);
   };
 
   /** 切换子项在当前简历中的可见性，不触碰 Wiki 数据。 */
   const handleToggleItemVisibility = (moduleId: string, itemId: string) => {
-    void updateDraftModules(
-      modules.map((module) =>
-        module.id === moduleId
-          ? {
-              ...module,
-              hiddenItemIds: toggleHiddenItem(module.hiddenItemIds, itemId),
-            }
-          : module,
-      ),
-    );
+    void contentOrchestration
+      .toggleItemVisibility(moduleId, itemId)
+      .then(reportContentResult);
   };
 
   // ---------- 导出 ----------
@@ -649,8 +609,8 @@ export default function ResumeEditor({
             <EditPanel
               modules={modules}
               wikiEntities={resumeWikiEntities}
-              onAddModules={handleModuleSelection}
-              onReorder={handleReorderModule}
+              onApplyModules={handleModuleSelection}
+              onMove={handleMoveModule}
               onToggleExpand={handleToggleExpand}
               onOverrideField={handleOverrideField}
               onToggleItemVisibility={handleToggleItemVisibility}

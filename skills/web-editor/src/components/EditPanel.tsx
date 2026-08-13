@@ -26,8 +26,8 @@ import UiIcon from './UiIcon';
 interface EditPanelProps {
   modules: ModuleInstance[];
   wikiEntities: WikiEntity[];
-  onAddModules: (types: EntityType[]) => void;
-  onReorder: (oldIndex: number, newIndex: number) => void;
+  onApplyModules: (types: EntityType[]) => boolean | Promise<boolean>;
+  onMove: (moduleId: string, direction: 'up' | 'down') => void;
   onToggleExpand: (id: string) => void;
   onOverrideField: (moduleId: string, itemPath: string, field: string, value: unknown) => void;
   onToggleItemVisibility: (moduleId: string, itemId: string) => void;
@@ -50,7 +50,7 @@ function ModuleEditCard({
   module,
   wikiData,
   onToggleExpand,
-  onReorder,
+  onMove,
   moduleIndex,
   moduleCount,
   onOverrideField,
@@ -63,7 +63,7 @@ function ModuleEditCard({
   module: ModuleInstance;
   wikiData: WikiEntity[];
   onToggleExpand: (id: string) => void;
-  onReorder: (oldIndex: number, newIndex: number) => void;
+  onMove: (moduleId: string, direction: 'up' | 'down') => void;
   moduleIndex: number;
   moduleCount: number;
   onOverrideField: (moduleId: string, itemPath: string, field: string, value: unknown) => void;
@@ -123,7 +123,7 @@ function ModuleEditCard({
         <div className="module-card-actions" role="group" aria-label={`${module.label}排序和操作`}>
           <button
             type="button"
-            onClick={() => onReorder(moduleIndex, moduleIndex - 1)}
+            onClick={() => onMove(module.id, 'up')}
             disabled={moduleIndex === 0}
             className="icon-button"
             title="上移模块"
@@ -133,7 +133,7 @@ function ModuleEditCard({
           </button>
           <button
             type="button"
-            onClick={() => onReorder(moduleIndex, moduleIndex + 1)}
+            onClick={() => onMove(module.id, 'down')}
             disabled={moduleIndex === moduleCount - 1}
             className="icon-button"
             title="下移模块"
@@ -376,8 +376,8 @@ function FieldEditor({
 export default function EditPanel({
   modules,
   wikiEntities,
-  onAddModules,
-  onReorder,
+  onApplyModules,
+  onMove,
   onToggleExpand,
   onOverrideField,
   onToggleItemVisibility,
@@ -403,7 +403,7 @@ export default function EditPanel({
           </div>
           <ModulePicker
             addedTypes={modules.map((module) => module.type)}
-            onAdd={onAddModules}
+            onApply={onApplyModules}
           />
         </div>
       </div>
@@ -434,7 +434,7 @@ export default function EditPanel({
                 module={m}
                 wikiData={getWikiDataForModule(m.type, wikiEntities)}
                 onToggleExpand={onToggleExpand}
-                onReorder={onReorder}
+                onMove={onMove}
                 moduleIndex={index}
                 moduleCount={modules.length}
                 onOverrideField={onOverrideField}

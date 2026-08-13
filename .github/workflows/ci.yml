@@ -30,7 +30,17 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: skills/resume-generator/package-lock.json
+          cache-dependency-path: |
+            skills/wiki-engine/package-lock.json
+            skills/resume-generator/package-lock.json
+
+      - name: Install wiki engine dependencies
+        working-directory: skills/wiki-engine
+        run: npm ci
+
+      - name: Test wiki engine
+        working-directory: skills/wiki-engine
+        run: npm test
 
       - name: Install resume generator dependencies
         working-directory: skills/resume-generator
@@ -39,9 +49,6 @@ jobs:
       - name: Test resume generator
         working-directory: skills/resume-generator
         run: npm test
-
-      - name: Test wiki engine
-        run: node --test skills/wiki-engine/tests/**/*.test.mjs
 
       - name: Test interview skill
         run: node --test skills/interview/tests/**/*.test.mjs

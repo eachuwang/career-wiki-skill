@@ -119,7 +119,14 @@ tech_stack: Python、FastAPI、Qwen、MySQL、Redis
 
 - person：`name`, `current_title`, `email`, `phone`, `location`, `github`, `website`
 - experience：`company`, `role`, `start`, `end`, `location`, `employment_type`, `salary`
-- project：`name`, `role`, `start`, `end`, `description`, `responsibilities`, `tech_stack`, `challenges`, `solutions`, `outcomes`, `learnings`, `at_company`
+- project：基础字段为 `name`, `role`, `start`, `end`, `description`, `responsibilities`, `tech_stack`, `at_company`；深度知识字段为：
+
+  | 字段 | 含义 | 默认简历展示 |
+  |---|---|---|
+  | challenges | 项目遇到的困难、约束与复杂性 | 否 |
+  | solutions | 针对困难采用的分析、方案与实施过程 | 否 |
+  | outcomes | 可验证的业务或技术结果 | 否 |
+  | learnings | 项目复盘、经验和后续改进 | 否 |
 - skill：`name`, `category`, `level`, `description`
 - education：`school`, `degree`, `major`, `start`, `end`, `gpa`, `courses`
 - certificate：`name`, `issuer`, `date`, `url`

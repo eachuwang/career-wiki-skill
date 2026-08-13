@@ -8,12 +8,12 @@ import { createServer } from 'node:http';
 
 async function createFixture() {
   const root = await mkdtemp(join(tmpdir(), 'career-wiki-polish-endpoint-'));
-  await mkdir(join(root, 'wiki', 'projects'), { recursive: true });
-  await mkdir(join(root, 'templates'), { recursive: true });
+  await mkdir(join(root, 'knowledge', 'projects'), { recursive: true });
+  await mkdir(join(root, '.career-wiki-skill', 'templates'), { recursive: true });
   await writeFile(
-    join(root, 'wiki', 'projects', 'data-agent.md'),
+    join(root, 'knowledge', 'projects', 'data-agent.md'),
     `---
-entity: project
+type: career.project
 name: 数据智能体
 role: 大模型应用工程师
 start: 2024-01
@@ -25,7 +25,7 @@ tech_stack: Node.js、PostgreSQL、LangChain
 `,
   );
   await writeFile(
-    join(root, 'templates', 'tech-minimal.json'),
+    join(root, '.career-wiki-skill', 'templates', 'tech-minimal.json'),
     JSON.stringify({
       id: 'tech-minimal',
       sections: [
@@ -40,9 +40,9 @@ async function createMultiCandidateFixture(count) {
   const root = await createFixture();
   for (let index = 1; index < count; index += 1) {
     await writeFile(
-      join(root, 'wiki', 'projects', `project-${index}.md`),
+      join(root, 'knowledge', 'projects', `project-${index}.md`),
       `---
-entity: project
+type: career.project
 name: 数据项目${index}
 description: 负责数据接入与清洗。
 ---

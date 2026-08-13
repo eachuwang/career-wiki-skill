@@ -20,7 +20,7 @@ async function waitForServer(baseUrl) {
 
 test('简历目录不可写时返回可操作的错误且不暴露本地绝对路径', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'career-wiki-save-permissions-'));
-  const resumesDir = join(root, 'resumes');
+  const resumesDir = join(root, '.career-wiki-skill', 'resumes');
   const resumePath = join(resumesDir, 'readonly-resume.json');
   await mkdir(resumesDir, { recursive: true });
   await writeFile(resumePath, '{}');

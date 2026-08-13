@@ -25,7 +25,7 @@ from pathlib import Path
 NODE_MIN_MAJOR = 18
 PYTHON_MIN_TUPLE = (3, 9)
 
-WIKI_SUBDIRS = [
+KNOWLEDGE_SUBDIRS = [
     "persons",
     "experiences",
     "projects",
@@ -39,13 +39,13 @@ WIKI_SUBDIRS = [
 ]
 
 ALL_DIRS = [
-    "sources/raw",
-    "sources/uploads",
-    "sources/raw/uploads",
-    *[f"wiki/{d}" for d in WIKI_SUBDIRS],
-    "resumes",
-    "templates",
+    *[f"knowledge/{d}" for d in KNOWLEDGE_SUBDIRS],
+    "knowledge/references/raw/uploads",
+    "knowledge/references/uploads",
     ".career-wiki-skill",
+    ".career-wiki-skill/resumes",
+    ".career-wiki-skill/templates",
+    ".career-wiki-skill/backups",
 ]
 
 
@@ -157,12 +157,25 @@ def write_config(root: Path) -> bool:
     if cfg_path.exists():
         return False
     cfg = {
-        "version": "1.0",
+        "version": "2.0",
+        "okf_version": "0.2",
         "root": str(root),
         "created": None,  # Agent 会填实际时间
     }
     cfg_path.parent.mkdir(parents=True, exist_ok=True)
     cfg_path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
+    return True
+
+
+def write_bundle_index(root: Path) -> bool:
+    """创建 OKF v0.2 bundle 根索引。已有索引不覆盖。"""
+    index_path = root / "knowledge" / "index.md"
+    if index_path.exists():
+        return False
+    index_path.write_text(
+        '---\nokf_version: "0.2"\n---\n\n# Career Wiki\n',
+        encoding="utf-8",
+    )
     return True
 
 
@@ -218,12 +231,15 @@ def main() -> int:
         print(f"  📁 数据目录已存在: {root}")
 
     created = ensure_dirs(root)
+    index_written = write_bundle_index(root)
     if created:
         print(f"  ✅ 新建 {len(created)} 个子目录:")
         for c in created:
             print(f"     - {c}")
     else:
         print("  ✅ 所有子目录已存在，无需创建")
+    if index_written:
+        print("  ✅ 创建 knowledge/index.md（OKF v0.2）")
 
     # 3. config.json
     print("\n[3/3] 配置文件")

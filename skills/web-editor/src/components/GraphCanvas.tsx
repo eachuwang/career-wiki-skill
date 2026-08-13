@@ -28,8 +28,7 @@ interface GraphCanvasProps {
 /** 把 wiki 快照转成 vis-network 的 nodes + edges */
 function buildGraph(wiki: WikiSnapshot): { nodes: GraphNode[]; edges: GraphEdge[] } {
   const nodes: GraphNode[] = wiki.entities.map((e) => {
-    const name =
-      String(e.fields.name || e.fields.company || e.fields.title || e.path.split('/').pop() || e.entity);
+    const name = e.title || String(e.path.split('/').pop() || e.entity);
     return {
       id: e.path,
       label: name,
@@ -259,17 +258,17 @@ function NodeDetail({ entity }: { entity: WikiEntity }) {
       )}
 
       <div>
-        <div className="text-xs font-semibold text-ink-700 mb-1">置信度</div>
+        <div className="text-xs font-semibold text-ink-700 mb-1">信任等级</div>
         <span
           className={`text-xs px-2 py-0.5 rounded ${
-            entity.confidence === 'verified'
+            entity.trustTier === 'human-reviewed'
               ? 'bg-green-100 text-green-700'
-              : entity.confidence === 'extracted'
+              : entity.trustTier === 'machine-confirmed'
                 ? 'bg-yellow-100 text-yellow-700'
                 : 'bg-orange-100 text-orange-700'
           }`}
         >
-          {entity.confidence}
+          {entity.trustTier}
         </span>
       </div>
 

@@ -33,7 +33,8 @@ async function renderPreview(overrides: Record<string, unknown> = {}): Promise<s
           {
             path: 'person/profile.md',
             entity: 'person',
-            confidence: 'verified',
+            title: '',
+    trustTier: 'unverified',
             sources: [],
             relations: [],
             links: [],
@@ -104,7 +105,8 @@ test('内容编排中编辑项目字段后，预览立即显示该条目的覆�
       {
         path: 'projects/data-agent.md',
         entity: 'project',
-        confidence: 'verified',
+        title: '',
+    trustTier: 'unverified',
         sources: [],
         relations: [],
         links: [],
@@ -116,7 +118,8 @@ test('内容编排中编辑项目字段后，预览立即显示该条目的覆�
       {
         path: 'projects/other.md',
         entity: 'project',
-        confidence: 'verified',
+        title: '',
+    trustTier: 'unverified',
         sources: [],
         relations: [],
         links: [],
@@ -150,7 +153,8 @@ async function previewShowsProjectResponsibilities(): Promise<void> {
       {
         path: 'projects/data-agent.md',
         entity: 'project',
-        confidence: 'extracted',
+        title: '',
+    trustTier: 'unverified',
         sources: [],
         relations: [],
         links: [],

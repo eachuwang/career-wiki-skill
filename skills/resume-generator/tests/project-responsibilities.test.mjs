@@ -17,32 +17,29 @@ test('润色指纹覆盖所有原始字段，避免上下文事实变化后复�
   );
 });
 
-/** 构造正文存岗位职责、frontmatter 存技术栈的兼容 Wiki 数据。 */
+/** 构造严格 OKF Career concept 测试数据。 */
 async function createFixture() {
   const root = await mkdtemp(join(tmpdir(), 'career-wiki-responsibilities-'));
-  await mkdir(join(root, 'wiki', 'projects'), { recursive: true });
-  await mkdir(join(root, 'templates'), { recursive: true });
+  await mkdir(join(root, 'knowledge', 'projects'), { recursive: true });
+  await mkdir(join(root, '.career-wiki-skill', 'templates'), { recursive: true });
   await writeFile(
-    join(root, 'wiki', 'projects', 'data-agent.md'),
+    join(root, 'knowledge', 'projects', 'data-agent.md'),
     `---
-entity: project
+type: career.project
 name: 数据智能体
 role: 大模型应用工程师
 start: 2024-01
 end: present
 description: 自动生成数据接入脚本。
+responsibilities: 解析数据字典；生成 DDL 与 ETL 脚本；推荐数仓模型。
 tech_stack: Node.js、PostgreSQL、LangChain
 ---
 
 项目背景说明。
-
-**岗位职责：**
-
-解析数据字典；生成 DDL 与 ETL 脚本；推荐数仓模型。
 `,
   );
   await writeFile(
-    join(root, 'templates', 'tech-minimal.json'),
+    join(root, '.career-wiki-skill', 'templates', 'tech-minimal.json'),
     JSON.stringify({
       id: 'tech-minimal',
       sections: [
@@ -205,14 +202,15 @@ test('仅应用与当前 Wiki 原文匹配的润色结果，原文变化后自�
   assert.equal(applied.sections[0].items[0]._polish.status, 'applied');
 
   await writeFile(
-    join(root, 'wiki', 'projects', 'data-agent.md'),
+    join(root, 'knowledge', 'projects', 'data-agent.md'),
     `---
-entity: project
+type: career.project
 name: 数据智能体
 role: 大模型应用工程师
 start: 2024-01
 end: present
 description: 自动生成数据接入脚本，并支持字段校验。
+responsibilities: 解析数据字典；生成 DDL 与 ETL 脚本；推荐数仓模型。
 tech_stack: Node.js、PostgreSQL、LangChain
 ---
 `,

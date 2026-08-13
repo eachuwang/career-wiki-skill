@@ -8,16 +8,16 @@ import test from 'node:test';
 /** 创建带有已删除项目清单的 API fixture，模拟 Wiki 文件尚未清理的过渡状态。 */
 async function createFixture() {
   const root = await mkdtemp(join(tmpdir(), 'career-wiki-api-deletion-'));
-  await mkdir(join(root, 'wiki', 'projects'), { recursive: true });
+  await mkdir(join(root, 'knowledge', 'projects'), { recursive: true });
   await mkdir(join(root, '.career-wiki-skill'), { recursive: true });
-  await mkdir(join(root, 'templates'), { recursive: true });
+  await mkdir(join(root, '.career-wiki-skill', 'templates'), { recursive: true });
   await writeFile(
-    join(root, 'wiki', 'projects', 'deleted-project.md'),
-    '---\nentity: project\nname: 待删除项目\nrole: 负责人\n---\n',
+    join(root, 'knowledge', 'projects', 'deleted-project.md'),
+    '---\ntype: career.project\nname: 待删除项目\nrole: 负责人\n---\n',
   );
   await writeFile(
-    join(root, 'wiki', 'projects', 'kept-project.md'),
-    '---\nentity: project\nname: 保留项目\nrole: 开发者\n---\n',
+    join(root, 'knowledge', 'projects', 'kept-project.md'),
+    '---\ntype: career.project\nname: 保留项目\nrole: 开发者\n---\n',
   );
   await writeFile(
     join(root, '.career-wiki-skill', 'deletions.json'),
@@ -29,7 +29,7 @@ async function createFixture() {
     }),
   );
   await writeFile(
-    join(root, 'templates', 'tech-minimal.json'),
+    join(root, '.career-wiki-skill', 'templates', 'tech-minimal.json'),
     JSON.stringify({
       id: 'tech-minimal',
       sections: [{ module: 'project', title: '项目经验', fields: ['name', 'role'] }],

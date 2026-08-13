@@ -43,6 +43,17 @@ import {
   POLISH_FIELDS,
 } from './resume_polish.mjs';
 import { generatePolishEntries, listProviderModels } from './resume_polish_provider.mjs';
+import {
+  extractConceptLinks,
+  parseCareerEntity,
+  sourceResources,
+  validateConceptDocument,
+} from '../../wiki-engine/scripts/okf.mjs';
+import {
+  bundleDirectory,
+  resumesDirectory,
+  templatesDirectory,
+} from '../../wiki-engine/scripts/layout.mjs';
 
 // ── 常量 ──────────────────────────────────────────────
 
@@ -62,9 +73,6 @@ const ENTITY_DIRS = {
   activity: 'activities',
   summary: 'summaries',
 };
-
-// wikilink 正则：[[path|name]] 或 [[path]]
-const WIKILINK_RE = /\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]/g;
 
 // ── 路径解析 ──────────────────────────────────────────
 
@@ -108,7 +116,7 @@ async function collectMarkdown(dir) {
     }
     if (s.isDirectory()) {
       results.push(...(await collectMarkdown(full)));
-    } else if (s.isFile() && extname(entry) === '.md') {
+    } else if (s.isFile() && extname(entry) === '.md' && entry !== 'index.md' && entry !== 'log.md') {
       results.push(full);
     }
   }
@@ -142,69 +150,44 @@ async function collectJson(dir) {
   return results;
 }
 
-/** 从正文中提取 wikilink，返回 {target, name}[] */
-function extractWikilinks(content) {
-  const links = [];
-  const re = new RegExp(WIKILINK_RE.source, 'g');
-  let m;
-  while ((m = re.exec(content)) !== null) {
-    const target = m[1].trim();
-    const name = (m[2] || '').trim() || target;
-    links.push({ target, name });
-  }
-  return links;
-}
-
-/** 从旧版项目正文中提取岗位职责，兼容尚未结构化该字段的 Wiki。 */
-function extractResponsibilities(content) {
-  const heading = /\*\*岗位职责[:：]?\*\*/.exec(content);
-  if (!heading) return '';
-
-  const remainder = content.slice(heading.index + heading[0].length);
-  const nextHeadingIndex = remainder.search(/\n\s*\*\*[^*\n]+[:：]?\*\*/);
-  const section = nextHeadingIndex >= 0
-    ? remainder.slice(0, nextHeadingIndex)
-    : remainder;
-  return section.replace(/\s*\n+\s*/g, ' ').trim();
-}
-
-/** 解析单个 wiki markdown 文件 → 实体对象 */
+/** 解析单个 OKF Career concept → 前端实体对象。 */
 async function parseWikiFile(filePath, wikiRoot) {
   const raw = await readFile(filePath, 'utf-8');
+  const errors = validateConceptDocument(raw);
+  if (errors.length > 0) throw new Error(`${filePath}: ${errors.join('; ')}`);
   const parsed = matter(raw);
   const fm = parsed.data || {};
   const content = parsed.content || '';
 
-  // 相对路径（相对于 wiki/）
+  // 相对路径（相对于 OKF bundle 根）
   const relPath = filePath.slice(wikiRoot.length + 1).replace(/\\/g, '/');
 
-  // 提取 wikilink
-  const links = extractWikilinks(content);
-
-  // 处理 relations
-  const relations = Array.isArray(fm.relations)
-    ? fm.relations.map((r) => ({
-        type: r.type,
-        target: String(r.target || '').replace(/\.md$/i, ''),
-      }))
-    : [];
+  const entity = parseCareerEntity(fm);
+  if (!entity) throw new Error(`${filePath}: type 必须是受支持的 career.* concept`);
+  const links = extractConceptLinks(content, relPath);
+  const relations = links.map((link) => ({ type: link.type, target: link.target }));
 
   // fields = frontmatter 除 meta 键以外的字段
-  const META_KEYS = ['entity', 'confidence', 'sources', 'relations'];
+  const META_KEYS = [
+    'type', 'title', 'resource', 'tags', 'sources', 'usage_window',
+    'generated', 'verified', 'status', 'stale_after',
+  ];
   const fields = {};
   for (const [k, v] of Object.entries(fm)) {
     if (!META_KEYS.includes(k)) fields[k] = v;
   }
-  if (fm.entity === 'project' && !fields.responsibilities) {
-    const responsibilities = extractResponsibilities(content);
-    if (responsibilities) fields.responsibilities = responsibilities;
-  }
+  if (fm.description !== undefined) fields.description = fm.description;
 
   return {
     path: relPath,
-    entity: fm.entity || null,
-    confidence: fm.confidence || null,
-    sources: Array.isArray(fm.sources) ? fm.sources : fm.sources ? [fm.sources] : [],
+    entity,
+    title: fm.title,
+    trustTier: Array.isArray(fm.verified)
+      ? fm.verified.some((event) => String(event?.by || '').startsWith('human:')) ? 'human-reviewed' : 'machine-confirmed'
+      : fm.verified
+        ? String(fm.verified.by || '').startsWith('human:') ? 'human-reviewed' : 'machine-confirmed'
+        : 'unverified',
+    sources: sourceResources(fm),
     fields,
     relations,
     links,
@@ -215,7 +198,7 @@ async function parseWikiFile(filePath, wikiRoot) {
 /** 读取请求中的简历配置；统一 generate/export/polish 三类接口的配置入口。 */
 async function resolveResumeConfig(wikiRoot, body) {
   if (body.resume_id) {
-    const configPath = join(wikiRoot, 'resumes', `${body.resume_id}.json`);
+    const configPath = join(resumesDirectory(wikiRoot), `${body.resume_id}.json`);
     try {
       const raw = await readFile(configPath, 'utf-8');
       return JSON.parse(raw);
@@ -236,17 +219,13 @@ async function resolveResumeConfig(wikiRoot, body) {
 async function collectWikiEntities(wikiRoot, module) {
   const dirName = ENTITY_DIRS[module];
   if (!dirName) return [];
-  const wikiPath = join(wikiRoot, 'wiki');
+  const wikiPath = bundleDirectory(wikiRoot);
   const deletions = await readDeletionManifest(wikiRoot);
   const files = await collectMarkdown(join(wikiPath, dirName));
   const entities = [];
   for (const file of files) {
-    try {
-      const entity = await parseWikiFile(file, wikiPath);
-      if (!isEntityDeleted(entity, deletions)) entities.push(entity);
-    } catch {
-      // 单个损坏页面不应阻断 Agent 的润色准备流程。
-    }
+    const entity = await parseWikiFile(file, wikiPath);
+    if (!isEntityDeleted(entity, deletions)) entities.push(entity);
   }
   return entities;
 }
@@ -473,10 +452,11 @@ function getSegments(url) {
 
 /** GET /api/health */
 async function handleHealth(wikiRoot, res) {
-  const wikiPath = join(wikiRoot, 'wiki');
-  const resumesPath = join(wikiRoot, 'resumes');
-  const templatesPath = join(wikiRoot, 'templates');
+  const wikiPath = bundleDirectory(wikiRoot);
+  const resumesPath = resumesDirectory(wikiRoot);
+  const templatesPath = templatesDirectory(wikiRoot);
   const deletions = await readDeletionManifest(wikiRoot);
+  const okfErrors = [];
 
   // 统计各实体目录文件数
   const entityCounts = {};
@@ -491,8 +471,8 @@ async function handleHealth(wikiRoot, res) {
         try {
           const entity = await parseWikiFile(filePath, wikiPath);
           if (!isEntityDeleted(entity, deletions)) entityCounts[dir] += 1;
-        } catch {
-          // 保持健康检查的兼容性，解析失败的文件仍不计入可用实体。
+        } catch (error) {
+          okfErrors.push(error.message);
         }
       }
     } catch {
@@ -523,23 +503,25 @@ async function handleHealth(wikiRoot, res) {
     entity_counts: entityCounts,
     resumes_count: resumesCount,
     templates_count: templatesCount,
+    okf_valid: okfErrors.length === 0,
+    okf_errors: okfErrors,
   });
 }
 
 /** GET /api/wiki — 所有 wiki 实体 */
 async function handleGetWiki(wikiRoot, res, query) {
-  const wikiPath = join(wikiRoot, 'wiki');
-  const files = await collectMarkdown(wikiPath);
+  const wikiPath = bundleDirectory(wikiRoot);
+  const files = (
+    await Promise.all(
+      Object.values(ENTITY_DIRS).map((directory) => collectMarkdown(join(wikiPath, directory))),
+    )
+  ).flat();
   const deletions = await readDeletionManifest(wikiRoot);
 
   let entities = [];
   for (const f of files) {
-    try {
-      const ent = await parseWikiFile(f, wikiPath);
-      if (!isEntityDeleted(ent, deletions)) entities.push(ent);
-    } catch {
-      // 跳过解析失败的文件
-    }
+    const ent = await parseWikiFile(f, wikiPath);
+    if (!isEntityDeleted(ent, deletions)) entities.push(ent);
   }
 
   // 按 entity 过滤
@@ -548,13 +530,13 @@ async function handleGetWiki(wikiRoot, res, query) {
   }
 
   // 扁平化所有关系，供图谱和缺口分析使用。
-  // 归一化到 entity.path 的形式（相对 wiki/，带 .md 后缀），
+  // 归一化到 entity.path 的形式（相对 OKF bundle 根，带 .md 后缀），
   // 并过滤掉指向不存在实体的关系，避免图谱边指向空节点。
   const entityPaths = new Set(entities.map((e) => e.path));
   const allRelations = [];
   for (const e of entities) {
     for (const r of e.relations) {
-      const to = `${String(r.target).replace(/^wiki\//, '')}.md`;
+      const to = String(r.target).replace(/\.md$/i, '') + '.md';
       if (entityPaths.has(to)) {
         allRelations.push({ from: e.path, to, type: r.type });
       }
@@ -567,7 +549,7 @@ async function handleGetWiki(wikiRoot, res, query) {
 /** GET /api/wiki/:entity/:id — 单个实体详情 */
 async function handleGetWikiEntity(wikiRoot, res, entityDir, id) {
   // entityDir 是复数目录名（persons/experiences/...），直接用
-  const filePath = join(wikiRoot, 'wiki', entityDir, `${id}.md`);
+  const filePath = join(bundleDirectory(wikiRoot), entityDir, `${id}.md`);
 
   try {
     await stat(filePath);
@@ -576,7 +558,7 @@ async function handleGetWikiEntity(wikiRoot, res, entityDir, id) {
   }
 
   try {
-    const ent = await parseWikiFile(filePath, join(wikiRoot, 'wiki'));
+    const ent = await parseWikiFile(filePath, bundleDirectory(wikiRoot));
     const deletions = await readDeletionManifest(wikiRoot);
     if (isEntityDeleted(ent, deletions)) {
       return sendJson(res, 404, { error: '实体已删除', path: `${entityDir}/${id}.md` });
@@ -589,7 +571,7 @@ async function handleGetWikiEntity(wikiRoot, res, entityDir, id) {
 
 /** GET /api/resumes — 所有简历配置（完整配置，前端编辑器需要 modules/privacy/emphasize 等字段） */
 async function handleGetResumes(wikiRoot, res) {
-  const resumesPath = join(wikiRoot, 'resumes');
+  const resumesPath = resumesDirectory(wikiRoot);
   const files = await collectJson(resumesPath);
 
   const resumes = [];
@@ -605,7 +587,7 @@ async function handleGetResumes(wikiRoot, res) {
 
 /** GET /api/templates — 所有模板（完整配置，前端预览渲染需要 sections 定义） */
 async function handleGetTemplates(wikiRoot, res) {
-  const templatesPath = join(wikiRoot, 'templates');
+  const templatesPath = templatesDirectory(wikiRoot);
   const files = await collectJson(templatesPath);
 
   const templates = [];
@@ -629,7 +611,7 @@ async function handleGetTemplates(wikiRoot, res) {
  * @returns {object} 结构化简历 JSON
  */
 async function assembleResume(config, template, wikiRoot) {
-  const wikiPath = join(wikiRoot, 'wiki');
+  const wikiPath = bundleDirectory(wikiRoot);
   const deletions = await readDeletionManifest(wikiRoot);
   const sections = [];
 
@@ -655,36 +637,34 @@ async function assembleResume(config, template, wikiRoot) {
     // 解析所有该类实体
     let items = [];
     for (const f of mdFiles) {
-      try {
-        const ent = await parseWikiFile(f, wikiPath);
-        if (isEntityDeleted(ent, deletions)) continue;
-        // 按 fields 配置抽取字段
-        const sectionFields = [...(section.fields || [])];
-        if (module === 'project') {
-          for (const field of ['responsibilities', 'tech_stack']) {
-            if (!sectionFields.includes(field)) sectionFields.push(field);
-          }
+      const ent = await parseWikiFile(f, wikiPath);
+      if (isEntityDeleted(ent, deletions)) continue;
+      // 按 fields 配置抽取字段
+      const sectionFields = [...(section.fields || [])];
+      if (module === 'project') {
+        for (const field of ['responsibilities', 'tech_stack']) {
+          if (!sectionFields.includes(field)) sectionFields.push(field);
         }
-        const polishEnabled = module === 'project' || module === 'experience';
-        const polished = polishEnabled
-          ? applyPolish(ent.fields, ent.path, config)
-          : { fields: ent.fields, status: null };
-        const contentOverride = config.content_overrides?.[ent.path];
-        const displayFields = contentOverride && typeof contentOverride === 'object'
-          ? { ...polished.fields, ...contentOverride }
-          : polished.fields;
-        const item = {};
-        for (const field of sectionFields) {
-          if (displayFields[field] !== undefined) {
-            item[field] = displayFields[field];
-          }
+      }
+      const polishEnabled = module === 'project' || module === 'experience';
+      const polished = polishEnabled
+        ? applyPolish(ent.fields, ent.path, config)
+        : { fields: ent.fields, status: null };
+      const contentOverride = config.content_overrides?.[ent.path];
+      const displayFields = contentOverride && typeof contentOverride === 'object'
+        ? { ...polished.fields, ...contentOverride }
+        : polished.fields;
+      const item = {};
+      for (const field of sectionFields) {
+        if (displayFields[field] !== undefined) {
+          item[field] = displayFields[field];
         }
-        // 保留 wikilink 供前端展示关系
-        item._links = ent.links;
-        item._path = ent.path;
-        if (polished.status) item._polish = polished.status;
-        items.push(item);
-      } catch {}
+      }
+      // 保留标准 Markdown concept links 供前端展示关系。
+      item._links = ent.links;
+      item._path = ent.path;
+      if (polished.status) item._polish = polished.status;
+      items.push(item);
     }
 
     // 排序
@@ -789,39 +769,37 @@ async function assembleResume(config, template, wikiRoot) {
   const personDir = join(wikiPath, 'persons');
   const personFiles = await collectMarkdown(personDir);
   if (personFiles.length > 0) {
-    try {
-      const ent = await parseWikiFile(personFiles[0], wikiPath);
-      if (!isEntityDeleted(ent, deletions)) {
-        personData = {
-          ...ent.fields,
-          ...(config.content_overrides?.[ent.path] || {}),
-        };
-        personData._links = ent.links;
-        personData._path = ent.path;
+    const ent = await parseWikiFile(personFiles[0], wikiPath);
+    if (!isEntityDeleted(ent, deletions)) {
+      personData = {
+        ...ent.fields,
+        ...(config.content_overrides?.[ent.path] || {}),
+      };
+      personData._links = ent.links;
+      personData._path = ent.path;
 
-        // person 也应用脱敏
-        const privacy = config.privacy || {};
-        if (privacy.mask_name && personData.name) {
-          personData.name = maskValue(personData.name, 'name');
-        }
-        if (privacy.mask_phone && personData.phone) {
-          personData.phone = maskValue(personData.phone, 'phone');
-        }
-        if (privacy.mask_email && personData.email) {
-          personData.email = maskValue(personData.email, 'email');
-        }
+      // person 也应用脱敏
+      const privacy = config.privacy || {};
+      if (privacy.mask_name && personData.name) {
+        personData.name = maskValue(personData.name, 'name');
+      }
+      if (privacy.mask_phone && personData.phone) {
+        personData.phone = maskValue(personData.phone, 'phone');
+      }
+      if (privacy.mask_email && personData.email) {
+        personData.email = maskValue(personData.email, 'email');
+      }
 
-        // person 隐藏字段
-        if (Array.isArray(config.hide)) {
-          const hideEntry = config.hide.find((h) => h.module === 'person');
-          if (hideEntry && Array.isArray(hideEntry.fields)) {
-            for (const f of hideEntry.fields) {
-              delete personData[f];
-            }
+      // person 隐藏字段
+      if (Array.isArray(config.hide)) {
+        const hideEntry = config.hide.find((h) => h.module === 'person');
+        if (hideEntry && Array.isArray(hideEntry.fields)) {
+          for (const f of hideEntry.fields) {
+            delete personData[f];
           }
         }
       }
-    } catch {}
+    }
   }
 
   // 统计实体数
@@ -890,7 +868,7 @@ async function handleGenerate(wikiRoot, res, body) {
 
   // 读简历配置
   if (body.resume_id) {
-    const configPath = join(wikiRoot, 'resumes', `${body.resume_id}.json`);
+    const configPath = join(resumesDirectory(wikiRoot), `${body.resume_id}.json`);
     try {
       const raw = await readFile(configPath, 'utf-8');
       config = JSON.parse(raw);
@@ -908,7 +886,7 @@ async function handleGenerate(wikiRoot, res, body) {
   if (!templateId) {
     return sendJson(res, 400, { error: '简历配置缺少 template 字段' });
   }
-  const templatePath = join(wikiRoot, 'templates', `${templateId}.json`);
+  const templatePath = join(templatesDirectory(wikiRoot), `${templateId}.json`);
   let template;
   try {
     const raw = await readFile(templatePath, 'utf-8');
@@ -933,7 +911,7 @@ async function handleExport(wikiRoot, res, body) {
   // 先生成简历 JSON（复用 generate 逻辑）
   let config;
   if (body.resume_id) {
-    const configPath = join(wikiRoot, 'resumes', `${body.resume_id}.json`);
+    const configPath = join(resumesDirectory(wikiRoot), `${body.resume_id}.json`);
     try {
       const raw = await readFile(configPath, 'utf-8');
       config = JSON.parse(raw);
@@ -950,7 +928,7 @@ async function handleExport(wikiRoot, res, body) {
   if (!templateId) {
     return sendJson(res, 400, { error: '简历配置缺少 template 字段' });
   }
-  const templatePath = join(wikiRoot, 'templates', `${templateId}.json`);
+  const templatePath = join(templatesDirectory(wikiRoot), `${templateId}.json`);
   let template;
   try {
     const raw = await readFile(templatePath, 'utf-8');
@@ -989,7 +967,7 @@ async function handleSave(wikiRoot, res, body) {
     return sendJson(res, 400, { error: '缺少 id 或 name' });
   }
 
-  const resumesDir = join(wikiRoot, 'resumes');
+  const resumesDir = resumesDirectory(wikiRoot);
   const filePath = join(resumesDir, `${config.id}.json`);
 
   // 确保 resumes/ 目录存在
@@ -1025,7 +1003,7 @@ async function handleDeleteResume(wikiRoot, res, body) {
   if (!/^[a-z0-9-]+$/i.test(id)) {
     return sendJson(res, 400, { error: '非法简历 id' });
   }
-  const filePath = join(wikiRoot, 'resumes', `${id}.json`);
+  const filePath = join(resumesDirectory(wikiRoot), `${id}.json`);
   try {
     await unlink(filePath);
   } catch (e) {
@@ -1052,7 +1030,7 @@ async function handleSaveTemplate(wikiRoot, res, body) {
     return sendJson(res, 400, { error: '非法模板 id，仅允许字母数字与连字符' });
   }
 
-  const templatesDir = join(wikiRoot, 'templates');
+  const templatesDir = templatesDirectory(wikiRoot);
   await mkdir(templatesDir, { recursive: true });
 
   // 补全 style 字段：未指定时按模板 id 生成
@@ -1086,7 +1064,7 @@ async function handleDeleteTemplate(wikiRoot, res, body) {
   if (!isSafeId(id)) {
     return sendJson(res, 400, { error: '非法模板 id' });
   }
-  const templatesDir = join(wikiRoot, 'templates');
+  const templatesDir = templatesDirectory(wikiRoot);
   const jsonPath = join(templatesDir, `${id}.json`);
   const cssPath = join(templatesDir, `${id}.css`);
   try {
@@ -1110,7 +1088,7 @@ async function handleGetTemplateCss(wikiRoot, res, query) {
   if (!isSafeId(id)) {
     return sendJson(res, 400, { error: '非法模板 id' });
   }
-  const cssPath = join(wikiRoot, 'templates', `${id}.css`);
+  const cssPath = join(templatesDirectory(wikiRoot), `${id}.css`);
   try {
     const css = await readFile(cssPath, 'utf-8');
     res.writeHead(200, { 'Content-Type': 'text/css; charset=utf-8' });

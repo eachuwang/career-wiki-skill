@@ -529,7 +529,7 @@ function ResumeHeader({
     <header className="person-info resume-header">
       <h1>{maskValue('name', f.name, privacy)}</h1>
       <div className="resume-headline">
-        {maskValue('title', f.title, privacy)}
+        {maskValue('current_title', f.current_title, privacy)}
       </div>
       <div className="resume-contact">
         {contacts.map((contact) => (

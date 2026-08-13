@@ -18,8 +18,8 @@ function entity(path, name = '目标项目') {
 test('删除清单按实体类型和精确路径幂等登记', async () => {
   const root = await mkdtemp(join(tmpdir(), 'career-wiki-deletion-'));
   try {
-    await mkdir(join(root, 'wiki', 'projects'), { recursive: true });
-    await writeFile(join(root, 'wiki', 'projects', '目标项目.md'), '旧 Wiki 页面');
+    await mkdir(join(root, 'knowledge', 'projects'), { recursive: true });
+    await writeFile(join(root, 'knowledge', 'projects', '目标项目.md'), '旧 Wiki 页面');
     await addDeletion(root, {
       entity: 'project',
       path: 'wiki/projects/目标项目.md',
@@ -33,7 +33,7 @@ test('删除清单按实体类型和精确路径幂等登记', async () => {
 
     const deletions = await readDeletionManifest(root);
     assert.equal(deletions.length, 1);
-    await assert.rejects(readFile(join(root, 'wiki', 'projects', '目标项目.md')));
+    await assert.rejects(readFile(join(root, 'knowledge', 'projects', '目标项目.md')));
     assert.equal(isEntityDeleted(entity('projects/目标项目.md'), deletions), true);
     assert.equal(isEntityDeleted(entity('projects/目标项目-副本.md', '其他项目'), deletions), false);
     assert.equal(isEntityDeleted(entity('projects/另一个项目.md', '目标项目'), deletions), false);

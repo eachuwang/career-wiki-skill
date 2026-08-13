@@ -10,7 +10,8 @@ const projects: WikiEntity[] = [
   {
     path: 'projects/search-platform.md',
     entity: 'project',
-    confidence: 'verified',
+    title: '',
+    trustTier: 'unverified',
     sources: [],
     relations: [],
     links: [],
@@ -19,7 +20,8 @@ const projects: WikiEntity[] = [
   {
     path: 'projects/legacy-console.md',
     entity: 'project',
-    confidence: 'verified',
+    title: '',
+    trustTier: 'unverified',
     sources: [],
     relations: [],
     links: [],

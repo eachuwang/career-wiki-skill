@@ -14,7 +14,7 @@
     {
       "module": "person",
       "title": "个人信息",
-      "fields": ["name", "title", "email", "phone", "github", "website"]
+      "fields": ["name", "current_title", "email", "phone", "github", "website"]
     },
     {
       "module": "experience",

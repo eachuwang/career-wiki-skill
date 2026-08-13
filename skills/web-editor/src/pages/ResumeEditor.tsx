@@ -6,7 +6,7 @@
  * 顶栏：简历名称 | 模板选择 | 脱敏设置 | 导出PDF | 导出HTML | 导出JSON | 保存
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef, useSyncExternalStore } from 'react';
 import {
   DndContext,
   type DragEndEvent,
@@ -47,11 +47,12 @@ import { MODULE_LIBRARY } from '../types';
 import * as api from '../api/client';
 import {
   createResumeConfig,
-  getHiddenItemIds,
-  getModuleContentOverrides,
+  getModuleDraftPatch,
+  projectResumeModules,
   reconcileModuleSelection,
   updateContentOverride,
 } from '../resume/config';
+import { createResumeEditingSession } from '../resume/editingSession';
 import { toggleHiddenItem } from '../resume/visibility';
 import { applyPolishToEntities, getSelectedPolishFields, DEFAULT_POLISH_FIELDS } from '../resume/polish';
 import {
@@ -61,7 +62,6 @@ import {
   saveExportBlob,
 } from '../resume/export';
 
-let moduleIdCounter = 0;
 const POLISH_PROVIDER_STORAGE_KEY = 'career-wiki.resume-polish-provider';
 const DEFAULT_POLISH_PROVIDER: ResumePolishProviderConfig = {
   protocol: 'openai',
@@ -69,6 +69,14 @@ const DEFAULT_POLISH_PROVIDER: ResumePolishProviderConfig = {
   api_key: '',
   model: '',
   timeout_ms: 60000,
+};
+const DEFAULT_PRIVACY: PrivacyConfig = {
+  mask_name: false,
+  mask_phone: true,
+  mask_email: true,
+  mask_salary: true,
+  mask_company: false,
+  mask_github: false,
 };
 
 function loadPolishProvider(): ResumePolishProviderConfig {
@@ -92,11 +100,6 @@ function loadPolishProvider(): ResumePolishProviderConfig {
   }
 }
 
-function genId(): string {
-  moduleIdCounter++;
-  return `module-${moduleIdCounter}`;
-}
-
 interface ResumeEditorProps {
   wikiEntities: WikiEntity[];
   templates: TemplateConfig[];
@@ -110,25 +113,27 @@ export default function ResumeEditor({
   resumes,
   onRefreshWiki,
 }: ResumeEditorProps) {
-  // 当前简历配置（resumeList 为本地管理的简历列表，支持新建/复制/删除后即时刷新）
-  const [currentResumeId, setCurrentResumeId] = useState<string>('');
-  const [resumeList, setResumeList] = useState<ResumeConfig[]>(resumes);
+  const [editingSession] = useState(() =>
+    createResumeEditingSession({ resumes, saveResume: api.saveResume }),
+  );
+  const session = useSyncExternalStore(
+    editingSession.subscribe,
+    editingSession.getSnapshot,
+    editingSession.getSnapshot,
+  );
   const [templateList, setTemplateList] = useState<TemplateConfig[]>(templates);
-  const [resumeName, setResumeName] = useState('新建简历');
-  const [templateId, setTemplateId] = useState<string>('');
-  const [privacy, setPrivacy] = useState<PrivacyConfig>({
-    mask_name: false,
-    mask_phone: true,
-    mask_email: true,
-    mask_salary: true,
-    mask_company: false,
-    mask_github: false,
-  });
-  const [modules, setModules] = useState<ModuleInstance[]>([]);
-  const [saving, setSaving] = useState(false);
+  const [expandedModuleTypes, setExpandedModuleTypes] = useState<Set<EntityType>>(new Set());
+  const draft = session.draft;
+  const currentResumeId = session.currentResumeId;
+  const resumeList = session.resumes;
+  const resumeName = draft?.name || '新建简历';
+  const templateId = draft?.template || templates[0]?.id || '';
+  const privacy = draft?.privacy || DEFAULT_PRIVACY;
+  const polish = draft?.polish;
+  const modules = projectResumeModules(draft, wikiEntities, expandedModuleTypes);
+  const saving = session.saveStatus === 'saving';
   const [saveMsg, setSaveMsg] = useState('');
   const [workspaceView, setWorkspaceView] = useState<'edit' | 'preview'>('edit');
-  const [polish, setPolish] = useState<ResumePolishConfig | undefined>();
   const [polishGenerating, setPolishGenerating] = useState(false);
   const [polishGeneratingKey, setPolishGeneratingKey] = useState<string | null>(null);
   const [polishProvider, setPolishProvider] = useState<ResumePolishProviderConfig>(loadPolishProvider);
@@ -161,86 +166,38 @@ export default function ResumeEditor({
   }, [polishProviderError]);
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
 
-  // 加载简历配置
-  const loadResume = useCallback(
-    (config: ResumeConfig) => {
-      setResumeName(config.name);
-      setTemplateId(config.template);
-      setPrivacy(
-        config.privacy || {
-          mask_name: false,
-          mask_phone: true,
-          mask_email: true,
-          mask_salary: true,
-          mask_company: false,
-          mask_github: false,
-        },
-      );
-      setModules(
-        (config.modules || []).map((type) => {
-          const def = MODULE_LIBRARY.find((m) => m.type === type);
-          return {
-            id: genId(),
-            type,
-            label: def?.label || type,
-            expanded: false,
-            overrides: getModuleContentOverrides(
-              config.content_overrides,
-              type,
-              wikiEntities,
-            ),
-            hiddenItemIds: getHiddenItemIds(config.hide, type),
-          };
-        }),
-      );
-      setPolish(config.polish);
-    },
-    [wikiEntities],
-  );
-
-  // App 刷新数据时同步本地简历/模板列表
+  // App 刷新数据时只同步服务端集合；当前草稿仍由编辑会话保护。
   useEffect(() => {
-    setResumeList(resumes);
-  }, [resumes]);
+    void editingSession.dispatch({ type: 'replace-resumes', resumes });
+  }, [editingSession, resumes]);
   useEffect(() => {
     setTemplateList(templates);
   }, [templates]);
-
-  // 加载第一份简历
-  useEffect(() => {
-    if (resumeList.length > 0 && !currentResumeId) {
-      setCurrentResumeId(resumeList[0].id);
-      loadResume(resumeList[0]);
-      // 简历配置里已带模板，直接返回；
-      // 否则下面的默认模板逻辑会在同一次 effect 里用闭包中的旧值
-      // 把 loadResume 设置的 templateId 覆盖掉
-      return;
-    }
-    // 默认模板（仅在没有简历配置时兜底）
-    if (templates.length > 0 && !templateId) {
-      setTemplateId(templates[0].id);
-    }
-  }, [resumeList, templates, currentResumeId, templateId, loadResume]);
 
   // ---------- 多简历管理（原 multi-resume 能力） ----------
 
   /** 重新拉取简历列表并同步本地状态，返回最新列表 */
   const refreshResumeList = async (): Promise<ResumeConfig[]> => {
     const fresh = await api.getResumes();
-    setResumeList(fresh);
     return fresh;
   };
 
   /** 切换简历：按 id 加载对应配置 */
-  const handleSelectResume = (id: string) => {
-    const config = resumeList.find((r) => r.id === id);
-    if (!config || id === currentResumeId) return;
-    setCurrentResumeId(id);
-    loadResume(config);
+  const handleSelectResume = async (id: string) => {
+    const result = await editingSession.dispatch({ type: 'switch-resume', resumeId: id });
+    if (result.status === 'confirm-discard') {
+      if (!window.confirm('当前简历有未保存修改，切换后这些修改会丢失。确定继续吗？')) return;
+      await editingSession.dispatch({ type: 'switch-resume', resumeId: id, discardDirty: true });
+    }
+    setExpandedModuleTypes(new Set());
   };
 
   /** 新建简历：默认模板 + 常用模块，保存后立即加载 */
   const handleNewResume = async () => {
+    const prepared = await editingSession.dispatch({ type: 'prepare-destructive-change' });
+    if (prepared.status === 'ready' && prepared.hasUnsavedDraft) {
+      if (!window.confirm('当前简历有未保存修改，新建后切换会丢失这些修改。确定继续吗？')) return;
+    }
     const newId = `resume-${Date.now()}`;
     // 常用模块按模块库定义构造 ModuleInstance 列表
     const defaultTypes: EntityType[] = [
@@ -253,7 +210,7 @@ export default function ResumeEditor({
     const newModules: ModuleInstance[] = defaultTypes.map((type) => {
       const def = MODULE_LIBRARY.find((m) => m.type === type);
       return {
-        id: genId(),
+        id: `module-${type}`,
         type,
         label: def?.label || type,
         expanded: false,
@@ -265,24 +222,15 @@ export default function ResumeEditor({
       resumeName: `新简历 ${resumeList.length + 1}`,
       resumeId: newId,
       templateId: templateId || templates[0]?.id || '',
-      privacy: {
-        mask_name: false,
-        mask_phone: true,
-        mask_email: true,
-        mask_salary: true,
-        mask_company: false,
-        mask_github: false,
-      },
+      privacy: DEFAULT_PRIVACY,
       modules: newModules,
     });
     try {
       await api.saveResume(config);
       const fresh = await refreshResumeList();
-      const created = fresh.find((r) => r.id === newId);
-      if (created) {
-        setCurrentResumeId(created.id);
-        loadResume(created);
-      }
+      await editingSession.dispatch({ type: 'replace-resumes', resumes: fresh });
+      await editingSession.dispatch({ type: 'switch-resume', resumeId: newId, discardDirty: true });
+      setExpandedModuleTypes(new Set());
     } catch (e) {
       alert(`新建简历失败: ${e instanceof Error ? e.message : e}`);
     }
@@ -290,6 +238,10 @@ export default function ResumeEditor({
 
   /** 复制当前简历：生成新 id/name，保留模板/模块/脱敏配置 */
   const handleDuplicateResume = async () => {
+    const prepared = await editingSession.dispatch({ type: 'prepare-destructive-change' });
+    if (prepared.status === 'ready' && prepared.hasUnsavedDraft) {
+      if (!window.confirm('当前简历有未保存修改，创建副本会使用已保存版本并丢弃当前修改。确定继续吗？')) return;
+    }
     const source = resumeList.find((r) => r.id === currentResumeId);
     if (!source) return;
     const newId = `${source.id}-copy`;
@@ -303,11 +255,9 @@ export default function ResumeEditor({
     try {
       await api.saveResume(copy);
       const fresh = await refreshResumeList();
-      const created = fresh.find((r) => r.id === newId);
-      if (created) {
-        setCurrentResumeId(created.id);
-        loadResume(created);
-      }
+      await editingSession.dispatch({ type: 'replace-resumes', resumes: fresh });
+      await editingSession.dispatch({ type: 'switch-resume', resumeId: newId, discardDirty: true });
+      setExpandedModuleTypes(new Set());
     } catch (e) {
       alert(`复制简历失败: ${e instanceof Error ? e.message : e}`);
     }
@@ -315,21 +265,28 @@ export default function ResumeEditor({
 
   /** 删除当前简历：确认后删除配置并切到剩余第一份 */
   const handleDeleteResume = async () => {
+    const prepared = await editingSession.dispatch({ type: 'prepare-destructive-change' });
     const target = resumeList.find((r) => r.id === currentResumeId);
     if (!target || resumeList.length <= 1) return;
-    if (!window.confirm(`确定删除简历「${target.name}」？仅删除配置，wiki 数据不受影响。`)) return;
+    const draftWarning = prepared.status === 'ready' && prepared.hasUnsavedDraft
+      ? ' 当前未保存草稿也会丢失。'
+      : '';
+    if (!window.confirm(`确定删除简历「${target.name}」？${draftWarning}仅删除配置，wiki 数据不受影响。`)) return;
     try {
       await api.deleteResume(target.id);
       const fresh = await refreshResumeList();
       if (fresh.length > 0) {
-        setCurrentResumeId(fresh[0].id);
-        loadResume(fresh[0]);
-      } else {
-        // 无简历：重置为空状态
-        setCurrentResumeId('');
-        setResumeName('新建简历');
-        setModules([]);
+        await editingSession.dispatch({
+          type: 'replace-resumes',
+          resumes: fresh,
+        });
+        await editingSession.dispatch({
+          type: 'switch-resume',
+          resumeId: fresh[0].id,
+          discardDirty: true,
+        });
       }
+      setExpandedModuleTypes(new Set());
     } catch (e) {
       alert(`删除简历失败: ${e instanceof Error ? e.message : e}`);
     }
@@ -361,7 +318,7 @@ export default function ResumeEditor({
       await api.saveTemplate(copy, css);
       const fresh = await api.getTemplates();
       setTemplateList(fresh);
-      setTemplateId(newId);
+      await editingSession.dispatch({ type: 'edit-draft', patch: { template: newId } });
     } catch (e) {
       alert(`复制模板失败: ${e instanceof Error ? e.message : e}`);
     }
@@ -378,7 +335,7 @@ export default function ResumeEditor({
       const fresh = await api.getTemplates();
       setTemplateList(fresh);
       const next = fresh[0]?.id || '';
-      setTemplateId(next);
+      await editingSession.dispatch({ type: 'edit-draft', patch: { template: next } });
     } catch (e) {
       alert(`删除模板失败: ${e instanceof Error ? e.message : e}`);
     }
@@ -399,16 +356,24 @@ export default function ResumeEditor({
       const oldIndex = modules.findIndex((m) => m.id === active.id);
       const newIndex = modules.findIndex((m) => m.id === over.id);
       if (oldIndex >= 0 && newIndex >= 0) {
-        setModules((prev) => arrayMove(prev, oldIndex, newIndex));
+        void updateDraftModules(arrayMove(modules, oldIndex, newIndex));
       }
     }
+  };
+
+  const updateDraftModules = async (nextModules: ModuleInstance[]) => {
+    if (!draft) return;
+    await editingSession.dispatch({
+      type: 'edit-draft',
+      patch: getModuleDraftPatch(draft, nextModules),
+    });
   };
 
   const handleModuleSelection = async (types: EntityType[]) => {
     const nextModules = reconcileModuleSelection(modules, types, (type) => {
       const def = MODULE_LIBRARY.find((module) => module.type === type);
       return {
-        id: genId(),
+        id: `module-${type}`,
         type,
         label: def?.label || type,
         expanded: false,
@@ -416,16 +381,21 @@ export default function ResumeEditor({
         hiddenItemIds: [],
       };
     });
-    setModules(nextModules);
-    await handleSave(nextModules, '编排已更新');
+    await updateDraftModules(nextModules);
+    await handleSave('编排已更新');
   };
 
   // ---------- 模块操作 ----------
 
   const handleToggleExpand = (id: string) => {
-    setModules((prev) =>
-      prev.map((m) => (m.id === id ? { ...m, expanded: !m.expanded } : m)),
-    );
+    const type = modules.find((module) => module.id === id)?.type;
+    if (!type) return;
+    setExpandedModuleTypes((current) => {
+      const next = new Set(current);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
   };
 
   const handleOverrideField = (
@@ -437,8 +407,8 @@ export default function ResumeEditor({
     const inheritedValue = resumeWikiEntities
       .find((entity) => entity.path === itemPath)
       ?.fields[field];
-    setModules((prev) =>
-      prev.map((m) =>
+    void updateDraftModules(
+      modules.map((m) =>
         m.id === moduleId
           ? {
               ...m,
@@ -458,20 +428,20 @@ export default function ResumeEditor({
   const handleRemoveModule = async (id: string) => {
     // 仅从当前简历的预览/导出编排中移除，并立即保存简历配置；不触碰 Wiki。
     const nextModules = modules.filter((m) => m.id !== id);
-    setModules(nextModules);
-    await handleSave(nextModules);
+    await updateDraftModules(nextModules);
+    await handleSave('已删除并保存');
   };
 
   /** 为键盘用户提供确定性的模块排序入口，并限制索引不越界。 */
   const handleReorderModule = (oldIndex: number, newIndex: number) => {
     if (newIndex < 0 || newIndex >= modules.length || oldIndex === newIndex) return;
-    setModules((prev) => arrayMove(prev, oldIndex, newIndex));
+    void updateDraftModules(arrayMove(modules, oldIndex, newIndex));
   };
 
   /** 切换子项在当前简历中的可见性，不触碰 Wiki 数据。 */
   const handleToggleItemVisibility = (moduleId: string, itemId: string) => {
-    setModules((prev) =>
-      prev.map((module) =>
+    void updateDraftModules(
+      modules.map((module) =>
         module.id === moduleId
           ? {
               ...module,
@@ -484,58 +454,26 @@ export default function ResumeEditor({
 
   // ---------- 导出 ----------
 
-  const buildResumeConfig = (
-    modulesOverride?: ModuleInstance[],
-    polishOverride?: ResumePolishConfig,
-  ): ResumeConfig => {
-    const baseConfig = resumeList.find((resume) => resume.id === currentResumeId);
-    return createResumeConfig({
-      resumeName,
-      resumeId: currentResumeId,
-      templateId,
-      privacy,
-      modules: modulesOverride ?? modules,
-      baseConfig,
-      polish: polishOverride ?? polish,
-    });
-  };
-
-  const handleSave = async (
-    modulesOverride?: ModuleInstance[],
-    successMessage = modulesOverride ? '已删除并保存' : '已保存',
-  ) => {
-    setSaving(true);
+  const handleSave = async (successMessage = '已保存') => {
     setSaveMsg('');
-    try {
-      const config = buildResumeConfig(modulesOverride);
-      await api.saveResume(config);
-      setResumeList((current) =>
-        current.map((resume) => (resume.id === config.id ? config : resume)),
-      );
+    const result = await editingSession.dispatch({ type: 'save' });
+    if (result.status === 'saved') {
       setSaveMsg(successMessage);
-    } catch (e) {
-      setSaveMsg(`保存失败：${e instanceof Error ? e.message : e}`);
-    } finally {
-      setSaving(false);
+    } else if (result.status === 'failed') {
+      setSaveMsg(`保存失败：${result.error}`);
     }
   };
 
   /** 开启 AI 润色时先生成结果，再切换预览；关闭时立即回到原始 Wiki 内容。 */
   const handlePolishChange = async (enabled: boolean) => {
-    const previousPolish = polish;
     if (!enabled) {
       const nextPolish = { ...(polish || {}), enabled: false };
-      const config = buildResumeConfig(undefined, nextPolish);
-      setPolish(nextPolish);
-      try {
-        await api.saveResume(config);
-        setResumeList((current) =>
-          current.map((resume) => (resume.id === config.id ? config : resume)),
-        );
+      await editingSession.dispatch({ type: 'edit-draft', patch: { polish: nextPolish } });
+      const saved = await editingSession.dispatch({ type: 'save' });
+      if (saved.status === 'saved') {
         setSaveMsg('已关闭 AI 润色，当前显示原文');
-      } catch (e) {
-        setPolish(previousPolish);
-        setSaveMsg(`保存 AI 润色设置失败：${e instanceof Error ? e.message : e}`);
+      } else if (saved.status === 'failed') {
+        setSaveMsg(`保存 AI 润色设置失败：${saved.error}`);
       }
       return;
     }
@@ -549,17 +487,12 @@ export default function ResumeEditor({
     );
     if (!providerConfigured && hasCachedPolish) {
       const nextPolish = { ...(polish || {}), enabled: true };
-      const config = buildResumeConfig(undefined, nextPolish);
-      setPolish(nextPolish);
-      try {
-        await api.saveResume(config);
-        setResumeList((current) =>
-          current.map((resume) => (resume.id === config.id ? config : resume)),
-        );
+      await editingSession.dispatch({ type: 'edit-draft', patch: { polish: nextPolish } });
+      const saved = await editingSession.dispatch({ type: 'save' });
+      if (saved.status === 'saved') {
         setSaveMsg('已开启 AI 润色，使用已有结果');
-      } catch (e) {
-        setPolish(previousPolish);
-        setSaveMsg(`保存 AI 润色设置失败：${e instanceof Error ? e.message : e}`);
+      } else if (saved.status === 'failed') {
+        setSaveMsg(`保存 AI 润色设置失败：${saved.error}`);
       }
       return;
     }
@@ -572,13 +505,16 @@ export default function ResumeEditor({
     setPolishGenerating(true);
     setSaveMsg('');
     try {
-      const config = buildResumeConfig();
-      const result = await api.polishResume(config, polishProvider);
-      await api.saveResume(result.config);
-      setPolish(result.config.polish);
-      setResumeList((current) =>
-        current.map((resume) => (resume.id === result.config.id ? result.config : resume)),
-      );
+      if (!draft) throw new Error('没有可润色的简历草稿');
+      const requestResumeId = draft.id;
+      const result = await api.polishResume(structuredClone(draft), polishProvider);
+      await editingSession.dispatch({
+        type: 'merge-polish-result',
+        requestResumeId,
+        polish: result.config.polish,
+      });
+      const saved = await editingSession.dispatch({ type: 'save' });
+      if (saved.status === 'failed') throw new Error(saved.error);
       setSaveMsg(
         result.generated_count > 0
           ? `已生成 ${result.generated_count} 条润色内容`
@@ -615,16 +551,12 @@ export default function ResumeEditor({
       ...(polish || {}),
       selected_fields: selectedFields,
     };
-    setPolish(nextPolish);
-    try {
-      const config = buildResumeConfig(undefined, nextPolish);
-      await api.saveResume(config);
-      setResumeList((current) =>
-        current.map((resume) => (resume.id === config.id ? config : resume)),
-      );
+    await editingSession.dispatch({ type: 'edit-draft', patch: { polish: nextPolish } });
+    const saved = await editingSession.dispatch({ type: 'save' });
+    if (saved.status === 'saved') {
       setSaveMsg('AI 润色模型和内容选择已保存');
-    } catch (error) {
-      setSaveMsg(`保存 AI 润色设置失败：${error instanceof Error ? error.message : error}`);
+    } else if (saved.status === 'failed') {
+      setSaveMsg(`保存 AI 润色设置失败：${saved.error}`);
     }
   };
 
@@ -645,17 +577,21 @@ export default function ResumeEditor({
     setPolishGeneratingKey(generatingKey);
     setSaveMsg('');
     try {
-      const config = buildResumeConfig(undefined, {
+      if (!draft) throw new Error('没有可润色的简历草稿');
+      const requestResumeId = draft.id;
+      const requestConfig: ResumeConfig = { ...structuredClone(draft), polish: {
         ...(polish || {}),
         enabled: true,
         selected_fields: selectedPolishFields.length > 0 ? selectedPolishFields : DEFAULT_POLISH_FIELDS,
+      } };
+      const result = await api.polishResume(requestConfig, polishProvider, { only: { path, field } });
+      await editingSession.dispatch({
+        type: 'merge-polish-result',
+        requestResumeId,
+        polish: result.config.polish,
       });
-      const result = await api.polishResume(config, polishProvider, { only: { path, field } });
-      await api.saveResume(result.config);
-      setPolish(result.config.polish);
-      setResumeList((current) =>
-        current.map((resume) => (resume.id === result.config.id ? result.config : resume)),
-      );
+      const saved = await editingSession.dispatch({ type: 'save' });
+      if (saved.status === 'failed') throw new Error(saved.error);
       setSaveMsg(result.generated_count > 0 ? '已换一版润色内容' : '未生成新的内容，请稍后重试');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -701,7 +637,8 @@ export default function ResumeEditor({
     }
 
     if (format === 'json') {
-      const blob = await api.exportResumeJson(buildResumeConfig());
+      if (!draft) throw new Error('没有可导出的简历草稿');
+      const blob = await api.exportResumeJson(draft);
       return saveExportBlob({
         blob,
         filename: fullFilename,
@@ -757,12 +694,16 @@ export default function ResumeEditor({
               onDuplicate={handleDuplicateResume}
               onDelete={handleDeleteResume}
               name={resumeName}
-              onNameChange={setResumeName}
+              onNameChange={(name) => {
+                void editingSession.dispatch({ type: 'change-name', name });
+              }}
             />
             <TemplateSelector
               templates={templateList}
               currentId={templateId}
-              onChange={setTemplateId}
+              onChange={(template) => {
+                void editingSession.dispatch({ type: 'edit-draft', patch: { template } });
+              }}
               onDuplicate={handleDuplicateTemplate}
               onDelete={handleDeleteTemplate}
             />
@@ -803,7 +744,12 @@ export default function ResumeEditor({
             <PrivacyControls
               config={privacy}
               open={privacySettingsOpen}
-              onChange={setPrivacy}
+              onChange={(nextPrivacy) => {
+                void editingSession.dispatch({
+                  type: 'edit-draft',
+                  patch: { privacy: nextPrivacy },
+                });
+              }}
               onOpenChange={(open) => {
                 if (open) setPolishSettingsOpen(false);
                 setPrivacySettingsOpen(open);

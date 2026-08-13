@@ -37,9 +37,7 @@ import type {
   ResumeConfig,
   PrivacyConfig,
   EntityType,
-  ResumePolishConfig,
   ResumePolishField,
-  ResumePolishProtocol,
   ResumePolishProviderConfig,
 } from '../types';
 import { MODULE_LIBRARY } from '../types';
@@ -54,7 +52,11 @@ import {
 } from '../resume/config';
 import { createResumeEditingSession } from '../resume/editingSession';
 import { toggleHiddenItem } from '../resume/visibility';
-import { applyPolishToEntities, getSelectedPolishFields, DEFAULT_POLISH_FIELDS } from '../resume/polish';
+import { applyPolishToEntities, getSelectedPolishFields } from '../resume/polish';
+import {
+  createResumePolishWorkflow,
+  isPolishProviderConfigured,
+} from '../resume/polishWorkflow';
 import { projectResume } from '../resume/projection';
 import {
   buildStandaloneResumeHtml,
@@ -64,14 +66,6 @@ import {
   saveExportBlob,
 } from '../resume/export';
 
-const POLISH_PROVIDER_STORAGE_KEY = 'career-wiki.resume-polish-provider';
-const DEFAULT_POLISH_PROVIDER: ResumePolishProviderConfig = {
-  protocol: 'openai',
-  base_url: 'https://api.openai.com/v1',
-  api_key: '',
-  model: '',
-  timeout_ms: 60000,
-};
 const DEFAULT_PRIVACY: PrivacyConfig = {
   mask_name: false,
   mask_phone: true,
@@ -80,27 +74,6 @@ const DEFAULT_PRIVACY: PrivacyConfig = {
   mask_company: false,
   mask_github: false,
 };
-
-function loadPolishProvider(): ResumePolishProviderConfig {
-  if (typeof window === 'undefined') return DEFAULT_POLISH_PROVIDER;
-  try {
-    const raw = window.localStorage.getItem(POLISH_PROVIDER_STORAGE_KEY);
-    if (!raw) return DEFAULT_POLISH_PROVIDER;
-    const parsed = JSON.parse(raw) as Partial<ResumePolishProviderConfig>;
-    return {
-      protocol: parsed.protocol === 'anthropic' ? 'anthropic' : 'openai',
-      base_url: typeof parsed.base_url === 'string' ? parsed.base_url : DEFAULT_POLISH_PROVIDER.base_url,
-      api_key: typeof parsed.api_key === 'string' ? parsed.api_key : '',
-      model: typeof parsed.model === 'string' ? parsed.model : '',
-      timeout_ms:
-        typeof parsed.timeout_ms === 'number'
-          ? Math.min(180000, Math.max(10000, parsed.timeout_ms))
-          : DEFAULT_POLISH_PROVIDER.timeout_ms,
-    };
-  } catch {
-    return DEFAULT_POLISH_PROVIDER;
-  }
-}
 
 interface ResumeEditorProps {
   wikiEntities: WikiEntity[];
@@ -128,6 +101,15 @@ export default function ResumeEditor({
     editingSession.getSnapshot,
     editingSession.getSnapshot,
   );
+  const [polishWorkflow] = useState(() => createResumePolishWorkflow({
+    session: editingSession,
+    modelClient: { getModels: api.getPolishModels },
+  }));
+  const polishWorkflowSnapshot = useSyncExternalStore(
+    polishWorkflow.subscribe,
+    polishWorkflow.getSnapshot,
+    polishWorkflow.getSnapshot,
+  );
   const [templateList, setTemplateList] = useState<TemplateConfig[]>(templates);
   const [expandedModuleTypes, setExpandedModuleTypes] = useState<Set<EntityType>>(new Set());
   const draft = session.draft;
@@ -141,37 +123,29 @@ export default function ResumeEditor({
   const saving = session.saveStatus === 'saving';
   const [saveMsg, setSaveMsg] = useState('');
   const [workspaceView, setWorkspaceView] = useState<'edit' | 'preview'>('edit');
-  const [polishGenerating, setPolishGenerating] = useState(false);
-  const [polishGeneratingKey, setPolishGeneratingKey] = useState<string | null>(null);
-  const [polishProvider, setPolishProvider] = useState<ResumePolishProviderConfig>(loadPolishProvider);
-  const [polishSettingsOpen, setPolishSettingsOpen] = useState(false);
-  const [privacySettingsOpen, setPrivacySettingsOpen] = useState(false);
-  const [polishModels, setPolishModels] = useState<string[]>([]);
-  const [polishModelsLoading, setPolishModelsLoading] = useState(false);
-  const [polishProviderError, setPolishProviderError] = useState('');
+  const [activeOverlay, setActiveOverlay] = useState<'polish' | 'privacy' | 'export' | null>(null);
   const polishProviderAnchorRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!polishSettingsOpen) return undefined;
+    if (activeOverlay !== 'polish') return undefined;
 
     const handlePointerDownOutside = (event: PointerEvent) => {
       const anchor = polishProviderAnchorRef.current;
       if (anchor && !anchor.contains(event.target as Node)) {
-        setPolishSettingsOpen(false);
+        setActiveOverlay(null);
       }
     };
 
     document.addEventListener('pointerdown', handlePointerDownOutside);
     return () => document.removeEventListener('pointerdown', handlePointerDownOutside);
-  }, [polishSettingsOpen]);
+  }, [activeOverlay]);
 
-  useEffect(() => {
-    if (!polishProviderError) return undefined;
-
-    const timeout = window.setTimeout(() => setPolishProviderError(''), 6000);
-    return () => window.clearTimeout(timeout);
-  }, [polishProviderError]);
-  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const polishProvider = polishWorkflowSnapshot.provider;
+  const polishGenerating = polishWorkflowSnapshot.generating;
+  const polishGeneratingKey = polishWorkflowSnapshot.generatingKey;
+  const polishModels = polishWorkflowSnapshot.models;
+  const polishModelsLoading = polishWorkflowSnapshot.modelsLoading;
+  const polishProviderError = polishWorkflowSnapshot.error;
 
   // App 刷新数据时只同步服务端集合；当前草稿仍由编辑会话保护。
   useEffect(() => {
@@ -458,65 +432,15 @@ export default function ResumeEditor({
 
   /** 开启 AI 润色时先生成结果，再切换预览；关闭时立即回到原始 Wiki 内容。 */
   const handlePolishChange = async (enabled: boolean) => {
-    if (!enabled) {
-      const nextPolish = { ...(polish || {}), enabled: false };
-      await editingSession.dispatch({ type: 'edit-draft', patch: { polish: nextPolish } });
-      const saved = await editingSession.dispatch({ type: 'save' });
-      if (saved.status === 'saved') {
-        setSaveMsg('已关闭 AI 润色，当前显示原文');
-      } else if (saved.status === 'failed') {
-        setSaveMsg(`保存 AI 润色设置失败：${saved.error}`);
-      }
-      return;
-    }
-
-    const hasCachedPolish = Object.keys(polish?.entries || {}).length > 0;
-    const providerConfigured = Boolean(
-      polishProvider.protocol &&
-        polishProvider.base_url.trim() &&
-        polishProvider.api_key.trim() &&
-        polishProvider.model.trim(),
-    );
-    if (!providerConfigured && hasCachedPolish) {
-      const nextPolish = { ...(polish || {}), enabled: true };
-      await editingSession.dispatch({ type: 'edit-draft', patch: { polish: nextPolish } });
-      const saved = await editingSession.dispatch({ type: 'save' });
-      if (saved.status === 'saved') {
-        setSaveMsg('已开启 AI 润色，使用已有结果');
-      } else if (saved.status === 'failed') {
-        setSaveMsg(`保存 AI 润色设置失败：${saved.error}`);
-      }
-      return;
-    }
-    if (!providerConfigured) {
-      setPolishSettingsOpen(true);
-      setPolishProviderError('请先选择协议并配置 Base URL、API Key 和模型');
+    setSaveMsg('');
+    const result = await polishWorkflow.toggle(enabled);
+    if (result.status === 'needs-config') {
+      setActiveOverlay('polish');
       setSaveMsg('请先配置 AI 润色协议和模型');
       return;
     }
-    setPolishGenerating(true);
-    setSaveMsg('');
-    try {
-      if (!draft) throw new Error('没有可润色的简历草稿');
-      const result = await editingSession.dispatch({
-        type: 'generate-polish',
-        provider: polishProvider,
-      });
-      if (result.status === 'failed') throw new Error(result.error);
-      if (result.status !== 'polished') throw new Error('AI 润色事务未完成');
-      setSaveMsg(
-        result.generatedCount > 0
-          ? `已生成 ${result.generatedCount} 条润色内容`
-          : '没有可润色的项目或经历，已保留原文',
-      );
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      setPolishProviderError(message);
-      setPolishSettingsOpen(true);
-      setSaveMsg(`AI 润色失败：${message}`);
-    } finally {
-      setPolishGenerating(false);
-    }
+    if (result.status === 'failed') setActiveOverlay('polish');
+    setSaveMsg(result.status === 'success' ? result.message : `AI 润色失败：${result.error}`);
   };
 
   /** 保存模型配置与用户选择的润色字段。字段选择属于当前简历视角。 */
@@ -524,85 +448,23 @@ export default function ResumeEditor({
     provider: ResumePolishProviderConfig,
     selectedFields: ResumePolishField[],
   ) => {
-    if (selectedFields.length === 0) {
-      setPolishProviderError('至少选择一项润色内容');
-      return;
-    }
-    setPolishProvider(provider);
-    setPolishProviderError('');
-    try {
-      window.localStorage.setItem(POLISH_PROVIDER_STORAGE_KEY, JSON.stringify(provider));
-    } catch {
-      setPolishProviderError('浏览器无法保存本地配置，但本次仍可继续使用');
-    }
-    setPolishSettingsOpen(false);
-    const nextPolish: ResumePolishConfig = {
-      ...(polish || {}),
-      selected_fields: selectedFields,
-    };
-    await editingSession.dispatch({ type: 'edit-draft', patch: { polish: nextPolish } });
-    const saved = await editingSession.dispatch({ type: 'save' });
-    if (saved.status === 'saved') {
-      setSaveMsg('AI 润色模型和内容选择已保存');
-    } else if (saved.status === 'failed') {
-      setSaveMsg(`保存 AI 润色设置失败：${saved.error}`);
+    const result = await polishWorkflow.saveProvider(provider, selectedFields);
+    if (result.status === 'success') {
+      setActiveOverlay(null);
+      setSaveMsg(result.message);
     }
   };
 
   /** 只重新生成当前条目的一个字段，供字段旁的“换一换”使用。 */
   const handleRegeneratePolish = async (path: string, field: ResumePolishField) => {
-    const providerConfigured = Boolean(
-      polishProvider.protocol &&
-        polishProvider.base_url.trim() &&
-        polishProvider.api_key.trim() &&
-        polishProvider.model.trim(),
-    );
-    if (!providerConfigured) {
-      setPolishSettingsOpen(true);
-      setPolishProviderError('请先选择协议并配置 Base URL、API Key 和模型');
-      return;
-    }
-    const generatingKey = `${path}:${field}`;
-    setPolishGeneratingKey(generatingKey);
     setSaveMsg('');
-    try {
-      if (!draft) throw new Error('没有可润色的简历草稿');
-      const requestConfig: ResumeConfig = { ...structuredClone(draft), polish: {
-        ...(polish || {}),
-        enabled: true,
-        selected_fields: selectedPolishFields.length > 0 ? selectedPolishFields : DEFAULT_POLISH_FIELDS,
-      } };
-      const result = await editingSession.dispatch({
-        type: 'generate-polish',
-        provider: polishProvider,
-        only: { path, field },
-        config: requestConfig,
-      });
-      if (result.status === 'failed') throw new Error(result.error);
-      if (result.status !== 'polished') throw new Error('AI 润色事务未完成');
-      setSaveMsg(result.generatedCount > 0 ? '已换一版润色内容' : '未生成新的内容，请稍后重试');
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setPolishProviderError(message);
-      setPolishSettingsOpen(true);
-      setSaveMsg(`重新生成失败：${message}`);
-    } finally {
-      setPolishGeneratingKey(null);
-    }
+    const result = await polishWorkflow.regenerate(path, field);
+    if (result.status === 'needs-config') setActiveOverlay('polish');
+    setSaveMsg(result.status === 'success' ? result.message : `重新生成失败：${result.error}`);
   };
 
   const handleFetchPolishModels = async (provider: ResumePolishProviderConfig) => {
-    setPolishModelsLoading(true);
-    setPolishProviderError('');
-    try {
-      const models = await api.getPolishModels(provider);
-      setPolishModels(models);
-      if (models.length === 0) setPolishProviderError('模型列表为空，请手动填写模型名称');
-    } catch (error) {
-      setPolishProviderError(error instanceof Error ? error.message : String(error));
-    } finally {
-      setPolishModelsLoading(false);
-    }
+    await polishWorkflow.fetchModels(provider);
   };
 
   /** 构造当前预览对应的文件，并交给系统“另存为”或浏览器下载。 */
@@ -703,35 +565,29 @@ export default function ResumeEditor({
                 hasEntries={Object.keys(polish?.entries || {}).length > 0}
                 generating={polishGenerating}
                 selectedFieldCount={selectedPolishFields.length}
-                providerConfigured={Boolean(
-                  polishProvider.protocol &&
-                    polishProvider.base_url.trim() &&
-                    polishProvider.api_key.trim() &&
-                    polishProvider.model.trim(),
-                )}
-                settingsOpen={polishSettingsOpen}
+                providerConfigured={isPolishProviderConfigured(polishProvider)}
+                settingsOpen={activeOverlay === 'polish'}
                 onChange={handlePolishChange}
                 onOpenSettings={() => {
-                  setPolishProviderError('');
-                  setPrivacySettingsOpen(false);
-                  setPolishSettingsOpen((open) => !open);
+                  polishWorkflow.clearError();
+                  setActiveOverlay((overlay) => overlay === 'polish' ? null : 'polish');
                 }}
               />
               <PolishProviderSettings
                 provider={polishProvider}
                 selectedFields={selectedPolishFields}
-                open={polishSettingsOpen}
+                open={activeOverlay === 'polish'}
                 models={polishModels}
                 loadingModels={polishModelsLoading}
                 error={polishProviderError}
-                onClose={() => setPolishSettingsOpen(false)}
+                onClose={() => setActiveOverlay(null)}
                 onSave={handleSavePolishProvider}
                 onFetchModels={handleFetchPolishModels}
               />
             </div>
             <PrivacyControls
               config={privacy}
-              open={privacySettingsOpen}
+              open={activeOverlay === 'privacy'}
               onChange={(nextPrivacy) => {
                 void editingSession.dispatch({
                   type: 'edit-draft',
@@ -739,8 +595,7 @@ export default function ResumeEditor({
                 });
               }}
               onOpenChange={(open) => {
-                if (open) setPolishSettingsOpen(false);
-                setPrivacySettingsOpen(open);
+                setActiveOverlay(open ? 'privacy' : null);
               }}
             />
           </div>
@@ -777,7 +632,7 @@ export default function ResumeEditor({
               <UiIcon name="refresh" size={18} />
             </button>
           </div>
-          {saveMsg && !polishSettingsOpen && (
+          {saveMsg && activeOverlay !== 'polish' && (
             <span
               className={`save-status ${saveMsgIsError ? 'is-error' : ''}`}
               role={saveMsgIsError ? 'alert' : 'status'}
@@ -813,9 +668,7 @@ export default function ResumeEditor({
                 view={resumeView}
                 template={currentTemplate}
                 onOpenExport={() => {
-                  setPolishSettingsOpen(false);
-                  setPrivacySettingsOpen(false);
-                  setExportDialogOpen(true);
+                  setActiveOverlay('export');
                 }}
               />
             )}
@@ -824,10 +677,10 @@ export default function ResumeEditor({
       </div>
 
       <ExportDialog
-        open={exportDialogOpen}
+        open={activeOverlay === 'export'}
         resumeName={resumeName}
         privacyEnabledCount={Object.values(privacy).filter(Boolean).length}
-        onClose={() => setExportDialogOpen(false)}
+        onClose={() => setActiveOverlay(null)}
         onExport={handleExport}
       />
     </DndContext>

@@ -9,6 +9,8 @@
   "scripts": {
     "test:wiki-engine": "npm test --workspace career-wiki-wiki-engine",
     "test:resume-generator": "npm test --workspace resume-generator",
-    "test": "npm run test:wiki-engine && npm run test:resume-generator"
+    "test:interview": "node --test interview/tests/**/*.test.mjs",
+    "test:env-init": "node --test env-init/tests/**/*.test.mjs",
+    "test": "npm run test:wiki-engine && npm run test:resume-generator && npm run test:interview && npm run test:env-init"
   }
 }

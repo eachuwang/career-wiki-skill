@@ -47,9 +47,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 /** 获取整个 wiki 快照（所有实体 + 关系） */
 export async function getWiki(): Promise<WikiSnapshot> {
-  const data = await request<WikiSnapshot>('/api/wiki');
-  // 兼容旧版 API server（不返回 allRelations）
-  return { ...data, allRelations: data.allRelations ?? [] };
+  return request<WikiSnapshot>('/api/wiki');
 }
 
 /** 获取单个实体详情 */

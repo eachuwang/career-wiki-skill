@@ -114,7 +114,7 @@ export interface ResumeHide {
   module: EntityType;
   /** 隐藏整个实体时保存 Wiki 相对路径；不删除源数据。 */
   items?: string[];
-  /** 兼容原有字段级隐藏配置。 */
+  /** 当前简历视角中需要隐藏的字段。 */
   fields?: string[];
   reason?: string;
 }
@@ -144,7 +144,7 @@ export interface ResumePolishEntry {
 
 export interface ResumePolishConfig {
   enabled?: boolean;
-  /** 用户选择要生成的内容字段；缺失时兼容旧配置，默认生成全部支持的字段。 */
+  /** 用户选择要生成的内容字段；尚未配置时界面使用默认选项。 */
   selected_fields?: ResumePolishField[];
   entries?: Record<string, ResumePolishEntry>;
 }

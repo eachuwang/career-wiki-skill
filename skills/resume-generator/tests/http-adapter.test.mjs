@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import test from 'node:test';
-import { createCareerWikiHttpAdapter } from '../scripts/http_adapter.mjs';
+import { createCareerWikiHttpAdapter, ENDPOINTS } from '../scripts/http_adapter.mjs';
 
 async function listen(handler) {
   const server = createServer(handler);
@@ -44,6 +44,10 @@ test('HTTP adapter 只翻译请求与模块结果', async (t) => {
   });
   const server = await listen(adapter);
   t.after(server.close);
+
+  const contractResponse = await fetch(server.baseUrl);
+  assert.equal(contractResponse.status, 200);
+  assert.deepEqual((await contractResponse.json()).endpoints, ENDPOINTS);
 
   const wikiResponse = await fetch(`${server.baseUrl}/api/wiki?entity=project`);
   assert.equal(wikiResponse.status, 200);

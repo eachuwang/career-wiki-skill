@@ -61,7 +61,7 @@ export function getModuleDraftPatch(
   };
 }
 
-/** 从保存配置中恢复指定模块的隐藏条目，同时兼容仅含 fields 的旧配置。 */
+/** 从保存配置中恢复指定模块的隐藏条目。字段级隐藏由投影层单独处理。 */
 export function getHiddenItemIds(
   hide: ResumeHide[] | undefined,
   module: EntityType,

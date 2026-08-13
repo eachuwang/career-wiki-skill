@@ -17,6 +17,7 @@ import os
 import shutil
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 
@@ -161,7 +162,7 @@ def write_config(root: Path) -> bool:
         "version": "2.0",
         "okf_version": "0.2",
         "root": str(root),
-        "created": None,  # Agent 会填实际时间
+        "created": datetime.now().astimezone().isoformat(timespec="seconds"),
     }
     cfg_path.parent.mkdir(parents=True, exist_ok=True)
     cfg_path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")

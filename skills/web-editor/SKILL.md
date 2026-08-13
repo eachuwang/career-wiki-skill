@@ -44,7 +44,7 @@ Career-Wiki-Skill 的前端 React 应用，包含两个页面：
 - **dnd-kit** — 编辑区内拖拽排序
 - **Tailwind CSS** — 样式
 - **vis-network** — 图谱可视化
-- **html2pdf.js** — 浏览器端生成并下载 PDF
+- **html2canvas + jsPDF** — 逐页渲染 A4 预览并在浏览器端下载 PDF
 
 ## 启动方式
 
@@ -161,7 +161,7 @@ skills/web-editor/
 
 | 格式 | 方式 | 说明 |
 |------|------|------|
-| PDF | `html2pdf.js` | 将 `.print-area` 的 A4 预览在浏览器端生成并直接下载，不调用打印对话框 |
+| PDF | `html2canvas + jsPDF` | 将 `.print-area` 中每个 `.a4-page` 独立渲染并按顺序写入 PDF，不调用打印对话框 |
 | HTML | `Blob` 下载 | 取 `.print-area` 的 outerHTML，包成完整 HTML 文件下载 |
 | JSON | `ResumeView` Blob | 浏览器直接序列化与预览相同的 Resume Projection 结果 |
 
@@ -245,7 +245,7 @@ npm run build    # 输出到 dist/
 
 5. **dnd-kit 拖拽需同时有 Sortable + Droppable。** 编辑区是 Droppable，模块卡片通过 `SortableContext` 支持排序；模块添加和移除通过「添加模块」选择器完成。
 
-6. **PDF 生成范围。** `html2pdf.js` 只接收 `.print-area`，不要传入预览工具栏或缩放容器，否则导出内容会带入界面控件或缩放比例。
+6. **PDF 生成范围。** `html2canvas` 只渲染 `.print-area` 内的 `.a4-page`；不要把预览工具栏或缩放容器交给导出器，否则界面控件或缩放比例会进入 PDF。
 
 7. **覆盖不回写 wiki。** 编辑区运行时按 Wiki 路径保存条目级 `overrides`，持久化时写入当前简历配置的 `content_overrides`，不修改 wiki 源数据。展示优先级是“手动覆盖 > 有效 AI 润色 > Wiki 原文”——改简历只改当前简历视角。
 

@@ -159,7 +159,7 @@ git clone https://github.com/eachuwang/career-wiki-skill.git
 
 env-init skill 会：
 1. 检查 Node.js ≥ 18 / Python ≥ 3.9 / npm
-2. 创建 `~/.career_wiki/` 目录结构（knowledge/references/raw、knowledge/、.career-wiki-skill/resumes/、.career-wiki-skill/templates/ 等 16 个子目录）
+2. 按 env-init 的目录契约创建 `~/.career_wiki/` 知识、原始资料和应用状态目录
 3. 安装 Node 依赖（gray-matter 等）
 4. 写入配置文件
 
@@ -217,7 +217,7 @@ career-wiki-skill 在以下 Agent 工具中均可使用：
 |------|------|
 | Wiki 数据 | OKF v0.2 Markdown + YAML frontmatter + 标准 Markdown 链接 |
 | API Server | Node.js + gray-matter（纯 `node:http`，无框架） |
-| Web 前端 | React 18 + Vite + dnd-kit + Tailwind CSS + vis-network + html2pdf.js |
+| Web 前端 | React 18 + Vite + dnd-kit + Tailwind CSS + vis-network + html2canvas + jsPDF |
 | Python 脚本 | 环境检查（标准库） |
 | 导出格式 | PDF（按 A4 预览直接下载）/ HTML / JSON；知识层原生为 OKF |
 | 模板系统 | JSON 配置 + CSS 样式 |

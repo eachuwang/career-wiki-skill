@@ -20,7 +20,7 @@ Career-Wiki-Skill 的前端 React 应用，包含两个页面：
 1. **简历编辑器** — 内容编排区（按需添加/排序/编辑/删除）→ 右侧实时预览（按模板渲染）
 2. **Wiki 图谱** — vis-network 渲染实体关系图，点击节点查看详情，缺口分析
 
-**核心理念：** 前端是展示层，不做数据持久化。所有数据通过 resume-generator API server 获取，编辑覆盖和 Agent 生成的轻量润色结果都只存简历配置 JSON，不回写 Wiki。
+**核心理念：** React 页面只渲染快照并 dispatch 用户意图。`Resume Editing Session` 负责草稿、保存、切换、新建、复制、删除和异步润色合并事务；`Resume Projection` 负责所有展示规则。数据通过 resume-generator 获取，编辑覆盖和润色结果只存简历配置 JSON，不回写 Wiki。
 
 ## 何时触发
 
@@ -105,6 +105,9 @@ skills/web-editor/
     │   └── GraphCanvas.tsx      ← vis-network 图谱画布
     ├── api/
     │   └── client.ts            ← API client（封装 fetch 调用）
+    ├── resume/
+    │   ├── editingSession.ts    ← 草稿、持久化与异步合并事务
+    │   └── projection.ts        ← 预览与导出的唯一投影接口
     └── types/
         └── index.ts            ← TypeScript 类型定义
 ```
@@ -210,6 +213,10 @@ skills/web-editor/
 | 邮箱 | 首字母 + `***` + 域名 | wang@example.com → w***@example.com |
 
 用户在顶栏勾选脱敏开关，预览实时更新。导出时用同一份脱敏配置。
+
+## Resume Editing Session
+
+`src/resume/editingSession.ts` 的 `getSnapshot / subscribe / dispatch` 是简历编辑事务的唯一接口。React 页面通过命令表达修改、保存、切换、新建、复制、删除和生成润色；会话负责串行保存、失败保留草稿、破坏性操作保护，以及异步润色返回时合并请求期间的最新用户修改。
 
 ## 构建产物
 

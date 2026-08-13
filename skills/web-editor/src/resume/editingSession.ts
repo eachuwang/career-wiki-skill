@@ -1,4 +1,8 @@
-import type { ResumeConfig, ResumePolishConfig } from '../types';
+import type {
+  ResumeConfig,
+  ResumePolishField,
+  ResumePolishProviderConfig,
+} from '../types';
 
 export type ResumeSaveStatus = 'clean' | 'dirty' | 'saving' | 'saved' | 'failed';
 
@@ -31,20 +35,24 @@ export type ResumeDraftPatch = Partial<
 export type ResumeEditingSessionCommand =
   | { type: 'change-name'; name: string }
   | { type: 'edit-draft'; patch: ResumeDraftPatch }
-  | {
-      type: 'merge-polish-result';
-      requestResumeId: string;
-      polish: ResumePolishConfig | undefined;
-    }
   | { type: 'replace-resumes'; resumes: ResumeConfig[] }
   | { type: 'prepare-destructive-change' }
   | { type: 'switch-resume'; resumeId: string; discardDirty?: boolean }
+  | { type: 'create-resume'; config: ResumeConfig }
+  | { type: 'delete-current-resume' }
+  | {
+      type: 'generate-polish';
+      provider: ResumePolishProviderConfig;
+      only?: { path: string; field: ResumePolishField };
+      config?: ResumeConfig;
+    }
   | { type: 'save' };
 
 export type ResumeEditingSessionResult =
   | { status: 'updated' }
   | { status: 'saved' }
   | { status: 'switched' }
+  | { status: 'polished'; generatedCount: number; candidateCount: number }
   | { status: 'confirm-discard'; resumeId: string }
   | { status: 'ready'; hasUnsavedDraft: boolean }
   | { status: 'failed'; error: string };
@@ -52,6 +60,12 @@ export type ResumeEditingSessionResult =
 interface CreateResumeEditingSessionInput {
   resumes: ResumeConfig[];
   saveResume: (config: ResumeConfig) => Promise<void>;
+  deleteResume?: (id: string) => Promise<void>;
+  polishResume?: (
+    config: ResumeConfig,
+    provider: ResumePolishProviderConfig,
+    options?: { only?: { path: string; field: ResumePolishField } },
+  ) => Promise<{ config: ResumeConfig; generated_count: number; candidate_count: number }>;
 }
 
 export interface ResumeEditingSession {
@@ -71,6 +85,8 @@ function cloneValue<T>(value: T): T {
 export function createResumeEditingSession({
   resumes,
   saveResume,
+  deleteResume,
+  polishResume,
 }: CreateResumeEditingSessionInput): ResumeEditingSession {
   const initial = resumes[0] ? cloneValue(resumes[0]) : null;
   let snapshot: ResumeEditingSessionSnapshot = {
@@ -153,19 +169,6 @@ export function createResumeEditingSession({
         return { status: 'updated' };
       }
 
-      if (command.type === 'merge-polish-result') {
-        if (command.requestResumeId !== snapshot.currentResumeId) return { status: 'updated' };
-        const latestPolish = snapshot.draft?.polish;
-        editDraft({
-          polish: {
-            ...(command.polish || {}),
-            ...latestPolish,
-            entries: command.polish?.entries || latestPolish?.entries || {},
-          },
-        });
-        return { status: 'updated' };
-      }
-
       if (command.type === 'replace-resumes') {
         const nextResumes = command.resumes.map(cloneValue);
         update({ resumes: nextResumes });
@@ -204,13 +207,115 @@ export function createResumeEditingSession({
         return { status: 'switched' };
       }
 
-      saveRequested = true;
-      if (!activeSave) {
-        activeSave = runSaveQueue().finally(() => {
-          activeSave = null;
+      if (command.type === 'create-resume') {
+        if (activeSave) await activeSave;
+        const config = cloneValue(command.config);
+        try {
+          await saveResume(config);
+        } catch (cause) {
+          const error = cause instanceof Error ? cause.message : String(cause);
+          return { status: 'failed', error };
+        }
+        draftRevision += 1;
+        const nextResumes = [
+          ...snapshot.resumes.filter((resume) => resume.id !== config.id),
+          cloneValue(config),
+        ];
+        update({
+          resumes: nextResumes,
+          currentResumeId: config.id,
+          saved: cloneValue(config),
+          draft: cloneValue(config),
+          saveStatus: 'clean',
+          error: '',
         });
+        return { status: 'switched' };
       }
-      return activeSave;
+
+      if (command.type === 'delete-current-resume') {
+        if (activeSave) await activeSave;
+        if (!deleteResume) return { status: 'failed', error: '未配置简历删除操作' };
+        if (!snapshot.currentResumeId || snapshot.resumes.length <= 1) {
+          return { status: 'failed', error: '至少保留一份简历' };
+        }
+        const id = snapshot.currentResumeId;
+        try {
+          await deleteResume(id);
+        } catch (cause) {
+          const error = cause instanceof Error ? cause.message : String(cause);
+          return { status: 'failed', error };
+        }
+        const nextResumes = snapshot.resumes.filter((resume) => resume.id !== id);
+        const next = cloneValue(nextResumes[0]);
+        draftRevision += 1;
+        update({
+          resumes: nextResumes,
+          currentResumeId: next.id,
+          saved: next,
+          draft: cloneValue(next),
+          saveStatus: 'clean',
+          error: '',
+        });
+        return { status: 'switched' };
+      }
+
+      if (command.type === 'generate-polish') {
+        if (!polishResume) return { status: 'failed', error: '未配置 AI 润色操作' };
+        const requestConfig = cloneValue(command.config || snapshot.draft);
+        if (!requestConfig) return { status: 'failed', error: '没有可润色的简历草稿' };
+        const requestResumeId = requestConfig.id;
+        try {
+          const result = await polishResume(
+            requestConfig,
+            command.provider,
+            command.only ? { only: command.only } : undefined,
+          );
+          if (requestResumeId !== snapshot.currentResumeId) {
+            return {
+              status: 'polished',
+              generatedCount: result.generated_count,
+              candidateCount: result.candidate_count,
+            };
+          }
+          const latestPolish = snapshot.draft?.polish;
+          editDraft({
+            polish: {
+              ...(result.config.polish || {}),
+              ...latestPolish,
+              entries: result.config.polish?.entries || latestPolish?.entries || {},
+            },
+          });
+          saveRequested = true;
+          if (!activeSave) {
+            activeSave = runSaveQueue().finally(() => {
+              activeSave = null;
+            });
+          }
+          const saved = await activeSave;
+          if (saved.status === 'failed') return saved;
+          return {
+            status: 'polished',
+            generatedCount: result.generated_count,
+            candidateCount: result.candidate_count,
+          };
+        } catch (cause) {
+          const error = cause instanceof Error ? cause.message : String(cause);
+          return { status: 'failed', error };
+        }
+      }
+
+      if (command.type === 'save') {
+        saveRequested = true;
+        if (!activeSave) {
+          activeSave = runSaveQueue().finally(() => {
+            activeSave = null;
+          });
+        }
+        return activeSave;
+      }
+
+      const exhaustive: never = command;
+      return { status: 'failed', error: `不支持的编辑命令：${String(exhaustive)}` };
     },
   };
 }

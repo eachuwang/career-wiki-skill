@@ -399,7 +399,7 @@ export default function EditPanel({
           <div>
             <h2 className="pane-heading-title">内容编排</h2>
             <p className="pane-heading-description">
-              拖拽排序 · 点击展开编辑 · 覆盖不回写 wiki
+              拖拽排序 · 点击展开编辑 · 仅影响当前简历预览和导出
             </p>
           </div>
           <ModulePicker

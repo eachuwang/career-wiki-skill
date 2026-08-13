@@ -4,6 +4,7 @@ import {
   createResumeConfig,
   getHiddenItemIds,
   getModuleContentOverrides,
+  reconcileModuleSelection,
   updateContentOverride,
 } from './config.ts';
 
@@ -185,4 +186,43 @@ test('字段恢复为当前继承值时移除冗余手动覆盖', () => {
       responsibilities: '仍需保留的职责。',
     },
   });
+});
+
+test('模块选择器取消勾选只移除当前简历模块，并保留其他模块状态', () => {
+  const currentModules = [
+    {
+      id: 'module-project',
+      type: 'project' as const,
+      label: '项目经验',
+      expanded: true,
+      overrides: { 'projects/demo.md': { description: '当前简历版本' } },
+      hiddenItemIds: ['projects/hidden.md'],
+    },
+    {
+      id: 'module-experience',
+      type: 'experience' as const,
+      label: '工作经历',
+      expanded: false,
+      overrides: {},
+      hiddenItemIds: [],
+    },
+  ];
+
+  const nextModules = reconcileModuleSelection(
+    currentModules,
+    ['project', 'education'],
+    (type) => ({
+      id: `module-${type}`,
+      type,
+      label: type,
+      expanded: false,
+      overrides: {},
+      hiddenItemIds: [],
+    }),
+  );
+
+  assert.deepEqual(nextModules.map((module) => module.type), ['project', 'education']);
+  assert.equal(nextModules[0], currentModules[0]);
+  assert.deepEqual(nextModules[0].overrides, currentModules[0].overrides);
+  assert.deepEqual(nextModules[0].hiddenItemIds, currentModules[0].hiddenItemIds);
 });

@@ -165,7 +165,7 @@ export async function polishResume(
   );
 }
 
-/** 从 OpenAI-compatible provider 拉取模型列表。 */
+/** 从 OpenAI-compatible provider 拉取模型列表；Anthropic Messages 需手动填写模型。 */
 export async function getPolishModels(
   provider: ResumePolishProviderConfig,
 ): Promise<string[]> {

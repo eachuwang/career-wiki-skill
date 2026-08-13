@@ -1,5 +1,9 @@
 import { useEffect, useState } from 'react';
-import type { ResumePolishField, ResumePolishProviderConfig } from '../types';
+import type {
+  ResumePolishField,
+  ResumePolishProtocol,
+  ResumePolishProviderConfig,
+} from '../types';
 import { DEFAULT_POLISH_FIELDS, POLISH_FIELD_OPTIONS } from '../resume/polish';
 
 interface PolishProviderSettingsProps {
@@ -14,7 +18,7 @@ interface PolishProviderSettingsProps {
   onFetchModels: (provider: ResumePolishProviderConfig) => void;
 }
 
-/** OpenAI-compatible provider 配置；API Key 仅由父层保存到浏览器本地，不进入简历配置。 */
+/** 模型 provider 配置；请求协议由用户明确选择，API Key 仅由父层保存到浏览器本地。 */
 export default function PolishProviderSettings({
   provider,
   selectedFields = DEFAULT_POLISH_FIELDS,
@@ -50,10 +54,26 @@ export default function PolishProviderSettings({
       <div className="polish-provider-settings-header">
         <div>
           <h2>AI 润色模型</h2>
-          <p>兼容 OpenAI API 的 Base URL、Key 和模型名称</p>
+          <p>{draft.protocol === 'anthropic'
+            ? 'Anthropic Messages 协议，模型名称需手动填写'
+            : 'OpenAI-compatible 协议，可拉取模型列表'}</p>
         </div>
         <button type="button" className="polish-settings-close" onClick={onClose} aria-label="关闭模型配置">×</button>
       </div>
+
+      <label className="polish-settings-field">
+        <span>AI 润色协议</span>
+        <select
+          value={draft.protocol}
+          onChange={(event) => setDraft((current) => ({
+            ...current,
+            protocol: event.target.value as ResumePolishProtocol,
+          }))}
+        >
+          <option value="openai">OpenAI-compatible</option>
+          <option value="anthropic">Anthropic Messages</option>
+        </select>
+      </label>
 
       <div className="polish-field-settings">
         <div className="polish-field-settings-title">润色内容</div>
@@ -84,7 +104,15 @@ export default function PolishProviderSettings({
 
       <label className="polish-settings-field">
         <span>Base URL</span>
-        <input value={draft.base_url} onChange={(event) => update('base_url', event.target.value)} placeholder="https://api.openai.com/v1" spellCheck={false} autoComplete="url" />
+        <input
+          value={draft.base_url}
+          onChange={(event) => update('base_url', event.target.value)}
+          placeholder={draft.protocol === 'anthropic'
+            ? 'https://api.anthropic.com'
+            : 'https://api.openai.com/v1'}
+          spellCheck={false}
+          autoComplete="url"
+        />
       </label>
       <label className="polish-settings-field">
         <span>API Key</span>
@@ -92,7 +120,14 @@ export default function PolishProviderSettings({
       </label>
       <label className="polish-settings-field">
         <span>模型</span>
-        <input value={draft.model} onChange={(event) => update('model', event.target.value)} list="polish-model-options" placeholder="手动填写，或点击拉取模型" spellCheck={false} autoComplete="off" />
+        <input
+          value={draft.model}
+          onChange={(event) => update('model', event.target.value)}
+          list="polish-model-options"
+          placeholder={draft.protocol === 'anthropic' ? '手动填写模型名称' : '手动填写，或点击拉取模型'}
+          spellCheck={false}
+          autoComplete="off"
+        />
         <datalist id="polish-model-options">
           {models.map((model) => <option value={model} key={model} />)}
         </datalist>
@@ -114,8 +149,13 @@ export default function PolishProviderSettings({
       </label>
 
       <div className="polish-settings-actions">
-        <button type="button" className="toolbar-button ghost compact" disabled={loadingModels} onClick={() => onFetchModels(draft)}>
-          {loadingModels ? '拉取中…' : '拉取模型'}
+        <button
+          type="button"
+          className="toolbar-button ghost compact"
+          disabled={loadingModels || draft.protocol === 'anthropic'}
+          onClick={() => onFetchModels(draft)}
+        >
+          {loadingModels ? '拉取中…' : draft.protocol === 'anthropic' ? 'Anthropic 不支持拉取' : '拉取模型'}
         </button>
         <button type="button" className="toolbar-button primary compact" onClick={() => onSave(draft, draftSelectedFields)}>保存配置</button>
       </div>

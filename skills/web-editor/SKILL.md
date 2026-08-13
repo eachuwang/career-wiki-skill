@@ -160,7 +160,7 @@ skills/web-editor/
 |------|------|------|
 | PDF | `html2pdf.js` | 将 `.print-area` 的 A4 预览在浏览器端生成并直接下载，不调用打印对话框 |
 | HTML | `Blob` 下载 | 取 `.print-area` 的 outerHTML，包成完整 HTML 文件下载 |
-| JSON | API server | 调 `/api/resume/export` 接口，后端组装结构化简历 JSON |
+| JSON | `ResumeView` Blob | 浏览器直接序列化与预览相同的 Resume Projection 结果 |
 
 ## Wiki 图谱页面
 
@@ -190,18 +190,18 @@ skills/web-editor/
 | GET | `/api/wiki/:entity/:id` | 获取单个实体详情 |
 | GET | `/api/resumes` | 获取所有简历配置 |
 | GET | `/api/templates` | 获取所有模板 |
-| POST | `/api/resume/generate` | 生成结构化简历 JSON |
 | POST | `/api/resume/polish-context` | 提供 Agent 润色所需的原始事实和用户口吻样本 |
 | POST | `/api/resume/polish` | 生成当前简历的 AI 润色结果 |
 | POST | `/api/resume/polish-models` | 拉取用户配置 provider 的模型列表 |
 | POST | `/api/resume/save` | 保存简历配置 |
-| POST | `/api/resume/export` | 导出简历（JSON 格式） |
 | PUT | `/api/wiki/refresh` | 触发 wiki 重新 compile |
 | GET | `/api/health` | 健康检查 |
 
-## 脱敏实现
+## Resume Projection
 
-前端预览时实时脱敏（对应 F07 决议 Q16 选 C）。脱敏逻辑在 `PreviewPanel.tsx` 的 `maskValue()` 函数中：
+`src/resume/projection.ts` 的 `projectResume({ wiki, config, template })` 是简历展示规则的唯一接口。固定顺序为：选择模块 → 应用有效润色 → 手动覆盖 → 隐藏条目/字段 → 排序/强调 → 隐私 → 分组。`PreviewPanel`、HTML、PDF 和 JSON 只消费最终 `ResumeView`。
+
+脱敏在 Resume Projection 中执行：
 
 | 字段 | 规则 | 示例 |
 |------|------|------|

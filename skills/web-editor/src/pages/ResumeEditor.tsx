@@ -6,7 +6,7 @@
  * 顶栏：简历名称 | 模板选择 | 脱敏设置 | 导出PDF | 导出HTML | 导出JSON | 保存
  */
 
-import { useState, useEffect, useRef, useSyncExternalStore } from 'react';
+import { useState, useEffect, useMemo, useRef, useSyncExternalStore } from 'react';
 import {
   DndContext,
   type DragEndEvent,
@@ -55,10 +55,12 @@ import {
 import { createResumeEditingSession } from '../resume/editingSession';
 import { toggleHiddenItem } from '../resume/visibility';
 import { applyPolishToEntities, getSelectedPolishFields, DEFAULT_POLISH_FIELDS } from '../resume/polish';
+import { projectResume } from '../resume/projection';
 import {
   buildStandaloneResumeHtml,
   collectDocumentCss,
   createResumePdfBlob,
+  createResumeJsonBlob,
   saveExportBlob,
 } from '../resume/export';
 
@@ -299,6 +301,12 @@ export default function ResumeEditor({
   const resumeWikiEntities = applyPolishToEntities(
     wikiEntities,
     polishEnabled ? polish : { ...(polish || {}), enabled: false },
+  );
+  const resumeView = useMemo(
+    () => draft
+      ? projectResume({ wiki: wikiEntities, config: draft, template: currentTemplate })
+      : null,
+    [currentTemplate, draft, wikiEntities],
   );
 
   // ---------- 模板管理（原 template-manager 能力） ----------
@@ -637,8 +645,8 @@ export default function ResumeEditor({
     }
 
     if (format === 'json') {
-      if (!draft) throw new Error('没有可导出的简历草稿');
-      const blob = await api.exportResumeJson(draft);
+      if (!resumeView) throw new Error('没有可导出的简历视图');
+      const blob = createResumeJsonBlob(resumeView);
       return saveExportBlob({
         blob,
         filename: fullFilename,
@@ -820,18 +828,17 @@ export default function ResumeEditor({
 
           {/* 右侧预览 */}
           <div className="preview-pane">
-            <PreviewPanel
-              modules={modules}
-              wikiEntities={resumeWikiEntities}
-              template={currentTemplate}
-              privacy={privacy}
-              resumeName={resumeName}
-              onOpenExport={() => {
-                setPolishSettingsOpen(false);
-                setPrivacySettingsOpen(false);
-                setExportDialogOpen(true);
-              }}
-            />
+            {resumeView && (
+              <PreviewPanel
+                view={resumeView}
+                template={currentTemplate}
+                onOpenExport={() => {
+                  setPolishSettingsOpen(false);
+                  setPrivacySettingsOpen(false);
+                  setExportDialogOpen(true);
+                }}
+              />
+            )}
           </div>
         </div>
       </div>

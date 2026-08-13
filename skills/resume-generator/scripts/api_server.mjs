@@ -10,32 +10,33 @@
  *   PORT      — 监听端口，默认 3001
  *   WIKI_ROOT — 数据目录根路径，默认读 ~/.career_wiki/.career-wiki-skill/config.json 的 root，再 fallback 到 ~/.career_wiki/
  *
- * 16 个接口:
+ * 14 个接口:
  *   GET    /api/health              — 健康检查
  *   GET    /api/wiki                — 所有 wiki 实体
  *   GET    /api/wiki/:entity/:id    — 单个实体详情
  *   GET    /api/resumes             — 所有简历配置
  *   GET    /api/templates           — 所有模板
- *   POST   /api/resume/generate     — 按模板+配置生成结构化简历 JSON
  *   POST   /api/resume/polish-context — 为 Agent 准备简历润色上下文
  *   POST   /api/resume/polish         — 生成并返回当前简历的润色结果
- *   POST   /api/resume/export       — 导出 PDF/HTML/JSON
+ *   POST   /api/resume/polish-models  — 拉取 OpenAI-compatible 模型列表
  *   POST   /api/resume/save         — 保存简历配置
+ *   POST   /api/resume/delete       — 删除简历配置
+ *   POST   /api/template/save       — 保存模板 JSON/CSS
+ *   POST   /api/template/delete     — 删除模板 JSON/CSS
+ *   GET    /api/template/css        — 读取模板 CSS
  *   PUT    /api/wiki/refresh        — 触发 wiki 重新 compile（提示用户调 Agent）
  */
 
 import { createServer } from 'node:http';
 import { readFile, writeFile, readdir, stat, mkdir, unlink } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
-import { join, extname, basename, dirname } from 'node:path';
+import { join, extname } from 'node:path';
 import { homedir } from 'node:os';
-import { fileURLToPath } from 'node:url';
 import {
   CAREER_ENTITY_DIRECTORIES,
   loadCareerKnowledge,
 } from 'career-wiki-wiki-engine/career-knowledge';
 import {
-  applyPolish,
   buildPolishSourceHash,
   getPolishStatus,
   getSelectedPolishFields,
@@ -102,7 +103,7 @@ async function collectJson(dir) {
   return results;
 }
 
-/** 读取请求中的简历配置；统一 generate/export/polish 三类接口的配置入口。 */
+/** 读取润色请求中的简历配置。 */
 async function resolveResumeConfig(wikiRoot, body) {
   if (body.resume_id) {
     const configPath = join(resumesDirectory(wikiRoot), `${body.resume_id}.json`);
@@ -456,355 +457,6 @@ async function handleGetTemplates(wikiRoot, res) {
   sendJson(res, 200, { templates, total: templates.length });
 }
 
-// ── 核心：简历生成 ────────────────────────────────────
-
-/**
- * 数据组装核心函数
- * @param {object} config — 简历配置
- * @param {object} template — 模板配置 JSON
- * @param {string} wikiRoot — wiki 根路径
- * @returns {object} 结构化简历 JSON
- */
-async function assembleResume(config, template, wikiRoot) {
-  const knowledge = await loadCareerKnowledge(wikiRoot);
-  const sections = [];
-
-  // 简历配置的 modules 覆盖模板 sections 顺序
-  let orderedSections;
-  if (Array.isArray(config.modules) && config.modules.length > 0) {
-    // 按配置的 modules 顺序过滤模板 sections
-    orderedSections = config.modules
-      .map((mod) => template.sections.find((s) => s.module === mod))
-      .filter(Boolean);
-  } else {
-    orderedSections = template.sections || [];
-  }
-
-  for (const section of orderedSections) {
-    const module = section.module;
-    if (!Object.hasOwn(CAREER_ENTITY_DIRECTORIES, module)) continue;
-
-    // 解析所有该类实体
-    let items = [];
-    for (const ent of knowledge.entities.filter((entity) => entity.entity === module)) {
-      // 按 fields 配置抽取字段
-      const sectionFields = [...(section.fields || [])];
-      if (module === 'project') {
-        for (const field of ['responsibilities', 'tech_stack']) {
-          if (!sectionFields.includes(field)) sectionFields.push(field);
-        }
-      }
-      const polishEnabled = module === 'project' || module === 'experience';
-      const polished = polishEnabled
-        ? applyPolish(ent.fields, ent.path, config)
-        : { fields: ent.fields, status: null };
-      const contentOverride = config.content_overrides?.[ent.path];
-      const displayFields = contentOverride && typeof contentOverride === 'object'
-        ? { ...polished.fields, ...contentOverride }
-        : polished.fields;
-      const item = {};
-      for (const field of sectionFields) {
-        if (displayFields[field] !== undefined) {
-          item[field] = displayFields[field];
-        }
-      }
-      // 保留标准 Markdown concept links 供前端展示关系。
-      item._links = ent.links;
-      item._path = ent.path;
-      if (polished.status) item._polish = polished.status;
-      items.push(item);
-    }
-
-    // 排序
-    const orderDir = (config.order && config.order[module]) || section.order || 'desc';
-    const timeFields = ['start', 'end', 'date'];
-    items.sort((a, b) => {
-      let aTime = null;
-      let bTime = null;
-      for (const tf of timeFields) {
-        if (a[tf]) aTime = a[tf];
-        if (b[tf]) bTime = b[tf];
-      }
-      if (!aTime && !bTime) return 0;
-      if (!aTime) return 1;
-      if (!bTime) return -1;
-      const cmp = String(aTime).localeCompare(String(bTime));
-      return orderDir === 'asc' ? cmp : -cmp;
-    });
-
-    // emphasize — 强调项排前面
-    if (Array.isArray(config.emphasize)) {
-      const emph = config.emphasize.find((e) => e.module === module);
-      if (emph && Array.isArray(emph.items)) {
-        items.sort((a, b) => {
-          const aName = a.name || a.title || a.company || '';
-          const bName = b.name || b.title || b.company || '';
-          const aEmph = emph.items.some((i) => String(aName).includes(String(i)));
-          const bEmph = emph.items.some((i) => String(bName).includes(String(i)));
-          if (aEmph && !bEmph) return -1;
-          if (!aEmph && bEmph) return 1;
-          return 0;
-        });
-      }
-    }
-
-    // hide.items — 仅从当前简历排除实体，Wiki 文件保持不变
-    if (Array.isArray(config.hide)) {
-      const hideEntries = config.hide.filter((entry) => entry.module === module);
-      const hiddenItems = new Set(
-        hideEntries.flatMap((entry) =>
-          Array.isArray(entry.items) ? entry.items.map(String) : [],
-        ),
-      );
-      items = items.filter((item) => !hiddenItems.has(String(item._path)));
-
-      // hide.fields — 保留既有字段级隐藏能力
-      const hiddenFields = new Set(
-        hideEntries.flatMap((entry) =>
-          Array.isArray(entry.fields) ? entry.fields.map(String) : [],
-        ),
-      );
-      for (const field of hiddenFields) {
-        items.forEach((item) => delete item[field]);
-      }
-    }
-
-    // privacy — 脱敏
-    const privacy = config.privacy || {};
-    if (privacy.mask_phone || privacy.mask_email || privacy.mask_name) {
-      items = items.map((item) => {
-        const masked = { ...item };
-        if (privacy.mask_name && masked.name) {
-          masked.name = maskValue(masked.name, 'name');
-        }
-        if (privacy.mask_phone && masked.phone) {
-          masked.phone = maskValue(masked.phone, 'phone');
-        }
-        if (privacy.mask_email && masked.email) {
-          masked.email = maskValue(masked.email, 'email');
-        }
-        return masked;
-      });
-    }
-
-    // group_by 分组
-    if (section.group_by) {
-      const groups = {};
-      for (const item of items) {
-        const key = item[section.group_by] || '其他';
-        if (!groups[key]) groups[key] = [];
-        groups[key].push(item);
-      }
-      sections.push({
-        module,
-        title: section.title,
-        grouped: true,
-        group_by: section.group_by,
-        groups: Object.entries(groups).map(([key, groupItems]) => ({ key, items: groupItems })),
-      });
-    } else {
-      sections.push({
-        module,
-        title: section.title,
-        grouped: false,
-        items,
-      });
-    }
-  }
-
-  // person 单独处理（取第一个 person 实体）
-  let personData = null;
-  const personEntity = knowledge.entities.find((entity) => entity.entity === 'person');
-  if (personEntity) {
-    const ent = personEntity;
-      personData = {
-        ...ent.fields,
-        ...(config.content_overrides?.[ent.path] || {}),
-      };
-      personData._links = ent.links;
-      personData._path = ent.path;
-
-      // person 也应用脱敏
-      const privacy = config.privacy || {};
-      if (privacy.mask_name && personData.name) {
-        personData.name = maskValue(personData.name, 'name');
-      }
-      if (privacy.mask_phone && personData.phone) {
-        personData.phone = maskValue(personData.phone, 'phone');
-      }
-      if (privacy.mask_email && personData.email) {
-        personData.email = maskValue(personData.email, 'email');
-      }
-
-      // person 隐藏字段
-      if (Array.isArray(config.hide)) {
-        const hideEntry = config.hide.find((h) => h.module === 'person');
-        if (hideEntry && Array.isArray(hideEntry.fields)) {
-          for (const f of hideEntry.fields) {
-            delete personData[f];
-          }
-        }
-      }
-  }
-
-  // 统计实体数
-  let entityCount = 0;
-  for (const s of sections) {
-    entityCount += s.grouped
-      ? s.groups.reduce((sum, g) => sum + g.items.length, 0)
-      : s.items.length;
-  }
-
-  const polishSummary = sections.reduce(
-    (summary, section) => {
-      for (const item of section.grouped
-        ? section.groups.flatMap((group) => group.items)
-        : section.items) {
-        const status = item._polish?.status;
-        if (!status) continue;
-        summary.total += 1;
-        summary[status] = (summary[status] || 0) + 1;
-      }
-      return summary;
-    },
-    { enabled: config.polish?.enabled !== false, total: 0 },
-  );
-
-  return {
-    resume: {
-      name: config.name || '',
-      id: config.id || '',
-      template: config.template || template.id,
-    },
-    person: personData,
-    sections,
-    meta: {
-      generated_at: new Date().toISOString(),
-      entity_count: entityCount,
-      template: template.id,
-      resume_config: config.id || '',
-      polish: polishSummary,
-    },
-  };
-}
-
-/** 脱敏函数 */
-function maskValue(value, type) {
-  const str = String(value);
-  switch (type) {
-    case 'name':
-      if (str.length <= 1) return str[0] + '*';
-      return str[0] + '*'.repeat(str.length - 1);
-    case 'phone':
-      if (str.length < 4) return '****';
-      return str.slice(0, 3) + '****' + str.slice(-4);
-    case 'email':
-      const [name, domain] = str.split('@');
-      if (!domain) return '***';
-      return name[0] + '***@' + domain;
-    default:
-      return '***';
-  }
-}
-
-/** POST /api/resume/generate */
-async function handleGenerate(wikiRoot, res, body) {
-  let config;
-
-  // 读简历配置
-  if (body.resume_id) {
-    const configPath = join(resumesDirectory(wikiRoot), `${body.resume_id}.json`);
-    try {
-      const raw = await readFile(configPath, 'utf-8');
-      config = JSON.parse(raw);
-    } catch {
-      return sendJson(res, 404, { error: '简历配置不存在', id: body.resume_id });
-    }
-  } else if (body.config && typeof body.config === 'object') {
-    config = body.config;
-  } else {
-    return sendJson(res, 400, { error: '缺少 resume_id 或 config' });
-  }
-
-  // 读模板
-  const templateId = config.template;
-  if (!templateId) {
-    return sendJson(res, 400, { error: '简历配置缺少 template 字段' });
-  }
-  const templatePath = join(templatesDirectory(wikiRoot), `${templateId}.json`);
-  let template;
-  try {
-    const raw = await readFile(templatePath, 'utf-8');
-    template = JSON.parse(raw);
-  } catch {
-    return sendJson(res, 404, { error: '模板不存在', template: templateId });
-  }
-
-  // 组装
-  try {
-    const result = await assembleResume(config, template, wikiRoot);
-    sendJson(res, 200, result);
-  } catch (e) {
-    sendJson(res, 500, { error: '生成失败', message: e.message });
-  }
-}
-
-/** POST /api/resume/export */
-async function handleExport(wikiRoot, res, body) {
-  const format = body.format || 'json';
-
-  // 先生成简历 JSON（复用 generate 逻辑）
-  let config;
-  if (body.resume_id) {
-    const configPath = join(resumesDirectory(wikiRoot), `${body.resume_id}.json`);
-    try {
-      const raw = await readFile(configPath, 'utf-8');
-      config = JSON.parse(raw);
-    } catch {
-      return sendJson(res, 404, { error: '简历配置不存在', id: body.resume_id });
-    }
-  } else if (body.config && typeof body.config === 'object') {
-    config = body.config;
-  } else {
-    return sendJson(res, 400, { error: '缺少 resume_id 或 config' });
-  }
-
-  const templateId = config.template;
-  if (!templateId) {
-    return sendJson(res, 400, { error: '简历配置缺少 template 字段' });
-  }
-  const templatePath = join(templatesDirectory(wikiRoot), `${templateId}.json`);
-  let template;
-  try {
-    const raw = await readFile(templatePath, 'utf-8');
-    template = JSON.parse(raw);
-  } catch {
-    return sendJson(res, 404, { error: '模板不存在', template: templateId });
-  }
-
-  try {
-    const data = await assembleResume(config, template, wikiRoot);
-
-    if (format === 'json') {
-      return sendJson(res, 200, data);
-    }
-
-    // html / pdf — 返回数据 + 指令，前端负责渲染
-    return sendJson(res, 200, {
-      format,
-      data,
-      template_id: templateId,
-      css_path: `templates/${templateId}.css`,
-      instruction:
-        format === 'pdf'
-          ? '前端用模板 CSS 渲染 HTML 页面，用 window.print() 导出 PDF'
-          : '前端用模板 CSS 渲染 HTML 页面，保存为 .html 文件',
-    });
-  } catch (e) {
-    sendJson(res, 500, { error: '导出失败', message: e.message });
-  }
-}
-
 /** POST /api/resume/save */
 async function handleSave(wikiRoot, res, body) {
   const config = body.config || body;
@@ -989,11 +641,9 @@ async function handleRequest(req, wikiRoot, res) {
           'GET /api/wiki/:entity/:id',
           'GET /api/resumes',
           'GET /api/templates',
-          'POST /api/resume/generate',
           'POST /api/resume/polish-context',
           'POST /api/resume/polish',
           'POST /api/resume/polish-models',
-          'POST /api/resume/export',
           'POST /api/resume/save',
           'POST /api/resume/delete',
           'POST /api/template/save',
@@ -1037,12 +687,6 @@ async function handleRequest(req, wikiRoot, res) {
       return await handleGetTemplates(wikiRoot, res);
     }
 
-    // /api/resume/generate
-    if (method === 'POST' && segs[1] === 'resume' && segs[2] === 'generate') {
-      const body = await readBody(req);
-      return await handleGenerate(wikiRoot, res, body);
-    }
-
     // /api/resume/polish-context
     if (method === 'POST' && segs[1] === 'resume' && segs[2] === 'polish-context') {
       const body = await readBody(req);
@@ -1059,12 +703,6 @@ async function handleRequest(req, wikiRoot, res) {
     if (method === 'POST' && segs[1] === 'resume' && segs[2] === 'polish-models') {
       const body = await readBody(req);
       return await handlePolishModels(res, body);
-    }
-
-    // /api/resume/export
-    if (method === 'POST' && segs[1] === 'resume' && segs[2] === 'export') {
-      const body = await readBody(req);
-      return await handleExport(wikiRoot, res, body);
     }
 
     // /api/resume/save
@@ -1127,11 +765,9 @@ async function start() {
     console.log(`  GET  /api/wiki/:entity/:id`);
     console.log(`  GET  /api/resumes`);
     console.log(`  GET  /api/templates`);
-    console.log(`  POST /api/resume/generate`);
     console.log(`  POST /api/resume/polish-context`);
     console.log(`  POST /api/resume/polish`);
     console.log(`  POST /api/resume/polish-models`);
-    console.log(`  POST /api/resume/export`);
     console.log(`  POST /api/resume/save`);
     console.log(`  POST /api/resume/delete`);
     console.log(`  POST /api/template/save`);

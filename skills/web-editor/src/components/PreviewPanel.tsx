@@ -11,14 +11,11 @@ import { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } fr
 import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 import type {
-  ModuleInstance,
-  WikiEntity,
   TemplateConfig,
-  PrivacyConfig,
 } from '../types';
+import type { ResumeView, ResumeViewItem, ResumeViewSection } from '../resume/projection.ts';
 
 import { getResumeContactItems } from '../resume/contact';
-import { getVisibleEntities } from '../resume/visibility';
 import {
   A4_WIDTH_MM,
   A4_HEIGHT_MM,
@@ -30,11 +27,8 @@ import {
 import UiIcon from './UiIcon';
 
 interface PreviewPanelProps {
-  modules: ModuleInstance[];
-  wikiEntities: WikiEntity[];
+  view: ResumeView;
   template: TemplateConfig | null;
-  privacy: PrivacyConfig;
-  resumeName: string;
   onOpenExport: () => void;
 }
 
@@ -53,39 +47,6 @@ function getInitialZoom(): number {
   return Math.max(0.4, Math.min(0.72, (window.innerWidth - 40) / (A4_WIDTH_MM * 3.7795)));
 }
 
-/** 脱敏单个值 */
-function maskValue(field: string, value: unknown, privacy: PrivacyConfig): string {
-  const v = String(value || '');
-  if (!v) return '';
-
-  // phone
-  if (privacy.mask_phone && (field === 'phone' || /^\d{11}$/.test(v))) {
-    return v.length >= 7 ? `${v.slice(0, 3)}****${v.slice(-4)}` : v;
-  }
-  // email
-  if (privacy.mask_email && field === 'email') {
-    const at = v.indexOf('@');
-    return at > 0 ? `${v[0]}***${v.slice(at)}` : v;
-  }
-  // name
-  if (privacy.mask_name && field === 'name') {
-    return v.length > 1 ? `${v[0]}${'*'.repeat(v.length - 1)}` : v;
-  }
-  // company（与 name 独立开关）
-  if (privacy.mask_company && field === 'company') {
-    return '[公司已隐藏]';
-  }
-  // salary
-  if (privacy.mask_salary && field === 'salary') {
-    return '[薪资已隐藏]';
-  }
-  // github
-  if (privacy.mask_github && field === 'github') {
-    return '[GitHub已隐藏]';
-  }
-  return v;
-}
-
 /** 格式化日期：present → 至今，YYYY-MM → YYYY.MM，其他原样返回 */
 function formatDate(value: unknown): string {
   const s = String(value ?? '').trim();
@@ -95,53 +56,15 @@ function formatDate(value: unknown): string {
   return m ? `${m[1]}.${m[2]}` : s;
 }
 
-/** 日期排序键：用于按开始时间倒序，缺失的排最后 */
-function dateSortKey(value: unknown): number {
-  const s = String(value ?? '').trim();
-  if (!s) return -1;
-  if (s.toLowerCase() === 'present') return 999999;
-  const m = /^(\d{4})-(\d{2})/.exec(s);
-  return m ? Number(m[1]) * 100 + Number(m[2]) : -1;
-}
-
-/** 按模板 section 把一个模块渲染成可分页的内容块列表 */
+/** 把已完成领域规则处理的 ResumeView section 渲染成可分页内容块。 */
 function renderModuleBlocks(
-  module: ModuleInstance,
-  wikiData: WikiEntity[],
-  templateSections: TemplateConfig['sections'],
-  privacy: PrivacyConfig,
+  section: ResumeViewSection,
 ): ResumeBlock[] {
-  // 找模板里这个 module 的 section 配置
-  const section = templateSections.find((s) => s.module === module.type);
-  const title = section?.title || module.label;
-  // 模板未定义该模块时的兜底字段，避免条目只剩日期
-  const FALLBACK_FIELDS: Record<string, string[]> = {
-    summary: ['content'],
-    experience: ['company', 'role', 'start', 'end', 'description'],
-    project: ['name', 'role', 'start', 'end', 'description', 'responsibilities', 'tech_stack'],
-    education: ['school', 'degree', 'major', 'start', 'end'],
-  };
-  const fields = section?.fields?.length
-    ? [...section.fields]
-    : FALLBACK_FIELDS[module.type] || [];
-  if (module.type === 'project' && !fields.includes('responsibilities')) {
-    const descriptionIndex = fields.indexOf('description');
-    fields.splice(descriptionIndex >= 0 ? descriptionIndex + 1 : fields.length, 0, 'responsibilities');
-  }
-  if (module.type === 'project' && !fields.includes('tech_stack')) {
-    const responsibilitiesIndex = fields.indexOf('responsibilities');
-    fields.splice(responsibilitiesIndex >= 0 ? responsibilitiesIndex + 1 : fields.length, 0, 'tech_stack');
-  }
-
-  if (wikiData.length === 0) return [];
-
-  // 有开始时间的条目按时间倒序（工作经历、项目经验、教育背景）
-  const sorted =
-    section?.order === 'asc'
-      ? wikiData
-      : [...wikiData].sort(
-          (a, b) => dateSortKey(b.fields.start) - dateSortKey(a.fields.start),
-        );
+  const { fields, title } = section;
+  const items = section.grouped
+    ? (section.groups || []).flatMap((group) => group.items)
+    : section.items || [];
+  if (items.length === 0) return [];
 
   const blocks: ResumeBlock[] = [];
 
@@ -153,7 +76,7 @@ function renderModuleBlocks(
     blocks.push(
       title
         ? {
-            key: `${module.id}-head`,
+            key: `${section.module}-head`,
             node: (
               <div className="section-head">
                 <h2 className="section-title">{title}</h2>
@@ -167,24 +90,19 @@ function renderModuleBlocks(
   };
 
   // group_by 处理（技能按分类分组）
-  if (section?.group_by) {
-    const groups: Record<string, WikiEntity[]> = {};
-    for (const e of sorted) {
-      const key = String(e.fields[section.group_by] || '其他');
-      (groups[key] = groups[key] || []).push(e);
-    }
-    const items = Object.entries(groups).map(([cat, entities]) => ({
-      key: `${module.id}-group-${cat}`,
+  if (section.grouped) {
+    const groupedBlocks = (section.groups || []).map((group) => ({
+      key: `${section.module}-group-${group.key}`,
       node: (
         <div className="skill-group resume-skill-row">
           <div className="skill-group-title resume-skill-category">
-            {cat}
+            {group.key}
           </div>
           <div className="skill-tags resume-skill-list">
-            {entities
+            {group.items
               .map((entity) => {
-                const name = maskValue('name', entity.fields.name, privacy);
-                const level = maskValue('level', entity.fields.level, privacy);
+                const name = String(entity.fields.name || '');
+                const level = String(entity.fields.level || '');
                 return level ? `${name}（${level}）` : name;
               })
               .filter(Boolean)
@@ -193,21 +111,21 @@ function renderModuleBlocks(
         </div>
       ),
     }));
-    pushSection(items[0], items.slice(1));
+    pushSection(groupedBlocks[0], groupedBlocks.slice(1));
     return blocks;
   }
 
   // 单字段模块（如个人优势 content）：没有标题/副标题结构，直接按段落渲染
   if (fields.length === 1) {
-    const items = sorted.map((e, i) => ({
-      key: `${module.id}-summary-${e.path || i}`,
+    const summaryBlocks = items.map((e, i) => ({
+      key: `${section.module}-summary-${e.path || i}`,
       node: (
         <div className="entry resume-summary">
-          {maskValue(fields[0], e.fields[fields[0]], privacy)}
+          {String(e.fields[fields[0]] || '')}
         </div>
       ),
     }));
-    pushSection(items[0], items.slice(1));
+    pushSection(summaryBlocks[0], summaryBlocks.slice(1));
     return blocks;
   }
 
@@ -230,21 +148,21 @@ function renderModuleBlocks(
   // 细粒度分块：title+sub 独占一个 entry-lead 块，每个描述字段各自成块。
   // 跨页边界下移的只是单个描述字段（高度小），留白大幅缩小，第一页内容区
   // 被尽量填满；title+sub 块很小、极少跨页，不会孤行。
-  const headItems = sorted.map((e, i) => {
+  const headItems = items.map((e, i) => {
     const startText = formatDate(e.fields.start);
     const endText = formatDate(e.fields.end);
     const dateRange = startText ? `${startText} - ${endText || '至今'}` : endText;
     return {
-      key: `${module.id}-entry-${e.path || i}-head`,
+      key: `${section.module}-entry-${e.path || i}-head`,
       node: (
         <div className="entry entry-lead">
           <div className="entry-title">
-            {maskValue(titleField, e.fields[titleField], privacy)}
+            {String(e.fields[titleField] || '')}
           </div>
           <div className="entry-sub">
             <span className="entry-role">
               {subFields
-                .map((f) => maskValue(f, e.fields[f], privacy))
+                .map((f) => String(e.fields[f] || ''))
                 .filter(Boolean)
                 .join(' · ')}
             </span>
@@ -258,11 +176,11 @@ function renderModuleBlocks(
       ),
     };
   });
-  const descItem = (e: WikiEntity, i: number, f: string): ResumeBlock => ({
-    key: `${module.id}-entry-${e.path || i}-desc-${f}`,
+  const descItem = (e: ResumeViewItem, i: number, f: string): ResumeBlock => ({
+    key: `${section.module}-entry-${e.path || i}-desc-${f}`,
     node: (
       <div className="entry-desc entry-desc-block">
-        {module.type === 'project' && f === 'description' && (
+        {section.module === 'project' && f === 'description' && (
           <span className="entry-desc-label">项目描述：</span>
         )}
         {f === 'responsibilities' && (
@@ -271,12 +189,12 @@ function renderModuleBlocks(
         {f === 'tech_stack' && (
           <span className="entry-desc-label">技术栈：</span>
         )}
-        {maskValue(f, e.fields[f], privacy)}
+        {String(e.fields[f] || '')}
       </div>
     ),
   });
   const entryBlocks: ResumeBlock[] = [];
-  sorted.forEach((e, i) => {
+  items.forEach((e, i) => {
     entryBlocks.push(headItems[i]);
     descFields.forEach((f) => {
       if (e.fields[f] != null) entryBlocks.push(descItem(e, i, f));
@@ -287,11 +205,8 @@ function renderModuleBlocks(
 }
 
 export default function PreviewPanel({
-  modules,
-  wikiEntities,
+  view,
   template,
-  privacy,
-  resumeName,
   onOpenExport,
 }: PreviewPanelProps) {
   const [zoom, setZoom] = useState(getInitialZoom);
@@ -305,46 +220,25 @@ export default function PreviewPanel({
   }, []);
 
   const templateClass = template?.id || 'default';
-  // 稳定引用：避免每次渲染生成新数组导致分页 effect 反复触发
-  const templateSections = useMemo(() => template?.sections || [], [template]);
-
-  const previewHTML = useMemo(() => {
-    return modules.map((m) => {
-      const data = getVisibleEntities(
-        wikiEntities.filter((e) => e.entity === m.type),
-        m.hiddenItemIds,
-      );
-      // 应用用户覆盖
-      const merged = data.map((e) => ({
-        ...e,
-        fields: { ...e.fields, ...(m.overrides[e.path] || {}) },
-      }));
-      return { module: m, data: merged };
-    });
-  }, [modules, wikiEntities]);
-
   /** 生成全部可分页内容块（头部 + 各模块） */
   const blocks = useMemo(() => {
     const list: ResumeBlock[] = [];
-    if (modules.some((m) => m.type === 'person')) {
+    if (view.person) {
       list.push({
         key: 'person-header',
         node: (
           <ResumeHeader
-            personData={previewHTML.find((p) => p.module.type === 'person')?.data?.[0]}
-            privacy={privacy}
-            resumeName={resumeName}
+            personData={view.person}
+            resumeName={view.resume.name}
           />
         ),
       });
     }
-    for (const { module, data } of previewHTML.filter(
-      (p) => p.module.type !== 'person',
-    )) {
-      list.push(...renderModuleBlocks(module, data, templateSections, privacy));
+    for (const section of view.sections) {
+      list.push(...renderModuleBlocks(section));
     }
     return list;
-  }, [previewHTML, templateSections, privacy, resumeName, modules]);
+  }, [view]);
 
   // 测量容器与块元素的引用，供分页计算读取真实排版高度
   const measureRef = useRef<HTMLDivElement>(null);
@@ -513,11 +407,9 @@ export default function PreviewPanel({
 /** 简历头部（个人信息） */
 function ResumeHeader({
   personData,
-  privacy,
   resumeName,
 }: {
-  personData?: WikiEntity;
-  privacy: PrivacyConfig;
+  personData?: ResumeViewItem;
   resumeName: string;
 }) {
   if (!personData) {
@@ -527,9 +419,9 @@ function ResumeHeader({
   const contacts = getResumeContactItems(f);
   return (
     <header className="person-info resume-header">
-      <h1>{maskValue('name', f.name, privacy)}</h1>
+      <h1>{String(f.name || '')}</h1>
       <div className="resume-headline">
-        {maskValue('current_title', f.current_title, privacy)}
+        {String(f.current_title || '')}
       </div>
       <div className="resume-contact">
         {contacts.map((contact) => (
@@ -539,7 +431,7 @@ function ResumeHeader({
               size={13}
               className="resume-contact-icon"
             />
-            {maskValue(contact.field, contact.value, privacy)}
+            {String(contact.value || '')}
           </span>
         ))}
       </div>

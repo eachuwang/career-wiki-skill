@@ -68,7 +68,7 @@ async function waitForServer(baseUrl) {
   throw new Error('API 服务启动超时');
 }
 
-test('项目岗位职责和技术栈以独立字段进入简历结果', async (t) => {
+test('项目岗位职责和技术栈以独立字段进入 Career Knowledge 响应', async (t) => {
   const root = await createFixture();
   const port = 42000 + Math.floor(Math.random() * 1000);
   const baseUrl = `http://127.0.0.1:${port}`;
@@ -91,27 +91,6 @@ test('项目岗位职责和技术栈以独立字段进入简历结果', async (t
   );
   assert.equal(wiki.entities[0].fields.tech_stack, 'Node.js、PostgreSQL、LangChain');
 
-  const resumeResponse = await fetch(`${baseUrl}/api/resume/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      config: {
-        id: 'ai-resume',
-        name: 'AI 应用简历',
-        template: 'tech-minimal',
-        modules: ['project'],
-      },
-    }),
-  });
-  const resume = await resumeResponse.json();
-  assert.equal(
-    resume.sections[0].items[0].responsibilities,
-    '解析数据字典；生成 DDL 与 ETL 脚本；推荐数仓模型。',
-  );
-  assert.equal(
-    resume.sections[0].items[0].tech_stack,
-    'Node.js、PostgreSQL、LangChain',
-  );
 });
 
 test('润色上下文提供原始事实、口吻样本和稳定指纹', async (t) => {
@@ -150,77 +129,4 @@ test('润色上下文提供原始事实、口吻样本和稳定指纹', async (t
   assert.equal(context.candidates[0].status.status, 'missing');
   assert.ok(context.style_samples.some((sample) => sample.field === 'description'));
   assert.ok(context.instructions.rules.some((rule) => rule.includes('不补造事实')));
-});
-
-test('仅应用与当前 Wiki 原文匹配的润色结果，原文变化后自动回退', async (t) => {
-  const root = await createFixture();
-  const port = 44000 + Math.floor(Math.random() * 1000);
-  const baseUrl = `http://127.0.0.1:${port}`;
-  const server = spawn(process.execPath, ['scripts/api_server.mjs'], {
-    cwd: new URL('..', import.meta.url),
-    env: { ...process.env, WIKI_ROOT: root, PORT: String(port) },
-    stdio: 'ignore',
-  });
-  t.after(async () => {
-    server.kill('SIGTERM');
-    await rm(root, { recursive: true, force: true });
-  });
-  await waitForServer(baseUrl);
-
-  const contextResponse = await fetch(`${baseUrl}/api/resume/polish-context`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ config: { template: 'tech-minimal', modules: ['project'] } }),
-  });
-  const context = await contextResponse.json();
-  const candidate = context.candidates[0];
-  const config = {
-    id: 'polished-resume',
-    name: '润色简历',
-    template: 'tech-minimal',
-    modules: ['project'],
-    polish: {
-      entries: {
-        [candidate.path]: {
-          source_hash: candidate.source_hash,
-          fields: {
-            description: '围绕数据接入自动化，完成脚本生成能力建设。',
-            responsibilities: '负责解析数据字典，并生成 DDL 与 ETL 脚本。',
-          },
-        },
-      },
-    },
-  };
-
-  const appliedResponse = await fetch(`${baseUrl}/api/resume/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ config }),
-  });
-  const applied = await appliedResponse.json();
-  assert.equal(applied.sections[0].items[0].description, '围绕数据接入自动化，完成脚本生成能力建设。');
-  assert.equal(applied.sections[0].items[0]._polish.status, 'applied');
-
-  await writeFile(
-    join(root, 'knowledge', 'projects', 'data-agent.md'),
-    `---
-type: career.project
-name: 数据智能体
-role: 大模型应用工程师
-start: 2024-01
-end: present
-description: 自动生成数据接入脚本，并支持字段校验。
-responsibilities: 解析数据字典；生成 DDL 与 ETL 脚本；推荐数仓模型。
-tech_stack: Node.js、PostgreSQL、LangChain
----
-`,
-  );
-  const staleResponse = await fetch(`${baseUrl}/api/resume/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ config }),
-  });
-  const stale = await staleResponse.json();
-  assert.equal(stale.sections[0].items[0].description, '自动生成数据接入脚本，并支持字段校验。');
-  assert.equal(stale.sections[0].items[0]._polish.status, 'stale');
 });

@@ -109,29 +109,7 @@ test('生成润色接口返回可应用的非原文结果并开启润色状态',
   );
   assert.equal(result.config.polish.entries['projects/data-agent.md'].source_hash.length, 8);
 
-  const polishedResumeResponse = await fetch(`${baseUrl}/api/resume/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ config: result.config }),
-  });
-  const polishedResume = await polishedResumeResponse.json();
-  assert.equal(
-    polishedResume.sections[0].items[0].description,
-    result.config.polish.entries['projects/data-agent.md'].fields.description,
-  );
-
-  const originalResumeResponse = await fetch(`${baseUrl}/api/resume/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      config: {
-        ...result.config,
-        polish: { ...result.config.polish, enabled: false },
-      },
-    }),
-  });
-  const originalResume = await originalResumeResponse.json();
-  assert.equal(originalResume.sections[0].items[0].description, original);
+  assert.equal(result.config.polish.enabled, true);
 });
 
 test('润色内容选择只生成选中的字段，并保留其他已生成结果', async (t) => {

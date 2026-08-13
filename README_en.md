@@ -218,7 +218,7 @@ All SKILL.md files have passed the runtime compatibility scan with no single-age
 |-----------|------------|
 | Wiki data | OKF v0.2 Markdown + YAML frontmatter + standard Markdown links |
 | API server | Node.js + gray-matter (plain `node:http`, no framework) |
-| Web frontend | React 18 + Vite + dnd-kit + Tailwind CSS + vis-network + html2pdf.js |
+| Web frontend | React 18 + Vite + dnd-kit + Tailwind CSS + vis-network + html2canvas + jsPDF |
 | Python scripts | Environment checks using the standard library |
 | Export formats | PDF (directly from A4 preview) / HTML / JSON; the knowledge layer is native OKF |
 | Template system | JSON configuration + CSS styles |

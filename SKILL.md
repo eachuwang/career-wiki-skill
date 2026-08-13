@@ -157,7 +157,7 @@ git clone https://github.com/eachuwang/career-wiki-skill.git
 
 env-init skill 会：
 1. 检查 Node.js ≥ 18 / Python ≥ 3.9 / npm
-2. 创建 `~/.career_wiki/` 目录结构（knowledge/references/raw、knowledge/、.career-wiki-skill/resumes/、.career-wiki-skill/templates/ 等 16 个子目录）
+2. 按 env-init 的目录契约创建 `~/.career_wiki/` 知识、原始资料和应用状态目录
 3. 安装 Node 依赖（gray-matter 等）
 4. 写入配置文件
 
@@ -190,7 +190,7 @@ env-init skill 会：
 - [ ] file-parser 提取的 markdown 在 `knowledge/references/raw/uploads/` 下，原始文件在 `knowledge/references/uploads/`
 - [ ] wiki-engine compile 后 `knowledge/` 各子目录有页面
 - [ ] wiki-engine lint 无 error（warn 可接受）
-- [ ] resume-generator API server 可启动，9 个接口可调
+- [ ] resume-generator API server 可启动，根响应列出的 HTTP 契约全部可调
 - [ ] web-editor 前端可打开，拖拽/预览/导出功能正常
 - [ ] web-editor 多简历切换/新建/复制/删除正常，配置在 `.career-wiki-skill/resumes/` 下
 - [ ] web-editor 模板复制/删除正常，模板在 `.career-wiki-skill/templates/` 下
@@ -203,11 +203,11 @@ env-init skill 会：
 | 子 Skill | 文件 |
 |---------|------|
 | env-init | SKILL.md + scripts/env_check.py |
-| interview | SKILL.md |
+| interview | SKILL.md + project-contract.json |
 | file-parser | SKILL.md |
 | wiki-engine | SKILL.md + scripts/okf_bundle.mjs + scripts/delete_entity.mjs |
-| resume-generator | SKILL.md + scripts/api_server.mjs + package.json |
-| web-editor | SKILL.md + React 项目 + .career-wiki-skill/templates/（4 JSON + 4 CSS） |
+| resume-generator | SKILL.md + Node 模块 + package.json |
+| web-editor | SKILL.md + React 项目 + 内置模板 |
 
 ---
 

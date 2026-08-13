@@ -36,19 +36,9 @@ jobs:
         working-directory: skills
         run: npm ci
 
-      - name: Test wiki engine
+      - name: Test skill contracts and runtime
         working-directory: skills
-        run: npm run test:wiki-engine
-
-      - name: Test resume generator
-        working-directory: skills
-        run: npm run test:resume-generator
-
-      - name: Test interview skill
-        run: node --test skills/interview/tests/**/*.test.mjs
-
-      - name: Test environment initialization
-        run: node --test skills/env-init/tests/**/*.test.mjs
+        run: npm test
 
   web-editor:
     name: Web editor

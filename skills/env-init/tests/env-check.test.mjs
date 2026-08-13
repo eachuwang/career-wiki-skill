@@ -22,6 +22,8 @@ test('env-init 创建严格 OKF bundle 与隔离的应用状态目录', async ()
     assert.match(index, /okf_version: "0\.2"/);
     assert.equal(config.okf_version, '0.2');
     assert.equal(config.root, await realpath(root));
+    assert.equal(typeof config.created, 'string');
+    assert.ok(Number.isFinite(Date.parse(config.created)), 'created 应为合法 ISO 8601 时间');
     assert.match(stdout, /gray-matter 已安装/);
     assert.match(stdout, /仓库的 skills\/ 目录运行: npm install/);
   } finally {

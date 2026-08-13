@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "project": {
+    "fields": [
+      { "field": "name", "required": true, "question": "这个项目叫什么？" },
+      { "field": "experience", "required": true, "question": "这个项目属于哪家公司或组织？" },
+      { "field": "start", "required": true, "question": "这个项目从什么时候开始？" },
+      { "field": "end", "required": true, "question": "这个项目什么时候结束，还是仍在进行？" },
+      { "field": "role", "required": true, "question": "你在这个项目中的角色是什么？" },
+      { "field": "description", "required": true, "question": "这个项目主要解决什么问题？" },
+      { "field": "responsibilities", "required": true, "question": "你在这个项目中具体负责什么？" },
+      { "field": "tech_stack", "required": true, "question": "项目用到了哪些语言、框架、数据库、云服务或工具？" },
+      { "field": "challenges", "required": true, "question": "过程中遇到的主要困难或约束是什么？" },
+      { "field": "solutions", "required": true, "question": "你最终采用了什么解决方案？" },
+      { "field": "outcomes", "required": false, "question": "这个项目最终取得了什么结果？" },
+      { "field": "learnings", "required": false, "question": "如果重做一次，你最想改进什么？" },
+      { "field": "url", "required": false, "question": "这个项目有可以记录的链接吗？" }
+    ]
+  },
+  "questioning": {
+    "max_questions_per_turn": 1,
+    "advance_only_when_clear": true,
+    "retry_current_field_when_unclear": true
+  },
+  "archive": {
+    "preserve_verbatim": true
+  },
+  "resume": {
+    "excluded_by_default": ["challenges", "solutions", "outcomes", "learnings"]
+  }
+}

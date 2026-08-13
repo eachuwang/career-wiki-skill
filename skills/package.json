@@ -1,0 +1,14 @@
+{
+  "name": "career-wiki-runtime",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "wiki-engine",
+    "resume-generator"
+  ],
+  "scripts": {
+    "test:wiki-engine": "npm test --workspace career-wiki-wiki-engine",
+    "test:resume-generator": "npm test --workspace resume-generator",
+    "test": "npm run test:wiki-engine && npm run test:resume-generator"
+  }
+}

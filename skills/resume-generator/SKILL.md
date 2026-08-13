@@ -109,7 +109,7 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 
 ### 依赖
 
-- `gray-matter` — 解析 markdown frontmatter（仓库根 package.json 声明）
+- `career-wiki-wiki-engine` — 通过公开的 Career Knowledge 接口读取统一知识快照
 - Node 内置 `http` / `fs` / `path` — 不需要额外依赖
 
 ### 16 个接口
@@ -117,7 +117,7 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 | # | 方法 | 路径 | 说明 |
 |---|------|------|------|
 | 1 | GET | `/api/health` | 健康检查，返回目录信息及 OKF 校验错误 |
-| 2 | GET | `/api/wiki` | 所有 wiki 实体，读 knowledge/ 下所有 markdown，gray-matter 解析 frontmatter 返回 JSON |
+| 2 | GET | `/api/wiki` | 所有 wiki 实体，通过 Career Knowledge snapshot 返回 JSON |
 | 3 | GET | `/api/wiki/:entity/:id` | 单个实体详情，entity 是实体类型（persons/experiences/...），id 是文件名（不带 .md） |
 | 4 | GET | `/api/resumes` | 所有简历配置，读 .career-wiki-skill/resumes/ 目录下所有 .json |
 | 5 | GET | `/api/templates` | 所有模板，读 .career-wiki-skill/templates/ 目录下所有 .json |
@@ -178,13 +178,10 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 | activity | `knowledge/activities/` |
 | summary | `knowledge/summaries/` |
 
-### 步骤 4：解析严格 OKF concept 与标准 Markdown 链接
+### 步骤 4：读取统一 Career Knowledge snapshot
 
-对每个 markdown 文件用 `gray-matter` 解析：
-- frontmatter（YAML metadata）→ 提取实体字段（company/role/start/end/...）
-- 正文 content → 保留为 `content`；`description`、`responsibilities`、`tech_stack` 等简历字段必须显式位于 frontmatter
-
-提取正文中的标准 Markdown 链接，解析为 `{target, name, type}`。列表上下文 `- used_skill: [Python](/skills/python.md)` 中的 `used_skill` 是关系类型；没有关系上下文时使用 `references`。
+调用 `career-wiki-wiki-engine/career-knowledge` 的
+`loadCareerKnowledge(root, options)`。目录遍历、严格 OKF 解析、标准 Markdown 关系归一化与删除清单过滤均由该模块负责；resume-generator 不直接解析 frontmatter，也不读取 10 个实体目录。
 
 ### 步骤 5：按模板 schema 组装结构化简历 JSON
 
@@ -559,7 +556,7 @@ Agent 完成润色后，将结果保存到当前简历配置：
 
 - [ ] `skills/resume-generator/SKILL.md` 已创建
 - [ ] `skills/resume-generator/scripts/api_server.mjs` 已创建
-- [ ] `skills/resume-generator/package.json` 已创建（声明 gray-matter）
+- [ ] `skills/package.json` workspace 已安装，resume-generator 显式依赖 `career-wiki-wiki-engine`
 - [ ] API server 能启动：`node skills/resume-generator/scripts/api_server.mjs`
 - [ ] `GET /api/health` 返回 200 + 状态信息
 - [ ] `GET /api/wiki` 返回 wiki 实体列表（无数据时返回空数组）

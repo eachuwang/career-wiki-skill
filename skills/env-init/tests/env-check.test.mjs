@@ -11,7 +11,7 @@ const execFileAsync = promisify(execFile);
 test('env-init 创建严格 OKF bundle 与隔离的应用状态目录', async () => {
   const root = await mkdtemp(join(tmpdir(), 'career-env-init-'));
   try {
-    await execFileAsync('python3', ['scripts/env_check.py', '--root', root], {
+    const { stdout } = await execFileAsync('python3', ['scripts/env_check.py', '--root', root], {
       cwd: new URL('..', import.meta.url),
     });
     const index = await readFile(join(root, 'knowledge', 'index.md'), 'utf8');
@@ -22,6 +22,8 @@ test('env-init 创建严格 OKF bundle 与隔离的应用状态目录', async ()
     assert.match(index, /okf_version: "0\.2"/);
     assert.equal(config.okf_version, '0.2');
     assert.equal(config.root, await realpath(root));
+    assert.match(stdout, /gray-matter 已安装/);
+    assert.match(stdout, /仓库的 skills\/ 目录运行: npm install/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

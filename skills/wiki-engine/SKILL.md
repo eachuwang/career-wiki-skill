@@ -16,6 +16,12 @@ Career Wiki 的知识层是一个严格的 [Open Knowledge Format v0.2](https://
 
 ## 主流程
 
+### 读取职业知识
+
+简历、图谱和 HTTP adapter 统一通过 `scripts/career_knowledge.mjs` 的
+`loadCareerKnowledge(root, options)` 读取 Career concepts。该接口负责目录遍历、严格 OKF
+解析、关系归一化和删除清单过滤；消费者不得自行解析 frontmatter 或读取 10 个实体目录。
+
 ### 编译
 
 1. 读取 `.career-wiki-skill/deletions.json`。

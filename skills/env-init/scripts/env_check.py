@@ -130,9 +130,10 @@ def check_npm() -> tuple[bool, str]:
 
 
 def check_gray_matter() -> tuple[bool, str]:
-    """gray-matter 是 wiki 引擎的 Node 依赖，不达标会被 SKILL.md 的 npm install 步骤装上。
+    """gray-matter 是 skills workspace 中 wiki-engine 的 Node 依赖。
     这里只做信息性检查，不阻断。"""
-    rc, out, _ = run_cmd("npm list gray-matter 2>/dev/null")
+    skills_dir = Path(__file__).resolve().parents[2]
+    rc, out, _ = run_cmd(f'npm list --prefix "{skills_dir}" gray-matter --depth=0 2>/dev/null')
     if rc == 0 and "gray-matter" in out:
         return True, f"✅ gray-matter 已安装"
     return False, "⚠️  gray-matter 未安装（将由 npm install 自动安装）"
@@ -254,7 +255,7 @@ def main() -> int:
     print("环境检查完成")
     print("=" * 50)
     print(f"数据目录: {root}")
-    print(f"  -> 如果 gray-matter 未安装，请在仓库根目录运行: npm install")
+    print(f"  -> 如果 gray-matter 未安装，请在仓库的 skills/ 目录运行: npm install")
     print(f"  -> 环境就绪，可以开始用采访 skill（F02）或文件解析 skill（F03）了")
     return 0
 

@@ -67,7 +67,7 @@ category: career-wiki-skill
    `knowledge/` 是可独立交换的 OKF v0.2 bundle；脚本必须同时创建根 `knowledge/index.md` 并声明 `okf_version: "0.2"`。简历、模板、配置、备份等应用状态只能放在 `.career-wiki-skill/`，不得混入 bundle。
 
 4. **npm install**
-   - 在 career-wiki-skill 仓库根目录运行 `npm install`（装 wiki 引擎用的 Node 依赖，如 gray-matter）
+   - 在 career-wiki-skill 仓库的 `skills/` 目录运行 `npm install`（安装 wiki-engine 与 resume-generator workspace 依赖）
    - 如果 `package.json` 不存在，跳过这一步并提示用户
 
 5. **提示用户**

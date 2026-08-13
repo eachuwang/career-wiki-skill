@@ -143,7 +143,6 @@ export function createResumePolishWorkflow({
     error: '',
   };
   const listeners = new Set<() => void>();
-  let errorTimer: ReturnType<typeof setTimeout> | null = null;
 
   const update = (changes: Partial<ResumePolishWorkflowSnapshot>) => {
     snapshot = { ...snapshot, ...changes };
@@ -151,16 +150,7 @@ export function createResumePolishWorkflow({
   };
 
   const setError = (error: string) => {
-    if (errorTimer) clearTimeout(errorTimer);
     update({ error });
-    if (error) {
-      errorTimer = setTimeout(() => {
-        errorTimer = null;
-        update({ error: '' });
-      }, 6000);
-      // Node's test runner should not stay alive just because a UI feedback timer is pending.
-      (errorTimer as unknown as { unref?: () => void }).unref?.();
-    }
   };
 
   const saveDraft = async (
@@ -264,7 +254,12 @@ export function createResumePolishWorkflow({
         return { status: 'needs-config', error };
       }
 
-      return generate(snapshot.provider);
+      const requestConfig = createConfigWithPolish(draft, {
+        ...(polish || {}),
+        enabled: true,
+        selected_fields: getSelectedPolishFields(polish),
+      });
+      return generate(snapshot.provider, undefined, requestConfig);
     },
     async saveProvider(provider, selectedFields) {
       if (selectedFields.length === 0) {

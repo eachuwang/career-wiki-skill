@@ -78,6 +78,10 @@ function cloneValue<T>(value: T): T {
   return structuredClone(value);
 }
 
+function equalValue(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
 /**
  * 当前简历编辑会话：集中保存版本、草稿与持久化状态。
  * React 只通过 dispatch 表达用户意图，并从 snapshot 渲染结果。
@@ -261,6 +265,7 @@ export function createResumeEditingSession({
 
       if (command.type === 'generate-polish') {
         if (!polishResume) return { status: 'failed', error: '未配置 AI 润色操作' };
+        const polishAtRequestStart = cloneValue(snapshot.draft?.polish);
         const requestConfig = cloneValue(command.config || snapshot.draft);
         if (!requestConfig) return { status: 'failed', error: '没有可润色的简历草稿' };
         const requestResumeId = requestConfig.id;
@@ -278,12 +283,15 @@ export function createResumeEditingSession({
             };
           }
           const latestPolish = snapshot.draft?.polish;
+          const polishChangedWhileGenerating = !equalValue(latestPolish, polishAtRequestStart);
           editDraft({
-            polish: {
-              ...(result.config.polish || {}),
-              ...latestPolish,
-              entries: result.config.polish?.entries || latestPolish?.entries || {},
-            },
+            polish: polishChangedWhileGenerating
+              ? {
+                  ...(result.config.polish || {}),
+                  ...latestPolish,
+                  entries: result.config.polish?.entries || latestPolish?.entries || {},
+                }
+              : result.config.polish,
           });
           saveRequested = true;
           if (!activeSave) {

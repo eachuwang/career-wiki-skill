@@ -313,3 +313,46 @@ test('异步润色合并请求期间的用户修改，并将合并后的最新�
     '润色后的项目描述',
   );
 });
+
+test('润色请求携带显式开关时，在用户未改润色选项的情况下采用请求结果', async () => {
+  const session = createResumeEditingSession({
+    resumes: [resume({ polish: { enabled: false, selected_fields: ['description'], entries: {} } })],
+    saveResume: async () => {},
+    polishResume: async (config) => ({
+      config: {
+        ...config,
+        polish: {
+          ...(config.polish || {}),
+          entries: {
+            'projects/mail.md': {
+              source_hash: 'abc',
+              fields: { description: '润色后的项目描述' },
+            },
+          },
+        },
+      },
+      generated_count: 1,
+      candidate_count: 1,
+    }),
+  });
+
+  await session.dispatch({
+    type: 'generate-polish',
+    provider: {
+      protocol: 'openai',
+      base_url: 'https://example.com/v1',
+      api_key: 'key',
+      model: 'model',
+      timeout_ms: 1000,
+    },
+    config: resume({
+      polish: { enabled: true, selected_fields: ['description'], entries: {} },
+    }),
+  });
+
+  assert.equal(session.getSnapshot().draft?.polish?.enabled, true);
+  assert.equal(
+    session.getSnapshot().draft?.polish?.entries?.['projects/mail.md']?.fields.description,
+    '润色后的项目描述',
+  );
+});

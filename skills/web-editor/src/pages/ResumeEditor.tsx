@@ -1,7 +1,7 @@
 /**
  * ResumeEditor — 简历编辑器页面
  *
- * 布局：顶栏 + 左侧模块库 + 中间编辑区 + 右侧预览
+ * 布局：顶栏 + 内容编排区 + 右侧预览
  *
  * 顶栏：简历名称 | 模板选择 | 脱敏设置 | 导出PDF | 导出HTML | 导出JSON | 保存
  */
@@ -10,8 +10,6 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   DndContext,
   type DragEndEvent,
-  type DragStartEvent,
-  DragOverlay,
   PointerSensor,
   useSensor,
   useSensors,
@@ -19,7 +17,6 @@ import {
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 
-import ModuleLibrary from '../components/ModuleLibrary';
 import EditPanel from '../components/EditPanel';
 import PreviewPanel from '../components/PreviewPanel';
 import ExportDialog, {
@@ -124,7 +121,6 @@ export default function ResumeEditor({
     mask_github: false,
   });
   const [modules, setModules] = useState<ModuleInstance[]>([]);
-  const [activeDrag, setActiveDrag] = useState<{ id: string; type: string } | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState('');
   const [workspaceView, setWorkspaceView] = useState<'edit' | 'preview'>('edit');
@@ -368,43 +364,9 @@ export default function ResumeEditor({
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
 
-  const handleDragStart = (e: DragStartEvent) => {
-    setActiveDrag({ id: String(e.active.id), type: String(e.active.data.current?.source) });
-  };
-
   const handleDragEnd = (e: DragEndEvent) => {
-    setActiveDrag(null);
     const { active, over } = e;
     if (!over) return;
-
-    // 从模块库拖入编辑区
-    // 注意：编辑区非空时，useSortable 让每个模块卡片也成为 droppable，
-    // closestCorners 会把 over 解析成卡片而非 edit-area 容器，
-    // 所以这里必须同时处理两种落点，否则第二个模块永远拖不进来。
-    if (active.data.current?.source === 'library') {
-      const moduleType = active.data.current?.moduleType as EntityType;
-      const def = MODULE_LIBRARY.find((m) => m.type === moduleType);
-      if (!def) return;
-      const newModule: ModuleInstance = {
-        id: genId(),
-        type: moduleType,
-        label: def.label,
-        expanded: false,
-        overrides: {},
-        hiddenItemIds: [],
-      };
-      setModules((prev) => {
-        // 落在某个已有模块上 → 插入到它前面；落在空白处 → 追加到末尾
-        const overIndex = prev.findIndex((m) => m.id === over.id);
-        if (overIndex >= 0) {
-          const next = [...prev];
-          next.splice(overIndex, 0, newModule);
-          return next;
-        }
-        return [...prev, newModule];
-      });
-      return;
-    }
 
     // 编辑区内排序
     if (active.id !== over.id) {
@@ -414,6 +376,28 @@ export default function ResumeEditor({
         setModules((prev) => arrayMove(prev, oldIndex, newIndex));
       }
     }
+  };
+
+  const handleModuleSelection = (types: EntityType[]) => {
+    const selectedTypes = new Set(types);
+    setModules((prev) => {
+      const retainedModules = prev.filter((module) => selectedTypes.has(module.type));
+      const existingTypes = new Set(retainedModules.map((module) => module.type));
+      const newModules = types
+        .filter((type) => !existingTypes.has(type))
+        .map((type) => {
+          const def = MODULE_LIBRARY.find((module) => module.type === type);
+          return {
+            id: genId(),
+            type,
+            label: def?.label || type,
+            expanded: false,
+            overrides: {},
+            hiddenItemIds: [],
+          };
+        });
+      return [...retainedModules, ...newModules];
+    });
   };
 
   // ---------- 模块操作 ----------
@@ -721,7 +705,6 @@ export default function ResumeEditor({
     <DndContext
       sensors={sensors}
       collisionDetection={closestCorners}
-      onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
       <div className="h-full flex flex-col">
@@ -831,16 +814,12 @@ export default function ResumeEditor({
 
         {/* 三栏布局 */}
         <div className={`editor-workspace workspace-view-${workspaceView}`}>
-          {/* 左侧模块库 */}
-          <div className="library-pane no-print">
-            <ModuleLibrary />
-          </div>
-
           {/* 中间编辑区 */}
           <div className="edit-pane no-print">
             <EditPanel
               modules={modules}
               wikiEntities={resumeWikiEntities}
+              onAddModules={handleModuleSelection}
               onReorder={handleReorderModule}
               onToggleExpand={handleToggleExpand}
               onOverrideField={handleOverrideField}
@@ -869,15 +848,6 @@ export default function ResumeEditor({
           </div>
         </div>
       </div>
-
-      {/* 拖拽 overlay */}
-      <DragOverlay>
-        {activeDrag ? (
-          <div className="drag-overlay-card">
-            <UiIcon name="grip" size={18} /> 拖拽中：{activeDrag.type}
-          </div>
-        ) : null}
-      </DragOverlay>
 
       <ExportDialog
         open={exportDialogOpen}

@@ -1,7 +1,7 @@
 /**
  * EditPanel — 中间编辑区
  *
- * 接收从左侧拖入的模块，支持：
+ * 管理已加入编排区的模块，支持：
  * - 拖拽排序（dnd-kit sortable）
  * - 展开/折叠
  * - 编辑覆盖字段（不回写 wiki，只存简历配置）
@@ -20,11 +20,13 @@ import { getOrderedEntityFieldEntries } from '../resume/fields';
 import { getSelectedPolishFields } from '../resume/polish';
 import type { ModuleInstance, WikiEntity, EntityType, ResumePolishConfig, ResumePolishField } from '../types';
 import { ENTITY_LABELS } from '../types';
+import ModulePicker from './ModulePicker';
 import UiIcon from './UiIcon';
 
 interface EditPanelProps {
   modules: ModuleInstance[];
   wikiEntities: WikiEntity[];
+  onAddModules: (types: EntityType[]) => void;
   onReorder: (oldIndex: number, newIndex: number) => void;
   onToggleExpand: (id: string) => void;
   onOverrideField: (moduleId: string, itemPath: string, field: string, value: unknown) => void;
@@ -375,6 +377,7 @@ function FieldEditor({
 export default function EditPanel({
   modules,
   wikiEntities,
+  onAddModules,
   onReorder,
   onToggleExpand,
   onOverrideField,
@@ -392,10 +395,18 @@ export default function EditPanel({
   return (
     <div className="h-full flex flex-col">
       <div className="pane-heading">
-        <h2 className="pane-heading-title">内容编排</h2>
-        <p className="pane-heading-description">
-          拖拽排序 · 点击展开编辑 · 覆盖不回写 wiki
-        </p>
+        <div className="pane-heading-row">
+          <div>
+            <h2 className="pane-heading-title">内容编排</h2>
+            <p className="pane-heading-description">
+              拖拽排序 · 点击展开编辑 · 覆盖不回写 wiki
+            </p>
+          </div>
+          <ModulePicker
+            addedTypes={modules.map((module) => module.type)}
+            onAdd={onAddModules}
+          />
+        </div>
       </div>
       <div
         ref={setNodeRef}
@@ -407,10 +418,10 @@ export default function EditPanel({
           <div className="edit-drop-empty" data-over={isOver}>
             <div className="empty-state-icon"><UiIcon name="file" size={24} /></div>
             <div className="text-sm">
-              将左侧模块拖到这里开始编排
+              从这里开始搭建简历内容
             </div>
             <div className="text-xs opacity-70">
-              可添加工作经历、项目经验、技能等模块
+              点击右上角「添加模块」，勾选需要的模块
             </div>
           </div>
         ) : (

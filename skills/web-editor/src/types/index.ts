@@ -178,7 +178,7 @@ export interface ResumeConfig {
   notes?: string;
 }
 
-// ---------- 简历模块定义（左侧模块库） ----------
+// ---------- 简历模块定义（按需添加） ----------
 
 /** 模块库里的一个模块类型 */
 export interface ModuleDef {
@@ -236,7 +236,7 @@ export interface ApiError {
   message?: string;
 }
 
-// ---------- 可拖拽模块库（10 个模块） ----------
+// ---------- 可添加模块（10 个模块） ----------
 
 export const MODULE_LIBRARY: ModuleDef[] = [
   { type: 'person', label: '个人信息', description: '姓名、职位、联系方式' },

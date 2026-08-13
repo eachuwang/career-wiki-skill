@@ -5,7 +5,7 @@ import UiIcon from './UiIcon';
 
 interface ModulePickerProps {
   addedTypes: EntityType[];
-  onAdd: (types: EntityType[]) => void;
+  onApply: (types: EntityType[]) => boolean | Promise<boolean>;
 }
 
 function ModuleOption({
@@ -42,22 +42,44 @@ function ModuleOption({
   );
 }
 
-export default function ModulePicker({ addedTypes, onAdd }: ModulePickerProps) {
+export default function ModulePicker({ addedTypes, onApply }: ModulePickerProps) {
   const [open, setOpen] = useState(false);
   const [selectedTypes, setSelectedTypes] = useState<EntityType[]>([]);
+  const [applying, setApplying] = useState(false);
+  const [applyError, setApplyError] = useState('');
+  const applyingRef = useRef(false);
   const pickerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const addedTypeSet = new Set(addedTypes);
+  const selectionChanged = selectedTypes.length !== addedTypeSet.size
+    || selectedTypes.some((type) => !addedTypeSet.has(type));
+
+  const closePicker = (force = false) => {
+    if (applyingRef.current && !force) return;
+    setOpen(false);
+    setSelectedTypes([]);
+    setApplyError('');
+    triggerRef.current?.focus();
+  };
 
   useEffect(() => {
     if (!open) return;
     const handlePointerDown = (event: PointerEvent) => {
       if (!pickerRef.current?.contains(event.target as Node)) {
-        setOpen(false);
-        setSelectedTypes([]);
+        closePicker();
       }
     };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closePicker();
+    };
     document.addEventListener('pointerdown', handlePointerDown);
-    return () => document.removeEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    dialogRef.current?.querySelector<HTMLElement>('input')?.focus();
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
   }, [open]);
 
   const toggleType = (type: EntityType) => {
@@ -68,16 +90,31 @@ export default function ModulePicker({ addedTypes, onAdd }: ModulePickerProps) {
     );
   };
 
-  const handleAdd = () => {
-    onAdd(selectedTypes);
-    setSelectedTypes([]);
-    setOpen(false);
+  const handleApply = async () => {
+    if (applying || !selectionChanged) return;
+    applyingRef.current = true;
+    setApplying(true);
+    setApplyError('');
+    try {
+      const applied = await onApply(selectedTypes);
+      if (applied) {
+        closePicker(true);
+      } else {
+        setApplyError('应用失败，当前选择未保存，请重试。');
+      }
+    } catch {
+      setApplyError('应用失败，当前选择未保存，请重试。');
+    } finally {
+      applyingRef.current = false;
+      setApplying(false);
+    }
   };
 
   return (
     <div ref={pickerRef} className="module-picker">
       <button
         type="button"
+        ref={triggerRef}
         className={`module-picker-trigger ${open ? 'is-open' : ''}`}
         aria-expanded={open}
         aria-haspopup="dialog"
@@ -85,6 +122,7 @@ export default function ModulePicker({ addedTypes, onAdd }: ModulePickerProps) {
           const nextOpen = !open;
           setOpen(nextOpen);
           setSelectedTypes(nextOpen ? [...addedTypes] : []);
+          setApplyError('');
         }}
       >
         <UiIcon name="plus" size={16} />
@@ -92,7 +130,12 @@ export default function ModulePicker({ addedTypes, onAdd }: ModulePickerProps) {
       </button>
 
       {open && (
-        <div className="module-picker-popover" role="dialog" aria-label="选择简历模块">
+        <div
+          ref={dialogRef}
+          className="module-picker-popover"
+          role="dialog"
+          aria-label="选择简历模块"
+        >
           <div className="module-picker-heading">
             <div>
               <h3>选择简历中要保留的模块</h3>
@@ -102,10 +145,7 @@ export default function ModulePicker({ addedTypes, onAdd }: ModulePickerProps) {
               type="button"
               className="module-picker-close"
               aria-label="关闭添加模块"
-              onClick={() => {
-                setOpen(false);
-                setSelectedTypes([]);
-              }}
+              onClick={() => closePicker()}
             >
               <UiIcon name="close" size={17} />
             </button>
@@ -121,14 +161,26 @@ export default function ModulePicker({ addedTypes, onAdd }: ModulePickerProps) {
               />
             ))}
           </div>
+          {applyError && (
+            <div className="module-picker-error" role="alert">
+              {applyError}
+            </div>
+          )}
           <div className="module-picker-footer">
-            <span>{selectedTypes.length > 0 ? `已选择 ${selectedTypes.length} 个` : '未选择模块'}</span>
+            <span>
+              {selectionChanged
+                ? selectedTypes.length > 0
+                  ? `将保留 ${selectedTypes.length} 个模块`
+                  : '将移除全部模块'
+                : `已保留 ${selectedTypes.length} 个模块`}
+            </span>
             <button
               type="button"
               className="module-picker-confirm"
-              onClick={handleAdd}
+              disabled={applying || !selectionChanged}
+              onClick={() => void handleApply()}
             >
-              应用选择
+              {applying ? '应用中…' : '应用变更'}
             </button>
           </div>
         </div>

@@ -1,10 +1,13 @@
 {
   "name": "career-wiki-wiki-engine",
   "version": "1.0.0",
-  "description": "Career Wiki OKF storage, migration, and validation engine",
+  "description": "Career Wiki OKF storage, migration, validation, and knowledge snapshot engine",
   "type": "module",
   "license": "MIT",
   "private": true,
+  "exports": {
+    "./career-knowledge": "./scripts/career_knowledge.mjs"
+  },
   "scripts": {
     "test": "node --test tests/**/*.test.mjs"
   },

@@ -30,11 +30,10 @@ import { existsSync } from 'node:fs';
 import { join, extname, basename, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import matter from 'gray-matter';
 import {
-  isEntityDeleted,
-  readDeletionManifest,
-} from '../../wiki-engine/scripts/delete_entity.mjs';
+  CAREER_ENTITY_DIRECTORIES,
+  loadCareerKnowledge,
+} from 'career-wiki-wiki-engine/career-knowledge';
 import {
   applyPolish,
   buildPolishSourceHash,
@@ -43,12 +42,6 @@ import {
   POLISH_FIELDS,
 } from './resume_polish.mjs';
 import { generatePolishEntries, listProviderModels } from './resume_polish_provider.mjs';
-import {
-  extractConceptLinks,
-  parseCareerEntity,
-  sourceResources,
-  validateConceptDocument,
-} from '../../wiki-engine/scripts/okf.mjs';
 import {
   bundleDirectory,
   resumesDirectory,
@@ -59,20 +52,6 @@ import {
 
 const VERSION = '1.0.0';
 const DEFAULT_PORT = 3001;
-
-// 实体类型 → 目录名映射（module 名用单数，目录用复数）
-const ENTITY_DIRS = {
-  person: 'persons',
-  experience: 'experiences',
-  project: 'projects',
-  skill: 'skills',
-  education: 'education',
-  certificate: 'certificates',
-  award: 'awards',
-  publication: 'publications',
-  activity: 'activities',
-  summary: 'summaries',
-};
 
 // ── 路径解析 ──────────────────────────────────────────
 
@@ -95,33 +74,6 @@ async function resolveWikiRoot() {
 }
 
 // ── 文件系统辅助 ──────────────────────────────────────
-
-/** 递归收集目录下所有 .md 文件，返回绝对路径数组 */
-async function collectMarkdown(dir) {
-  const results = [];
-  let entries;
-  try {
-    entries = await readdir(dir);
-  } catch (e) {
-    if (e.code === 'ENOENT') return [];
-    throw e;
-  }
-  for (const entry of entries) {
-    const full = join(dir, entry);
-    let s;
-    try {
-      s = await stat(full);
-    } catch {
-      continue;
-    }
-    if (s.isDirectory()) {
-      results.push(...(await collectMarkdown(full)));
-    } else if (s.isFile() && extname(entry) === '.md' && entry !== 'index.md' && entry !== 'log.md') {
-      results.push(full);
-    }
-  }
-  return results;
-}
 
 /** 递归收集目录下所有 .json 文件 */
 async function collectJson(dir) {
@@ -150,51 +102,6 @@ async function collectJson(dir) {
   return results;
 }
 
-/** 解析单个 OKF Career concept → 前端实体对象。 */
-async function parseWikiFile(filePath, wikiRoot) {
-  const raw = await readFile(filePath, 'utf-8');
-  const errors = validateConceptDocument(raw);
-  if (errors.length > 0) throw new Error(`${filePath}: ${errors.join('; ')}`);
-  const parsed = matter(raw);
-  const fm = parsed.data || {};
-  const content = parsed.content || '';
-
-  // 相对路径（相对于 OKF bundle 根）
-  const relPath = filePath.slice(wikiRoot.length + 1).replace(/\\/g, '/');
-
-  const entity = parseCareerEntity(fm);
-  if (!entity) throw new Error(`${filePath}: type 必须是受支持的 career.* concept`);
-  const links = extractConceptLinks(content, relPath);
-  const relations = links.map((link) => ({ type: link.type, target: link.target }));
-
-  // fields = frontmatter 除 meta 键以外的字段
-  const META_KEYS = [
-    'type', 'title', 'resource', 'tags', 'sources', 'usage_window',
-    'generated', 'verified', 'status', 'stale_after',
-  ];
-  const fields = {};
-  for (const [k, v] of Object.entries(fm)) {
-    if (!META_KEYS.includes(k)) fields[k] = v;
-  }
-  if (fm.description !== undefined) fields.description = fm.description;
-
-  return {
-    path: relPath,
-    entity,
-    title: fm.title,
-    trustTier: Array.isArray(fm.verified)
-      ? fm.verified.some((event) => String(event?.by || '').startsWith('human:')) ? 'human-reviewed' : 'machine-confirmed'
-      : fm.verified
-        ? String(fm.verified.by || '').startsWith('human:') ? 'human-reviewed' : 'machine-confirmed'
-        : 'unverified',
-    sources: sourceResources(fm),
-    fields,
-    relations,
-    links,
-    content,
-  };
-}
-
 /** 读取请求中的简历配置；统一 generate/export/polish 三类接口的配置入口。 */
 async function resolveResumeConfig(wikiRoot, body) {
   if (body.resume_id) {
@@ -217,17 +124,8 @@ async function resolveResumeConfig(wikiRoot, body) {
 
 /** 读取一个实体类型的 Wiki 页面，跳过删除清单中的实体。 */
 async function collectWikiEntities(wikiRoot, module) {
-  const dirName = ENTITY_DIRS[module];
-  if (!dirName) return [];
-  const wikiPath = bundleDirectory(wikiRoot);
-  const deletions = await readDeletionManifest(wikiRoot);
-  const files = await collectMarkdown(join(wikiPath, dirName));
-  const entities = [];
-  for (const file of files) {
-    const entity = await parseWikiFile(file, wikiPath);
-    if (!isEntityDeleted(entity, deletions)) entities.push(entity);
-  }
-  return entities;
+  if (!Object.hasOwn(CAREER_ENTITY_DIRECTORIES, module)) return [];
+  return (await loadCareerKnowledge(wikiRoot, { entity: module })).entities;
 }
 
 /** 将简历配置中的 hide.items 应用到 Agent 要处理的实体集合。 */
@@ -455,29 +353,18 @@ async function handleHealth(wikiRoot, res) {
   const wikiPath = bundleDirectory(wikiRoot);
   const resumesPath = resumesDirectory(wikiRoot);
   const templatesPath = templatesDirectory(wikiRoot);
-  const deletions = await readDeletionManifest(wikiRoot);
   const okfErrors = [];
 
-  // 统计各实体目录文件数
-  const entityCounts = {};
-  for (const [module, dir] of Object.entries(ENTITY_DIRS)) {
-    const fullDir = join(wikiPath, dir);
-    try {
-      const files = await readdir(fullDir);
-      const markdownFiles = files.filter((f) => f.endsWith('.md'));
-      entityCounts[dir] = 0;
-      for (const file of markdownFiles) {
-        const filePath = join(fullDir, file);
-        try {
-          const entity = await parseWikiFile(filePath, wikiPath);
-          if (!isEntityDeleted(entity, deletions)) entityCounts[dir] += 1;
-        } catch (error) {
-          okfErrors.push(error.message);
-        }
-      }
-    } catch {
-      entityCounts[dir] = 0;
+  const entityCounts = Object.fromEntries(
+    Object.values(CAREER_ENTITY_DIRECTORIES).map((directory) => [directory, 0]),
+  );
+  try {
+    const snapshot = await loadCareerKnowledge(wikiRoot, { includeContent: false });
+    for (const entity of snapshot.entities) {
+      entityCounts[CAREER_ENTITY_DIRECTORIES[entity.entity]] += 1;
     }
+  } catch (error) {
+    okfErrors.push(error.message);
   }
 
   // 统计简历配置数
@@ -510,62 +397,30 @@ async function handleHealth(wikiRoot, res) {
 
 /** GET /api/wiki — 所有 wiki 实体 */
 async function handleGetWiki(wikiRoot, res, query) {
-  const wikiPath = bundleDirectory(wikiRoot);
-  const files = (
-    await Promise.all(
-      Object.values(ENTITY_DIRS).map((directory) => collectMarkdown(join(wikiPath, directory))),
-    )
-  ).flat();
-  const deletions = await readDeletionManifest(wikiRoot);
-
-  let entities = [];
-  for (const f of files) {
-    const ent = await parseWikiFile(f, wikiPath);
-    if (!isEntityDeleted(ent, deletions)) entities.push(ent);
+  try {
+    const snapshot = await loadCareerKnowledge(wikiRoot, {
+      ...(query.entity ? { entity: query.entity } : {}),
+    });
+    sendJson(res, 200, snapshot);
+  } catch (error) {
+    sendJson(res, 400, { error: '读取 Wiki 失败', message: error.message });
   }
-
-  // 按 entity 过滤
-  if (query.entity) {
-    entities = entities.filter((e) => e.entity === query.entity);
-  }
-
-  // 扁平化所有关系，供图谱和缺口分析使用。
-  // 归一化到 entity.path 的形式（相对 OKF bundle 根，带 .md 后缀），
-  // 并过滤掉指向不存在实体的关系，避免图谱边指向空节点。
-  const entityPaths = new Set(entities.map((e) => e.path));
-  const allRelations = [];
-  for (const e of entities) {
-    for (const r of e.relations) {
-      const to = String(r.target).replace(/\.md$/i, '') + '.md';
-      if (entityPaths.has(to)) {
-        allRelations.push({ from: e.path, to, type: r.type });
-      }
-    }
-  }
-
-  sendJson(res, 200, { entities, allRelations, total: entities.length });
 }
 
 /** GET /api/wiki/:entity/:id — 单个实体详情 */
 async function handleGetWikiEntity(wikiRoot, res, entityDir, id) {
-  // entityDir 是复数目录名（persons/experiences/...），直接用
-  const filePath = join(bundleDirectory(wikiRoot), entityDir, `${id}.md`);
+  const entity = Object.entries(CAREER_ENTITY_DIRECTORIES)
+    .find(([, directory]) => directory === entityDir)?.[0];
+  const path = `${entityDir}/${id.replace(/\.md$/i, '')}.md`;
+  if (!entity) return sendJson(res, 404, { error: '实体不存在', path });
 
   try {
-    await stat(filePath);
-  } catch {
-    return sendJson(res, 404, { error: '实体不存在', path: `${entityDir}/${id}.md` });
-  }
-
-  try {
-    const ent = await parseWikiFile(filePath, bundleDirectory(wikiRoot));
-    const deletions = await readDeletionManifest(wikiRoot);
-    if (isEntityDeleted(ent, deletions)) {
-      return sendJson(res, 404, { error: '实体已删除', path: `${entityDir}/${id}.md` });
-    }
-    sendJson(res, 200, ent);
-  } catch (e) {
-    sendJson(res, 500, { error: '解析失败', message: e.message });
+    const snapshot = await loadCareerKnowledge(wikiRoot, { entity });
+    const found = snapshot.entities.find((item) => item.path === path);
+    if (!found) return sendJson(res, 404, { error: '实体不存在', path });
+    return sendJson(res, 200, found);
+  } catch (error) {
+    return sendJson(res, 500, { error: '读取失败', message: error.message });
   }
 }
 
@@ -611,8 +466,7 @@ async function handleGetTemplates(wikiRoot, res) {
  * @returns {object} 结构化简历 JSON
  */
 async function assembleResume(config, template, wikiRoot) {
-  const wikiPath = bundleDirectory(wikiRoot);
-  const deletions = await readDeletionManifest(wikiRoot);
+  const knowledge = await loadCareerKnowledge(wikiRoot);
   const sections = [];
 
   // 简历配置的 modules 覆盖模板 sections 顺序
@@ -628,17 +482,11 @@ async function assembleResume(config, template, wikiRoot) {
 
   for (const section of orderedSections) {
     const module = section.module;
-    const dirName = ENTITY_DIRS[module];
-    if (!dirName) continue; // 未知 module，跳过
-
-    const entityDir = join(wikiPath, dirName);
-    const mdFiles = await collectMarkdown(entityDir);
+    if (!Object.hasOwn(CAREER_ENTITY_DIRECTORIES, module)) continue;
 
     // 解析所有该类实体
     let items = [];
-    for (const f of mdFiles) {
-      const ent = await parseWikiFile(f, wikiPath);
-      if (isEntityDeleted(ent, deletions)) continue;
+    for (const ent of knowledge.entities.filter((entity) => entity.entity === module)) {
       // 按 fields 配置抽取字段
       const sectionFields = [...(section.fields || [])];
       if (module === 'project') {
@@ -766,11 +614,9 @@ async function assembleResume(config, template, wikiRoot) {
 
   // person 单独处理（取第一个 person 实体）
   let personData = null;
-  const personDir = join(wikiPath, 'persons');
-  const personFiles = await collectMarkdown(personDir);
-  if (personFiles.length > 0) {
-    const ent = await parseWikiFile(personFiles[0], wikiPath);
-    if (!isEntityDeleted(ent, deletions)) {
+  const personEntity = knowledge.entities.find((entity) => entity.entity === 'person');
+  if (personEntity) {
+    const ent = personEntity;
       personData = {
         ...ent.fields,
         ...(config.content_overrides?.[ent.path] || {}),
@@ -799,7 +645,6 @@ async function assembleResume(config, template, wikiRoot) {
           }
         }
       }
-    }
   }
 
   // 统计实体数

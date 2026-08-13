@@ -46,23 +46,25 @@ category: career-wiki-skill
 
 3. **创建目录结构**（脚本已做，但若用户选了自定义路径，需在自定义路径下建）
    ```
-   sources/raw/
-   sources/uploads/
-   sources/raw/uploads/
-   wiki/persons/
-   wiki/experiences/
-   wiki/projects/
-   wiki/skills/
-   wiki/education/
-   wiki/certificates/
-   wiki/awards/
-   wiki/publications/
-   wiki/activities/
-   wiki/summaries/
-   resumes/
-   templates/
+   knowledge/references/raw/
+   knowledge/references/uploads/
+   knowledge/references/raw/uploads/
+   knowledge/persons/
+   knowledge/experiences/
+   knowledge/projects/
+   knowledge/skills/
+   knowledge/education/
+   knowledge/certificates/
+   knowledge/awards/
+   knowledge/publications/
+   knowledge/activities/
+   knowledge/summaries/
+   .career-wiki-skill/resumes/
+   .career-wiki-skill/templates/
    .career-wiki-skill/
    ```
+
+   `knowledge/` 是可独立交换的 OKF v0.2 bundle；脚本必须同时创建根 `knowledge/index.md` 并声明 `okf_version: "0.2"`。简历、模板、配置、备份等应用状态只能放在 `.career-wiki-skill/`，不得混入 bundle。
 
 4. **npm install**
    - 在 career-wiki-skill 仓库根目录运行 `npm install`（装 wiki 引擎用的 Node 依赖，如 gray-matter）
@@ -80,9 +82,9 @@ category: career-wiki-skill
 
 1. **用 pip 替 npm 装 Node 依赖。** `gray-matter` 是 Node 包，必须用 `npm install` 安装。用 `pip install gray-matter` 装的是无关的 Python 包，wiki 引擎和简历生成跑不起来。Node 依赖用 npm，Python 脚本只用标准库，不要混。
 
-2. **跳过目录创建直接用后续 skill。** 初始化时如果 `~/.career_wiki/` 及其子目录（`sources/raw/`、`wiki/persons/` 等）没建好，后续 interview/file-parser/wiki-engine 等 skill 会找不到路径、写文件失败。目录结构是所有 skill 的地基，必须先建。
+2. **跳过目录创建直接用后续 skill。** 初始化时如果 `~/.career_wiki/` 及其子目录（`knowledge/references/raw/`、`knowledge/persons/` 等）没建好，后续 interview/file-parser/wiki-engine 等 skill 会找不到路径、写文件失败。目录结构是所有 skill 的地基，必须先建。
 
-3. **初始化时跑 wiki compile。** 刚初始化完 `sources/raw/` 是空的，没有采访产出也没有文件提取产出，此时跑 compile 没有任何 raw 可扫，生成的 wiki 是空的。compile 应在 interview 或 file-parser 产出 raw 之后才触发，不要在 env-init 阶段调 wiki 引擎。
+3. **初始化时跑 wiki compile。** 刚初始化完 `knowledge/references/raw/` 是空的，没有采访产出也没有文件提取产出，此时跑 compile 没有任何 raw 可扫，生成的 wiki 是空的。compile 应在 interview 或 file-parser 产出 raw 之后才触发，不要在 env-init 阶段调 wiki 引擎。
 
 4. **不确认就让用户选了默认路径。** 数据目录路径写进 `config.json` 的 `root` 字段后，所有后续 skill 都基于它。选错了全要重来。必须向用户明确确认路径选择，不能默认替用户决定。
 

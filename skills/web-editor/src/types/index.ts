@@ -20,7 +20,7 @@ export type EntityType =
   | 'activity'
   | 'summary';
 
-export type Confidence = 'verified' | 'extracted' | 'inferred';
+export type TrustTier = 'unverified' | 'machine-confirmed' | 'human-reviewed';
 
 /** 关系类型，对应 wiki-engine 的 13 种关系 */
 export type RelationType =
@@ -38,23 +38,25 @@ export type RelationType =
   | 'took_course'
   | 'references';
 
-/** 一个 wiki 关系（frontmatter relations 数组项） */
+/** 从标准 Markdown 链接上下文派生的关系。 */
 export interface Relation {
   type: RelationType;
-  target: string; // 相对 wiki 根的路径，如 wiki/skills/go
+  target: string; // 相对 OKF bundle 根的路径，如 skills/go.md
 }
 
-/** 正文中的 wikilink */
+/** 正文中的标准 Markdown concept link。 */
 export interface WikiLink {
-  target: string; // wiki/skills/go
+  target: string; // skills/go.md
   name: string; // 显示名 "Go"
+  type: RelationType;
 }
 
 /** Wiki 实体——通用结构，fields 是各实体类型的 frontmatter 字段 */
 export interface WikiEntity {
-  path: string; // wiki/experiences/bytedance-2023.md
+  path: string; // experiences/bytedance-2023.md
   entity: EntityType;
-  confidence: Confidence;
+  title: string;
+  trustTier: TrustTier;
   sources: string[];
   fields: Record<string, unknown>;
   relations: Relation[];

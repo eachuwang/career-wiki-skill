@@ -14,7 +14,7 @@
     {
       "module": "person",
       "title": "关于我",
-      "fields": ["name", "title", "photo", "email", "phone", "website", "github"]
+      "fields": ["name", "current_title", "photo", "email", "phone", "website", "github"]
     },
     {
       "module": "experience",

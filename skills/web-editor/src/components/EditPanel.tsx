@@ -214,8 +214,7 @@ function ModuleEditForm({
   return (
     <div className="p-4 space-y-3">
       {wikiData.map((entity, idx) => {
-        const entityLabel =
-          String(entity.fields.name || entity.fields.company || entity.fields.title || `${ENTITY_LABELS[entity.entity]} ${idx + 1}`);
+        const entityLabel = entity.title || `${ENTITY_LABELS[entity.entity]} ${idx + 1}`;
         const isHidden = module.hiddenItemIds.includes(entity.path);
         const isExpanded = expandedItemId === entity.path;
         return (

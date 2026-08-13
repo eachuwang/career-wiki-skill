@@ -62,7 +62,7 @@ career-wiki-skill 把这些问题一次性解决：**采访采集 → Wiki 知�
 | 1 | **env-init** | SKILL.md + Python 脚本 | 环境检查、目录初始化、依赖安装 |
 | 2 | **interview** | 纯 SKILL.md | 单题串行采访，深挖项目上下文，完整产出 raw markdown |
 | 3 | **file-parser** | 纯 SKILL.md | 上传 PDF/图片/文档，Agent 提取内容落到 raw |
-| 4 | **wiki-engine** | SKILL.md + Node 脚本 | 数据 schema 定义、compile/lint/OKF 导入导出 |
+| 4 | **wiki-engine** | SKILL.md + Node 脚本 | 严格 OKF v0.2 compile/lint/旧工作区迁移 |
 | 5 | **resume-generator** | SKILL.md + Node API server | 从 Wiki 查询数据，按模板组装简历 JSON |
 | 6 | **web-editor** | SKILL.md + React 项目 | 可视化编辑、多简历管理、模板复制/删除、6 字段隐私脱敏、实时预览、Wiki 图谱、直接导出 PDF |
 
@@ -107,21 +107,23 @@ used_skill · did_project · at_company · took_course · references
 
 ```
 ~/.career_wiki/
-├── sources/
-│   ├── raw/               ← 采访产出 + 文件提取（原始材料）
-│   └── uploads/           ← 用户上传的原始文件
-├── wiki/                  ← 编译产出的结构化页面（不允许人工编辑）
+├── knowledge/             ← 可独立交换的 OKF v0.2 bundle
+│   ├── index.md
+│   ├── references/
+│   │   ├── raw/           ← 采访/提取形成的 Reference concepts
+│   │   └── uploads/       ← 原始附件
 │   ├── persons/
 │   ├── experiences/
 │   ├── projects/
 │   ├── skills/
 │   └── ...
-├── resumes/               ← 简历配置（每份一个 JSON）
-├── templates/             ← 简历模板（JSON + CSS）
-└── .career-wiki-skill/    ← 运行时状态
+└── .career-wiki-skill/    ← 应用状态，不属于 OKF bundle
+    ├── resumes/
+    ├── templates/
+    └── backups/
 ```
 
-schema 写在 wiki-engine 的 SKILL.md 里，不用 profile.json，跟 OKF 理念一致。
+`knowledge/` 本身就是严格 OKF v0.2，不是等待导出的私有 Wiki。所有 concept 使用 `type`、对象数组 `sources`、`generated/verified` 和标准 Markdown 链接；应用状态与知识 bundle 物理隔离。
 
 ---
 
@@ -157,7 +159,7 @@ git clone https://github.com/eachuwang/career-wiki-skill.git
 
 env-init skill 会：
 1. 检查 Node.js ≥ 18 / Python ≥ 3.9 / npm
-2. 创建 `~/.career_wiki/` 目录结构（sources/raw、wiki/、resumes/、templates/ 等 16 个子目录）
+2. 创建 `~/.career_wiki/` 目录结构（knowledge/references/raw、knowledge/、.career-wiki-skill/resumes/、.career-wiki-skill/templates/ 等 16 个子目录）
 3. 安装 Node 依赖（gray-matter 等）
 4. 写入配置文件
 
@@ -188,8 +190,8 @@ web-editor skill 启动 React 前端，支持模块排序、字段编辑、项�
 | 01 | **Skill 只编排，不执行** | SKILL.md 指导 Agent 怎么做，LLM 推理让 Agent 做，脚本只做确定性操作 |
 | 02 | **跨 Agent 兼容** | 只用通用工具链（Bash + Python + Node），不依赖任何特定 Agent 的工具 |
 | 03 | **纯本地数据** | 用户数据在 `~/.career_wiki/`，自选目录和同步方式（Git/硬盘） |
-| 04 | **Wiki 是编译产物** | 全量重建，不允许人工编辑，改信息改 raw 再 recompile |
-| 05 | **OKF 标准导出** | 支持谷歌 OKF 格式导入导出，跨系统交换 |
+| 04 | **Knowledge 是编译产物** | 全量重建，不允许人工编辑，改信息改 Reference 再 recompile |
+| 05 | **OKF 原生存储** | `knowledge/` 直接遵循 OKF v0.2，不维护私有兼容格式 |
 
 ---
 
@@ -213,11 +215,11 @@ career-wiki-skill 在以下 Agent 工具中均可使用：
 
 | 组件 | 技术 |
 |------|------|
-| Wiki 数据 | Markdown + YAML frontmatter + wikilink |
+| Wiki 数据 | OKF v0.2 Markdown + YAML frontmatter + 标准 Markdown 链接 |
 | API Server | Node.js + gray-matter（纯 `node:http`，无框架） |
 | Web 前端 | React 18 + Vite + dnd-kit + Tailwind CSS + vis-network + html2pdf.js |
 | Python 脚本 | 环境检查（标准库） |
-| 导出格式 | PDF（按 A4 预览直接下载）/ HTML / JSON / OKF |
+| 导出格式 | PDF（按 A4 预览直接下载）/ HTML / JSON；知识层原生为 OKF |
 | 模板系统 | JSON 配置 + CSS 样式 |
 
 ---

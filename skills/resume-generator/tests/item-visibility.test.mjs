@@ -8,18 +8,18 @@ import test from 'node:test';
 /** 写入最小 Wiki 数据，隔离验证 API 的简历视角过滤。 */
 async function createFixture() {
   const root = await mkdtemp(join(tmpdir(), 'career-wiki-api-'));
-  await mkdir(join(root, 'wiki', 'projects'), { recursive: true });
-  await mkdir(join(root, 'templates'), { recursive: true });
+  await mkdir(join(root, 'knowledge', 'projects'), { recursive: true });
+  await mkdir(join(root, '.career-wiki-skill', 'templates'), { recursive: true });
   await writeFile(
-    join(root, 'wiki', 'projects', 'search-platform.md'),
-    '---\nentity: project\nname: 搜索平台\nrole: 负责人\n---\n',
+    join(root, 'knowledge', 'projects', 'search-platform.md'),
+    '---\ntype: career.project\nname: 搜索平台\nrole: 负责人\n---\n',
   );
   await writeFile(
-    join(root, 'wiki', 'projects', 'legacy-console.md'),
-    '---\nentity: project\nname: 旧版控制台\nrole: 开发者\n---\n',
+    join(root, 'knowledge', 'projects', 'legacy-console.md'),
+    '---\ntype: career.project\nname: 旧版控制台\nrole: 开发者\n---\n',
   );
   await writeFile(
-    join(root, 'templates', 'tech-minimal.json'),
+    join(root, '.career-wiki-skill', 'templates', 'tech-minimal.json'),
     JSON.stringify({
       id: 'tech-minimal',
       sections: [

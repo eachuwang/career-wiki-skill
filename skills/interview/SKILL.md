@@ -1,6 +1,6 @@
 ---
 name: interview
-description: 用途：通过结构化采访采集求职者信息。当用户说"开始采访"、"录入信息"、"补充经历"或主动提供个人/职业信息时触发。产出原始 markdown 存 sources/raw/，不预提取，采完自动调 wiki 引擎 compile。
+description: 用途：通过结构化采访采集求职者信息。当用户说"开始采访"、"录入信息"、"补充经历"或主动提供个人/职业信息时触发。产出原始 markdown 存 knowledge/references/raw/，不预提取，采完自动调 wiki 引擎 compile。
 version: 1.0.0
 author: career-wiki-skill
 license: MIT
@@ -27,7 +27,7 @@ metadata:
 
 ## 数据目录约定
 
-- 存储：`~/.career_wiki/sources/raw/interview-{YYYYMMDD-HHmmss}.md`
+- 存储：`~/.career_wiki/knowledge/references/raw/interview-{YYYYMMDD-HHmmss}.md`
 - 续采时 round 递增（首轮 round=1，第一次补 round=2）
 - 进行中的采访断点：`~/.career_wiki/.career-wiki-skill/interview-checkpoint.json`
 - 所有路径以 `~/.career_wiki` 为根，Agent 首次调用先确认该目录存在；不存在则提示用户先跑 env-init skill
@@ -38,6 +38,10 @@ metadata:
 
 ```markdown
 ---
+type: Reference
+title: Career interview 2026-07-31 round 1
+status: stable
+generated: { by: career-wiki-agent/1.0, at: 2026-07-31T10:00:00+08:00 }
 interview_date: 2026-07-31
 round: 1
 interviewer: career-wiki-skill
@@ -59,7 +63,7 @@ interviewer: career-wiki-skill
 ...
 ```
 
-**保留用户原话。** 用户自由讲的部分用引用块 `>` 记录原话，Agent 的提取确认用普通文本跟在后面。项目回答的完整原话必须写入 raw，不能只保留面向简历的摘要。不做 frontmatter 实体提取——那是 compile 的活。
+**保留用户原话。** 该文件本身是 OKF `Reference` concept；除 Reference 元数据外，不在 frontmatter 预提取职业实体。用户自由讲的部分用引用块 `>` 记录原话，Agent 的提取确认用普通文本跟在后面。项目回答的完整原话必须写入 raw，不能只保留面向简历的摘要。职业实体提取是 compile 的活。
 
 ### 断点文件格式
 
@@ -69,7 +73,7 @@ interviewer: career-wiki-skill
 {
   "status": "in_progress",
   "round": 1,
-  "interview_file": "sources/raw/interview-20260807-140000.md",
+  "interview_file": "knowledge/references/raw/interview-20260807-140000.md",
   "current_section": "project",
   "current_item": "基于 LangChain 的数据入湖智能体开发",
   "last_completed_field": "项目描述",
@@ -81,7 +85,7 @@ interviewer: career-wiki-skill
 ```
 
 - `confirmed_content` 保存已确认的原话和整理结果，不能只保存“已聊到项目经验”这类摘要。
-- checkpoint 是进行中状态，不得放入 `sources/raw/`，也不得在采访未结束时触发 compile。
+- checkpoint 是进行中状态，不得放入 `knowledge/references/raw/`，也不得在采访未结束时触发 compile。
 - 用户明确表示结束采访时，才将 checkpoint 中的完整内容写入 `interview_file`，删除或标记 checkpoint 为 `completed`，再触发 compile。
 
 ## 采访流程
@@ -92,7 +96,7 @@ interviewer: career-wiki-skill
 >
 > 1. 确认 `~/.career_wiki/` 存在；不存在 → 🛑 STOP，提示用户先跑 env-init
 > 2. 先检查 `interview-checkpoint.json`：如果 `status=in_progress`，恢复同一轮采访，不创建新 round；读取其中的完整已确认内容、当前节、当前项目、最后完成字段和待问问题。
-> 3. 如果没有进行中的 checkpoint，再读取最新 interview raw；对其中“详见某个 raw 文件”或来源列表里的引用，继续读取对应 raw 文件全文，并核对已有 `wiki/` 编译结果，再告诉用户已有什么、问要补哪节。
+> 3. 如果没有进行中的 checkpoint，再读取最新 interview raw；对其中“详见某个 raw 文件”或来源列表里的引用，继续读取对应 raw 文件全文，并核对已有 `knowledge/` 编译结果，再告诉用户已有什么、问要补哪节。
 > 4. 如果是首轮，说明流程："我会按 7 节问，基本信息快过，经历项目你自由讲我来整理确认"
 >
 > 🛑 目录不存在时不要继续。没有数据目录，采集的内容无处可写。
@@ -228,13 +232,13 @@ interviewer: career-wiki-skill
 > 2. 告知用户 compile 可能需要时间（有 subagent 则并行，无则同步阻塞）
 > 3. 用户确认后，执行以下步骤：
 >
-> 1. 用 `write_file` 写 `~/.career_wiki/sources/raw/interview-{timestamp}.md`
+> 1. 用 `write_file` 写 `~/.career_wiki/knowledge/references/raw/interview-{timestamp}.md`
 >    - frontmatter：`interview_date / round / interviewer: career-wiki-skill`
 >    - 正文按 7 节组织，用户原话用 `>` 引用块，Agent 确认用普通文本
 > 2. **自动触发 wiki 引擎 compile**（F04）：
 >    - **有 subagent 能力**：并行触发 compile，不阻塞用户
 >    - **无 subagent 能力**：同步执行 compile，跑完告诉用户"已编译进 wiki"
->    - compile 必须全量读取 `sources/raw/`，包括 `sources/raw/uploads/` 下的简历 raw；简历 raw 中的项目描述、本人职责和其他实体必须解析并保存到对应 Wiki 页面，不能只作为采访文件的引用。
+>    - compile 必须全量读取 `knowledge/references/raw/`，包括 `knowledge/references/raw/uploads/` 下的简历 raw；简历 raw 中的项目描述、本人职责和其他实体必须解析并保存到对应 Wiki 页面，不能只作为采访文件的引用。
 >    - compile 完成后核对相关 Wiki 页面的 `sources` 是否包含简历 raw，并确认项目页面保留描述和职责正文。
 > 3. 告诉用户文件路径 + compile 状态
 
@@ -253,8 +257,8 @@ interviewer: career-wiki-skill
 
 1. 先检查进行中的 `interview-checkpoint.json`：存在且 `status=in_progress` 时，恢复原 round，不创建新文件、不递增 round。
 2. 没有进行中的 checkpoint 时，读取最新的 interview raw 文件，看 round 号，新文件 round+1。
-3. 从该文件正文、frontmatter 的 `sources` 或“详见/来源”说明中提取引用的 `sources/raw/` 路径，并读取对应 raw 文件全文；不能把“详见简历 raw 文件”当成项目没有详情。
-4. 检查已有 `wiki/` 编译结果，重点读取 `wiki/projects/`、`wiki/experiences/` 等与本轮续采章节相关的页面；如果引用的简历 raw 尚未进入相关 Wiki 页面的 `sources`，先触发一次全量 compile。
+3. 从该文件正文、frontmatter 的 `sources` 或“详见/来源”说明中提取引用的 `knowledge/references/raw/` 路径，并读取对应 raw 文件全文；不能把“详见简历 raw 文件”当成项目没有详情。
+4. 检查已有 `knowledge/` 编译结果，重点读取 `knowledge/projects/`、`knowledge/experiences/` 等与本轮续采章节相关的页面；如果引用的简历 raw 尚未进入相关 Wiki 页面的 `sources`，先触发一次全量 compile。
 5. 建立缺口时区分三种状态：
    - **已完整**：引用的 raw 或 Wiki 页面已经有项目描述、本人职责等内容，不得再次判定为缺失；
    - **部分完整**：已有描述或职责，但技术栈、困难、解决方案、结果、复盘等字段确实缺失，只追问缺失字段；
@@ -294,7 +298,7 @@ interviewer: career-wiki-skill
 
 ## Verification Checklist
 
-- [ ] `~/.career_wiki/sources/raw/interview-{timestamp}.md` 已创建
+- [ ] `~/.career_wiki/knowledge/references/raw/interview-{timestamp}.md` 已创建
 - [ ] 采访过程中每轮回答都已更新 `interview-checkpoint.json`
 - [ ] frontmatter 含 `interview_date / round / interviewer: career-wiki-skill`
 - [ ] 正文按 7 节组织，经历的节有循环

@@ -1,6 +1,6 @@
 ---
 name: resume-generator
-description: 简历生成 skill。提供 Node API server（16 个 HTTP 接口），读 wiki markdown → gray-matter 解析 frontmatter → 正则提取 wikilink → 按模板 schema 组装结构化简历 JSON，并提供项目描述/个人优势/岗位职责的 AI 润色上下文、生成和模型列表接口。用户说"生成简历""导出简历""启动 API server"时触发。数据组装与润色结果校验由 Node 完成，模型推理由用户配置的 OpenAI-compatible provider 完成。PDF/HTML 导出由前端渲染。
+description: 简历生成 skill。提供 Node API server（16 个 HTTP 接口），严格读取 OKF v0.2 career.* concepts，按模板组装简历 JSON，并提供 AI 润色上下文、生成和模型列表接口。用户说"生成简历""导出简历""启动 API server"时触发。旧 entity/confidence/wikilink 格式会被明确拒绝。
 version: 1.0.0
 author: career-wiki-skill
 license: MIT
@@ -15,7 +15,7 @@ metadata:
 
 ## 概述
 
-career-wiki-skill 的简历生成层。提供 **Node HTTP API server**，从 wiki markdown 读数据、解析 frontmatter、按模板+简历配置组装结构化简历 JSON。Web 前端（F07）调用这些接口完成简历渲染和导出。
+career-wiki-skill 的简历生成层。提供 **Node HTTP API server**，从 `knowledge/` 严格读取 OKF v0.2 concepts、按模板与简历配置组装结构化简历 JSON。Web 前端调用这些接口完成简历渲染和导出。
 
 **核心理念：** Wiki 是事实源，简历是面向岗位的表达视角。Node 负责读取、组装、指纹校验和应用结果；润色可以由宿主 Agent 或已配置的服务端 provider 执行。润色结果写入当前简历配置的 `polish.entries`，不回写 Wiki；原文变化后旧结果自动失效。
 
@@ -56,7 +56,9 @@ career-wiki-skill 的简历生成层。提供 **Node HTTP API server**，从 wik
 
 ```
 ~/.career_wiki/
-├── wiki/                  ← 数据源（F06 读这里）
+├── knowledge/                  ← OKF v0.2 bundle（唯一知识源）
+│   ├── index.md
+│   ├── references/
 │   ├── persons/
 │   ├── experiences/
 │   ├── projects/
@@ -67,10 +69,10 @@ career-wiki-skill 的简历生成层。提供 **Node HTTP API server**，从 wik
 │   ├── publications/
 │   ├── activities/
 │   └── summaries/
-├── resumes/               ← 简历配置（F06 读这里）
+├── .career-wiki-skill/resumes/               ← 简历配置（F06 读这里）
 │   ├── bytedance-backend.json
 │   └── ...
-├── templates/             ← 简历模板（F06 读这里）
+├── .career-wiki-skill/templates/             ← 简历模板（F06 读这里）
 │   ├── tech-minimal.json
 │   ├── tech-minimal.css
 │   └── ...
@@ -80,7 +82,8 @@ career-wiki-skill 的简历生成层。提供 **Node HTTP API server**，从 wik
 
 - 数据目录默认 `~/.career_wiki/`，用户可在 env-init 时自定义
 - API server 启动时读 `~/.career_wiki/.career-wiki-skill/config.json` 的 `root` 字段确定数据目录
-- 所有 wiki/ resumes/ templates/ 路径都基于 root 计算
+- 所有路径都基于 root 计算；`knowledge/` 与 `.career-wiki-skill/` 由 wiki-engine 的 `layout.json` 统一定义
+- API 只消费 10 个 `career.*` concept 目录。旧 `entity/confidence/relations/[[wikilink]]` 不会被猜测或兼容解析
 
 ---
 
@@ -113,17 +116,17 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 
 | # | 方法 | 路径 | 说明 |
 |---|------|------|------|
-| 1 | GET | `/api/health` | 健康检查，返回服务状态 + 数据目录信息 |
-| 2 | GET | `/api/wiki` | 所有 wiki 实体，读 wiki/ 下所有 markdown，gray-matter 解析 frontmatter 返回 JSON |
+| 1 | GET | `/api/health` | 健康检查，返回目录信息及 OKF 校验错误 |
+| 2 | GET | `/api/wiki` | 所有 wiki 实体，读 knowledge/ 下所有 markdown，gray-matter 解析 frontmatter 返回 JSON |
 | 3 | GET | `/api/wiki/:entity/:id` | 单个实体详情，entity 是实体类型（persons/experiences/...），id 是文件名（不带 .md） |
-| 4 | GET | `/api/resumes` | 所有简历配置，读 resumes/ 目录下所有 .json |
-| 5 | GET | `/api/templates` | 所有模板，读 templates/ 目录下所有 .json |
+| 4 | GET | `/api/resumes` | 所有简历配置，读 .career-wiki-skill/resumes/ 目录下所有 .json |
+| 5 | GET | `/api/templates` | 所有模板，读 .career-wiki-skill/templates/ 目录下所有 .json |
 | 6 | POST | `/api/resume/generate` | 按模板 + 配置生成结构化简历 JSON |
 | 7 | POST | `/api/resume/polish-context` | 为 Agent 准备原始事实、口吻样本和润色状态 |
 | 8 | POST | `/api/resume/polish` | 生成当前简历的润色结果并返回可保存配置 |
 | 9 | POST | `/api/resume/polish-models` | 拉取用户 OpenAI-compatible provider 的模型列表 |
 | 10 | POST | `/api/resume/export` | 导出 PDF/HTML/JSON（JSON 直接返回，HTML/PDF 由前端渲染） |
-| 11 | POST | `/api/resume/save` | 保存简历配置到 resumes/ |
+| 11 | POST | `/api/resume/save` | 保存简历配置到 .career-wiki-skill/resumes/ |
 | 12 | PUT | `/api/wiki/refresh` | 触发 wiki 重新 compile（提示用户调 Agent） |
 | 13 | POST | `/api/resume/delete` | 删除简历配置（仅删 JSON，不删 wiki 数据） |
 | 14 | POST | `/api/template/save` | 创建/更新模板（JSON + 可选 CSS） |
@@ -138,7 +141,7 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 
 ### 步骤 1：读简历配置
 
-请求体含 `resume_id`（简历配置 id）或直接传完整配置对象。根据 `resume_id` 从 `~/.career_wiki/resumes/{id}.json` 读配置。
+请求体含 `resume_id`（简历配置 id）或直接传完整配置对象。根据 `resume_id` 从 `~/.career_wiki/.career-wiki-skill/resumes/{id}.json` 读配置。
 
 配置决定：
 - 用哪个模板（`template` 字段 → 读模板 JSON 的 sections 定义）
@@ -150,49 +153,45 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 
 ### 步骤 2：读模板 schema
 
-从 `~/.career_wiki/templates/{template_id}.json` 读模板配置。模板的 `sections` 数组定义了：
-- 每个模块对应哪个 wiki 实体（`module` 字段 → 实体目录名，如 `experience` → `wiki/experiences/`）
+从 `~/.career_wiki/.career-wiki-skill/templates/{template_id}.json` 读模板配置。模板的 `sections` 数组定义了：
+- 每个模块对应哪个 wiki 实体（`module` 字段 → 实体目录名，如 `experience` → `knowledge/experiences/`）
 - 每个模块抽取哪些字段（`fields` 数组）
 - 模块内排序方向（`order`，可被简历配置的 `order` 覆盖）
 - 分组方式（`group_by`，如 skill 按 category 分组）
 
 ### 步骤 3：读 wiki markdown
 
-根据模板 sections 的 module 定义，读 `wiki/` 下对应实体目录的所有 markdown 文件。
+根据模板 sections 的 module 定义，读 `knowledge/` 下对应实体目录的所有 markdown 文件。
 
 实体→目录映射：
 
 | module | 目录 |
 |--------|------|
-| person | `wiki/persons/` |
-| experience | `wiki/experiences/` |
-| project | `wiki/projects/` |
-| skill | `wiki/skills/` |
-| education | `wiki/education/` |
-| certificate | `wiki/certificates/` |
-| award | `wiki/awards/` |
-| publication | `wiki/publications/` |
-| activity | `wiki/activities/` |
-| summary | `wiki/summaries/` |
+| person | `knowledge/persons/` |
+| experience | `knowledge/experiences/` |
+| project | `knowledge/projects/` |
+| skill | `knowledge/skills/` |
+| education | `knowledge/education/` |
+| certificate | `knowledge/certificates/` |
+| award | `knowledge/awards/` |
+| publication | `knowledge/publications/` |
+| activity | `knowledge/activities/` |
+| summary | `knowledge/summaries/` |
 
-### 步骤 4：gray-matter 解析 frontmatter + 正则提取 wikilink
+### 步骤 4：解析严格 OKF concept 与标准 Markdown 链接
 
 对每个 markdown 文件用 `gray-matter` 解析：
 - frontmatter（YAML metadata）→ 提取实体字段（company/role/start/end/...）
-- 正文 content → 保留为 `content`；project frontmatter 的 `tech_stack` 作为独立字段透传，旧版正文中的“岗位职责”兼容提取为 `responsibilities`
+- 正文 content → 保留为 `content`；`description`、`responsibilities`、`tech_stack` 等简历字段必须显式位于 frontmatter
 
-用正则提取正文中的 wikilink：
-```
-\[\[([^\]|]+?)(?:\|([^\]]+?))?\]\]
-```
-提取出 `{target, name}` 数组，用于关系展示（如"在 XX 公司期间用了 YY 技能"）。
+提取正文中的标准 Markdown 链接，解析为 `{target, name, type}`。列表上下文 `- used_skill: [Python](/skills/python.md)` 中的 `used_skill` 是关系类型；没有关系上下文时使用 `references`。
 
 ### 步骤 5：按模板 schema 组装结构化简历 JSON
 
 按模板 sections 顺序组装。对每个 section：
 
 1. 取该 module 对应的所有 wiki 实体数据
-2. 按 `fields` 配置抽取字段；project 固定补充 `responsibilities` 和 `tech_stack` 以兼容旧模板
+2. 按 `fields` 配置抽取字段；project 固定补充 `responsibilities` 和 `tech_stack`
 3. 应用简历配置的覆盖：
    - `modules` 过滤 — 只保留简历配置要的模块
    - `polish.entries` — 原文指纹有效且开关开启时应用 AI 润色
@@ -232,8 +231,8 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
           "end": "2024-09",
           "description": "负责高并发 API 网关...",
           "links": [
-            {"target": "wiki/skills/go", "name": "Go"},
-            {"target": "wiki/projects/xxx-system", "name": "XXX系统"}
+            {"target": "knowledge/skills/go", "name": "Go"},
+            {"target": "knowledge/projects/xxx-system", "name": "XXX系统"}
           ]
         }
       ]
@@ -293,7 +292,7 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 
 ### 2. GET /api/wiki
 
-返回所有 wiki 实体。递归扫描 `wiki/` 下所有 `.md` 文件，gray-matter 解析 frontmatter，正则提取 wikilink。
+返回所有 Career 实体。扫描 `knowledge/` 的 10 个领域目录，严格解析 OKF frontmatter 与标准 Markdown 链接；Reference 和其他合法 OKF concept 不进入简历数据。
 
 **响应 200：**
 ```json
@@ -302,17 +301,18 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
     {
       "path": "persons/王二.md",
       "entity": "person",
-      "confidence": "verified",
-      "sources": ["sources/raw/interview-20260731-140000.md"],
+      "title": "王二",
+      "trustTier": "human-reviewed",
+      "sources": ["/references/raw/interview-20260731-140000.md"],
       "fields": {
         "name": "王二",
-        "title": "后端开发工程师"
+        "current_title": "后端开发工程师"
       },
       "relations": [
-        {"type": "has_experience", "target": "wiki/experiences/bytedance-backend-2023"}
+        {"type": "has_experience", "target": "experiences/bytedance-backend-2023.md"}
       ],
       "links": [
-        {"target": "wiki/skills/go", "name": "Go"}
+        {"target": "knowledge/skills/go", "name": "Go"}
       ],
       "content": "正文 markdown..."
     }
@@ -324,7 +324,7 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 }
 ```
 
-`allRelations` 是所有实体关系的扁平化列表，供图谱和缺口分析使用。`from`/`to` 已归一化为 `entity.path` 的形式（相对 wiki/，带 `.md` 后缀），且只包含指向存在实体的关系。
+`allRelations` 是所有实体关系的扁平化列表，供图谱和缺口分析使用。`from`/`to` 已归一化为 `entity.path` 的形式（相对 knowledge/，带 `.md` 后缀），且只包含指向存在实体的关系。
 
 **查询参数：**
 - `entity=skill` — 只返回某类实体
@@ -338,7 +338,7 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 
 ### 4. GET /api/resumes
 
-返回所有简历配置（完整配置对象，前端编辑器需要 `modules`/`privacy`/`emphasize`/`hide` 等字段）。读 `resumes/` 下所有 `.json`，原样返回文件内容。
+返回所有简历配置（完整配置对象，前端编辑器需要 `modules`/`privacy`/`emphasize`/`hide` 等字段）。读 `.career-wiki-skill/resumes/` 下所有 `.json`，原样返回文件内容。
 
 **响应 200：**
 ```json
@@ -363,7 +363,7 @@ WIKI_ROOT=/path/to/wiki node skills/resume-generator/scripts/api_server.mjs
 
 ### 5. GET /api/templates
 
-返回所有模板（完整模板配置，前端预览渲染需要 `sections` 定义）。读 `templates/` 下所有 `.json`，原样返回文件内容。
+返回所有模板（完整模板配置，前端预览渲染需要 `sections` 定义）。读 `.career-wiki-skill/templates/` 下所有 `.json`，原样返回文件内容。
 
 **响应 200：**
 ```json
@@ -482,24 +482,24 @@ Agent 完成润色后，将结果保存到当前简历配置：
   "format": "html",
   "data": { /* 结构化简历 JSON */ },
   "template_id": "tech-minimal",
-  "css_path": "templates/tech-minimal.css",
+  "css_path": ".career-wiki-skill/templates/tech-minimal.css",
   "instruction": "前端用模板 CSS 渲染 HTML，PDF 用 window.print()"
 }
 ```
 
 ### 10. POST /api/resume/save
 
-保存简历配置到 `~/.career_wiki/resumes/{id}.json`。
+保存简历配置到 `~/.career_wiki/.career-wiki-skill/resumes/{id}.json`。
 
-**请求体：** 完整的简历配置 JSON（由 web-editor 前端生成，格式见 `resumes/` 下现有配置）。
+**请求体：** 完整的简历配置 JSON（由 web-editor 前端生成，格式见 `.career-wiki-skill/resumes/` 下现有配置）。
 
-内容编排中的手动修改保存在 `content_overrides[Wiki相对路径][字段名]`。保存接口只写 `resumes/{id}.json`，不会调用 Wiki 写入流程；generate/JSON export 在读取 Wiki 后将该覆盖应用到当前简历结果。
+内容编排中的手动修改保存在 `content_overrides[Wiki相对路径][字段名]`。保存接口只写 `.career-wiki-skill/resumes/{id}.json`，不会调用 Wiki 写入流程；generate/JSON export 在读取 Wiki 后将该覆盖应用到当前简历结果。
 
 **响应 200：**
 ```json
 {
   "status": "saved",
-  "path": "/Users/joewang/.career_wiki/resumes/bytedance-backend.json",
+  "path": "/Users/joewang/.career_wiki/.career-wiki-skill/resumes/bytedance-backend.json",
   "id": "bytedance-backend"
 }
 ```
@@ -533,7 +533,7 @@ Agent 完成润色后，将结果保存到当前简历配置：
 
 ## Common Pitfalls
 
-1. **wiki/ 是空目录就启动。** API server 能启动但 `/api/wiki` 返回空数组。应提示用户先跑 interview skill 采集信息再 compile wiki。
+1. **knowledge/ 是空目录就启动。** API server 能启动但 `/api/wiki` 返回空数组。应提示用户先跑 interview skill 采集信息再 compile wiki。
 
 2. **简历配置的 template 指向不存在的模板。** `/api/resume/generate` 会返回 404。生成前应检查模板文件存在。
 
@@ -543,7 +543,7 @@ Agent 完成润色后，将结果保存到当前简历配置：
 
 5. **数据目录找不到。** `WIKI_ROOT` 环境变量没设、config.json 不存在、目录路径写错——API server 启动时应该 fallback 到 `~/.career_wiki/`，并在 `/api/health` 里返回实际用的路径让用户确认。
 
-6. **wiki markdown 没有 frontmatter 或 frontmatter 不合规。** gray-matter 解析不出 fields，实体数据会是空的。应跳过并 warn，不 crash。
+6. **OKF concept 不合规。** 缺少 `type`、`sources` 不是对象数组、含旧字段或 `[[wikilink]]` 时，API 必须明确报错；不得静默跳过或猜测旧格式。
 
 7. **端口冲突。** 默认 3001，被占时启动失败。应提示用户设 `PORT` 环境变量换端口。
 
@@ -551,7 +551,7 @@ Agent 完成润色后，将结果保存到当前简历配置：
 
 9. **PUT /api/wiki/refresh 被误以为是同步编译。** 这个接口不编译 wiki，只返回提示。Wiki compile 是 Agent LLM 操作，必须用户在对话里触发 wiki-engine skill。
 
-10. **正则提取 wikilink 漏了嵌套方括号。** wikilink 格式是 `[[path|name]]`，正则要正确处理可选的 `|name` 部分。参考 wiki-engine 的 okf_export.mjs 的正则。
+10. **把旧 wikilink 当成关系。** OKF 关系只能来自标准 Markdown 链接；旧 `[[path|name]]` 必须先通过一次性迁移工具转换。
 
 ---
 

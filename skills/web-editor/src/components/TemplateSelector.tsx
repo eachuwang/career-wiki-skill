@@ -3,7 +3,7 @@
  *
  * 下拉选择当前模板，并提供「复制当前模板」「删除当前模板」操作。
  * 复制会生成新 id/name 并携带源模板 CSS；预设模板同样可删（删除的是
- * ~/.career_wiki/templates/ 下的副本，不影响 skill 包内预设文件）。
+ * ~/.career_wiki/.career-wiki-skill/templates/ 下的副本，不影响 skill 包内预设文件）。
  */
 
 import { useEffect, useRef, useState } from 'react';

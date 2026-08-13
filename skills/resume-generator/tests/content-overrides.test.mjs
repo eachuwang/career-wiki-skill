@@ -21,18 +21,18 @@ async function waitForServer(baseUrl) {
 
 test('内容覆盖只进入当前简历生成结果，不修改 Wiki 原文', async (t) => {
   const root = await mkdtemp(join(tmpdir(), 'career-wiki-content-overrides-'));
-  const wikiFile = join(root, 'wiki', 'projects', 'data-agent.md');
-  await mkdir(join(root, 'wiki', 'projects'), { recursive: true });
-  await mkdir(join(root, 'templates'), { recursive: true });
+  const wikiFile = join(root, 'knowledge', 'projects', 'data-agent.md');
+  await mkdir(join(root, 'knowledge', 'projects'), { recursive: true });
+  await mkdir(join(root, '.career-wiki-skill', 'templates'), { recursive: true });
   const wikiSource = `---
-entity: project
+type: career.project
 name: 数据智能体
 description: Wiki 原始项目描述。
 ---
 `;
   await writeFile(wikiFile, wikiSource);
   await writeFile(
-    join(root, 'templates', 'tech-minimal.json'),
+    join(root, '.career-wiki-skill', 'templates', 'tech-minimal.json'),
     JSON.stringify({
       id: 'tech-minimal',
       sections: [{ module: 'project', title: '项目经验', fields: ['name', 'description'] }],

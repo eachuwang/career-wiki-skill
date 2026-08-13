@@ -3,6 +3,7 @@
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { bundleDirectory } from './layout.mjs';
 
 export const DELETION_MANIFEST = '.career-wiki-skill/deletions.json';
 
@@ -83,7 +84,7 @@ export async function addDeletion(root, record) {
     'utf8',
   );
   try {
-    await unlink(join(root, 'wiki', normalized.path));
+    await unlink(join(bundleDirectory(root), normalized.path));
   } catch (error) {
     if (error.code !== 'ENOENT') {
       throw new Error(`删除 Wiki 生成页失败: ${error.message}`);

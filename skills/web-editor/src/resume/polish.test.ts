@@ -6,7 +6,8 @@ import { applyPolishToEntities, buildPolishSourceHash } from './polish.ts';
 const project: WikiEntity = {
   path: 'projects/data-agent.md',
   entity: 'project',
-  confidence: 'verified',
+  title: '',
+    trustTier: 'unverified',
   sources: [],
   relations: [],
   links: [],
@@ -67,7 +68,8 @@ test('只应用用户选择的润色字段，并支持个人优势内容', () =>
   const summary = {
     path: 'summaries/profile.md',
     entity: 'summary',
-    confidence: 'verified',
+    title: '',
+    trustTier: 'unverified',
     sources: [],
     relations: [],
     links: [],
@@ -76,7 +78,8 @@ test('只应用用户选择的润色字段，并支持个人优势内容', () =>
   const project = {
     path: 'projects/demo.md',
     entity: 'project',
-    confidence: 'verified',
+    title: '',
+    trustTier: 'unverified',
     sources: [],
     relations: [],
     links: [],

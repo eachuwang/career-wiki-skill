@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { createCareerWikiAppState } from '../scripts/app_state.mjs';
 import { buildPolishSourceHash } from '../scripts/resume_polish.mjs';
+import { createCareerKnowledge } from '../scripts/career_knowledge_application.mjs';
+import { createResumePolish } from '../scripts/resume_polish_application.mjs';
 
 test('润色指纹覆盖所有原始字段，避免上下文事实变化后复用旧文案', () => {
   assert.notEqual(
@@ -54,37 +56,10 @@ tech_stack: Node.js、PostgreSQL、LangChain
   return root;
 }
 
-/** 等待真实服务可访问，确保测试覆盖 Markdown 到 HTTP 的完整链路。 */
-async function waitForServer(baseUrl) {
-  for (let attempt = 0; attempt < 60; attempt += 1) {
-    try {
-      const response = await fetch(`${baseUrl}/api/health`);
-      if (response.ok) return;
-    } catch {
-      // 服务尚未监听，短暂等待后重试。
-    }
-    await new Promise((resolve) => setTimeout(resolve, 50));
-  }
-  throw new Error('API 服务启动超时');
-}
-
-test('项目岗位职责和技术栈以独立字段进入 Career Knowledge 响应', async (t) => {
+test('项目岗位职责和技术栈以独立字段进入 Career Knowledge', async (t) => {
   const root = await createFixture();
-  const port = 42000 + Math.floor(Math.random() * 1000);
-  const baseUrl = `http://127.0.0.1:${port}`;
-  const server = spawn(process.execPath, ['scripts/api_server.mjs'], {
-    cwd: new URL('..', import.meta.url),
-    env: { ...process.env, WIKI_ROOT: root, PORT: String(port) },
-    stdio: 'ignore',
-  });
-  t.after(async () => {
-    server.kill('SIGTERM');
-    await rm(root, { recursive: true, force: true });
-  });
-  await waitForServer(baseUrl);
-
-  const wikiResponse = await fetch(`${baseUrl}/api/wiki`);
-  const wiki = await wikiResponse.json();
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const wiki = await createCareerKnowledge({ root }).load();
   assert.equal(
     wiki.entities[0].fields.responsibilities,
     '解析数据字典；生成 DDL 与 ETL 脚本；推荐数仓模型。',
@@ -95,33 +70,17 @@ test('项目岗位职责和技术栈以独立字段进入 Career Knowledge 响�
 
 test('润色上下文提供原始事实、口吻样本和稳定指纹', async (t) => {
   const root = await createFixture();
-  const port = 43000 + Math.floor(Math.random() * 1000);
-  const baseUrl = `http://127.0.0.1:${port}`;
-  const server = spawn(process.execPath, ['scripts/api_server.mjs'], {
-    cwd: new URL('..', import.meta.url),
-    env: { ...process.env, WIKI_ROOT: root, PORT: String(port) },
-    stdio: 'ignore',
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const appState = createCareerWikiAppState({ root });
+  const polish = createResumePolish({ root, appState });
+  const context = await polish.buildContext({
+    config: {
+      id: 'ai-resume',
+      name: 'AI 应用简历',
+      template: 'tech-minimal',
+      modules: ['project'],
+    },
   });
-  t.after(async () => {
-    server.kill('SIGTERM');
-    await rm(root, { recursive: true, force: true });
-  });
-  await waitForServer(baseUrl);
-
-  const response = await fetch(`${baseUrl}/api/resume/polish-context`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      config: {
-        id: 'ai-resume',
-        name: 'AI 应用简历',
-        template: 'tech-minimal',
-        modules: ['project'],
-      },
-    }),
-  });
-  assert.equal(response.status, 200);
-  const context = await response.json();
   assert.equal(context.candidates.length, 1);
   assert.equal(context.candidates[0].source.description, '自动生成数据接入脚本。');
   assert.equal(context.candidates[0].source.responsibilities, '解析数据字典；生成 DDL 与 ETL 脚本；推荐数仓模型。');

@@ -15,12 +15,12 @@ metadata:
 
 ## 职责
 
-Node 进程只承担 I/O 与远程模型适配：
+Node 进程由四个明确接口组成：
 
-1. 通过 `career-wiki-wiki-engine/career-knowledge` 返回统一 Wiki snapshot。
-2. 读取和保存 `.career-wiki-skill/resumes/` 下的简历配置。
-3. 读取和管理 `.career-wiki-skill/templates/` 下的模板 JSON/CSS。
-4. 构造 AI 润色上下文，并按用户显式协议调用 OpenAI-compatible 或 Anthropic Messages provider。
+1. `createCareerKnowledge({ root })`：统一 Wiki snapshot、实体读取与健康状态。
+2. `createCareerWikiAppState({ root })`：简历和模板的读取、保存与删除事务。
+3. `createResumePolish({ root, appState })`：润色上下文、生成、结果合并与模型列表。
+4. `createCareerWikiHttpAdapter({ knowledge, appState, polish })`：只翻译 HTTP 输入输出、状态码和序列化。
 
 浏览器端 `projectResume({ wiki, config, template })` 拥有简历投影。预览、HTML、PDF 和 JSON 导出消费同一 `ResumeView`；HTTP adapter 不执行模块选择、润色应用、手动覆盖、隐藏、排序、隐私或分组。
 
@@ -68,7 +68,7 @@ node skills/resume-generator/scripts/api_server.mjs
 loadCareerKnowledge(root, options)
 ```
 
-该模块拥有目录遍历、严格 OKF 校验、实体解析、关系归一化和删除清单过滤。HTTP adapter 只翻译查询参数与响应状态，不直接解析 frontmatter 或读取 10 个实体目录。
+Career Knowledge 模块拥有目录遍历、严格 OKF 校验、实体解析、关系归一化和删除清单过滤。HTTP adapter 只翻译查询参数与响应状态，不直接解析 frontmatter 或读取实体目录。
 
 `GET /api/wiki` 返回：
 
@@ -153,5 +153,7 @@ Base URL 不用于猜测协议。候选项每批最多 2 条、最多同时 2 �
 - 润色上下文包含原始事实、口吻样本、选中字段和稳定指纹。
 - OpenAI-compatible 与 Anthropic Messages 使用各自请求和响应协议。
 - 保存失败保留浏览器草稿并返回不含绝对路径的错误。
-- HTTP adapter 中不存在 Resume Projection 或导出实现。
+- `api_server.mjs` 只组装生产模块和管理端口生命周期。
+- HTTP adapter 中不存在文件系统、OKF 解析、润色编排、Resume Projection 或导出实现。
+- 应用状态与润色行为通过各自接口测试；HTTP 只保留少量契约测试。
 - `npm run test:resume-generator` 通过。

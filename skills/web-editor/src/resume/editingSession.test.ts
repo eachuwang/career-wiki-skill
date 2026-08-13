@@ -152,66 +152,6 @@ test('保存进行中切换简历时先等待保存，再保护期间产生的�
   assert.equal(session.getSnapshot().draft?.name, '保存期间的新草稿');
 });
 
-test('AI 润色返回时只合并润色结果，不覆盖请求期间的其他草稿修改', async () => {
-  const session = createResumeEditingSession({
-    resumes: [resume()],
-    saveResume: async () => {},
-  });
-
-  const requestDraft = structuredClone(session.getSnapshot().draft!);
-  await session.dispatch({ type: 'edit-draft', patch: { template: 'business-double' } });
-  await session.dispatch({
-    type: 'merge-polish-result',
-    requestResumeId: requestDraft.id,
-    polish: {
-      enabled: true,
-      entries: {
-        'wiki/projects/mail.md': {
-          source_hash: 'abc',
-          fields: { description: '润色后的项目描述' },
-        },
-      },
-    },
-  });
-
-  assert.equal(session.getSnapshot().draft?.template, 'business-double');
-  assert.equal(
-    session.getSnapshot().draft?.polish?.entries?.['wiki/projects/mail.md']?.fields.description,
-    '润色后的项目描述',
-  );
-  assert.equal(session.getSnapshot().saveStatus, 'dirty');
-});
-
-test('AI 润色返回时保留请求期间更新的润色选项', async () => {
-  const session = createResumeEditingSession({
-    resumes: [resume({ polish: { enabled: true, selected_fields: ['description'], entries: {} } })],
-    saveResume: async () => {},
-  });
-
-  await session.dispatch({
-    type: 'edit-draft',
-    patch: { polish: { enabled: false, selected_fields: ['content'], entries: {} } },
-  });
-  await session.dispatch({
-    type: 'merge-polish-result',
-    requestResumeId: 'ai-engineer',
-    polish: {
-      enabled: true,
-      selected_fields: ['description'],
-      entries: {
-        'wiki/projects/mail.md': {
-          source_hash: 'abc',
-          fields: { description: '新结果' },
-        },
-      },
-    },
-  });
-
-  assert.equal(session.getSnapshot().draft?.polish?.enabled, false);
-  assert.deepEqual(session.getSnapshot().draft?.polish?.selected_fields, ['content']);
-  assert.equal(session.getSnapshot().draft?.polish?.entries?.['wiki/projects/mail.md']?.fields.description, '新结果');
-});
-
 test('刷新简历集合只同步列表，切换新简历仍受草稿保护', async () => {
   const session = createResumeEditingSession({
     resumes: [resume()],
@@ -253,4 +193,123 @@ test('破坏性操作会等待进行中的保存，并报告保存期间产生�
   releaseSave?.();
   await saving;
   assert.deepEqual(await preparing, { status: 'ready', hasUnsavedDraft: true });
+});
+
+test('新建简历作为一个事务持久化、加入集合并切换到新草稿', async () => {
+  const persisted: ResumeConfig[] = [];
+  const session = createResumeEditingSession({
+    resumes: [resume()],
+    saveResume: async (config) => { persisted.push(structuredClone(config)); },
+    deleteResume: async () => {},
+  });
+  const created = resume({ id: 'new-resume', name: '新简历' });
+
+  const result = await session.dispatch({ type: 'create-resume', config: created });
+
+  assert.deepEqual(result, { status: 'switched' });
+  assert.deepEqual(persisted, [created]);
+  assert.deepEqual(session.getSnapshot().resumes.map((item) => item.id), [
+    'ai-engineer',
+    'new-resume',
+  ]);
+  assert.equal(session.getSnapshot().currentResumeId, 'new-resume');
+  assert.equal(session.getSnapshot().draft?.name, '新简历');
+  assert.equal(session.getSnapshot().saveStatus, 'clean');
+});
+
+test('删除当前简历作为一个事务持久化，并切换到剩余简历', async () => {
+  const deleted: string[] = [];
+  const session = createResumeEditingSession({
+    resumes: [resume(), resume({ id: 'product', name: '产品经理简历' })],
+    saveResume: async () => {},
+    deleteResume: async (id) => { deleted.push(id); },
+  });
+
+  const result = await session.dispatch({ type: 'delete-current-resume' });
+
+  assert.deepEqual(result, { status: 'switched' });
+  assert.deepEqual(deleted, ['ai-engineer']);
+  assert.deepEqual(session.getSnapshot().resumes.map((item) => item.id), ['product']);
+  assert.equal(session.getSnapshot().currentResumeId, 'product');
+  assert.equal(session.getSnapshot().draft?.name, '产品经理简历');
+});
+
+test('新建持久化失败时保持当前简历和草稿不变', async () => {
+  const session = createResumeEditingSession({
+    resumes: [resume()],
+    saveResume: async () => { throw new Error('保存新简历失败'); },
+    deleteResume: async () => {},
+  });
+  const before = structuredClone(session.getSnapshot());
+
+  const result = await session.dispatch({
+    type: 'create-resume',
+    config: resume({ id: 'new-resume', name: '新简历' }),
+  });
+
+  assert.deepEqual(result, { status: 'failed', error: '保存新简历失败' });
+  assert.deepEqual(session.getSnapshot(), before);
+});
+
+test('异步润色合并请求期间的用户修改，并将合并后的最新草稿保存', async () => {
+  let releasePolish: (() => void) | undefined;
+  const pendingPolish = new Promise<void>((resolve) => { releasePolish = resolve; });
+  const saved: ResumeConfig[] = [];
+  const session = createResumeEditingSession({
+    resumes: [resume()],
+    saveResume: async (config) => { saved.push(structuredClone(config)); },
+    polishResume: async (config) => {
+      await pendingPolish;
+      return {
+        config: {
+          ...config,
+          polish: {
+            enabled: true,
+            entries: {
+              'projects/mail.md': {
+                source_hash: 'abc',
+                fields: { description: '润色后的项目描述' },
+              },
+            },
+          },
+        },
+        generated_count: 1,
+        candidate_count: 1,
+      };
+    },
+  });
+
+  const polishing = session.dispatch({
+    type: 'generate-polish',
+    provider: {
+      protocol: 'openai',
+      base_url: 'https://example.com/v1',
+      api_key: 'key',
+      model: 'model',
+      timeout_ms: 1000,
+    },
+  });
+  await session.dispatch({
+    type: 'edit-draft',
+    patch: {
+      template: 'business-double',
+      polish: { enabled: false, selected_fields: ['content'], entries: {} },
+    },
+  });
+  releasePolish?.();
+
+  assert.deepEqual(await polishing, {
+    status: 'polished',
+    generatedCount: 1,
+    candidateCount: 1,
+  });
+  assert.equal(session.getSnapshot().draft?.template, 'business-double');
+  assert.equal(session.getSnapshot().draft?.polish?.enabled, false);
+  assert.deepEqual(session.getSnapshot().draft?.polish?.selected_fields, ['content']);
+  assert.equal(session.getSnapshot().saveStatus, 'saved');
+  assert.equal(saved[0].template, 'business-double');
+  assert.equal(
+    saved[0].polish?.entries?.['projects/mail.md']?.fields.description,
+    '润色后的项目描述',
+  );
 });

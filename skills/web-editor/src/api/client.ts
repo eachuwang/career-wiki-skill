@@ -69,11 +69,6 @@ export async function getResumes(): Promise<ResumeConfig[]> {
   return data.resumes ?? [];
 }
 
-/** 获取单份简历配置 */
-export async function getResume(id: string): Promise<ResumeConfig> {
-  return request<ResumeConfig>(`/api/resumes/${id}`);
-}
-
 /** 保存简历配置 */
 export async function saveResume(config: ResumeConfig): Promise<void> {
   await request<void>('/api/resume/save', {

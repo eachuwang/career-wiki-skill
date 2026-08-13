@@ -116,7 +116,12 @@ export default function ResumeEditor({
   onRefreshWiki,
 }: ResumeEditorProps) {
   const [editingSession] = useState(() =>
-    createResumeEditingSession({ resumes, saveResume: api.saveResume }),
+    createResumeEditingSession({
+      resumes,
+      saveResume: api.saveResume,
+      deleteResume: api.deleteResume,
+      polishResume: api.polishResume,
+    }),
   );
   const session = useSyncExternalStore(
     editingSession.subscribe,
@@ -178,12 +183,6 @@ export default function ResumeEditor({
 
   // ---------- 多简历管理（原 multi-resume 能力） ----------
 
-  /** 重新拉取简历列表并同步本地状态，返回最新列表 */
-  const refreshResumeList = async (): Promise<ResumeConfig[]> => {
-    const fresh = await api.getResumes();
-    return fresh;
-  };
-
   /** 切换简历：按 id 加载对应配置 */
   const handleSelectResume = async (id: string) => {
     const result = await editingSession.dispatch({ type: 'switch-resume', resumeId: id });
@@ -228,10 +227,8 @@ export default function ResumeEditor({
       modules: newModules,
     });
     try {
-      await api.saveResume(config);
-      const fresh = await refreshResumeList();
-      await editingSession.dispatch({ type: 'replace-resumes', resumes: fresh });
-      await editingSession.dispatch({ type: 'switch-resume', resumeId: newId, discardDirty: true });
+      const result = await editingSession.dispatch({ type: 'create-resume', config });
+      if (result.status === 'failed') throw new Error(result.error);
       setExpandedModuleTypes(new Set());
     } catch (e) {
       alert(`新建简历失败: ${e instanceof Error ? e.message : e}`);
@@ -255,10 +252,8 @@ export default function ResumeEditor({
       updated: new Date().toISOString().slice(0, 10),
     };
     try {
-      await api.saveResume(copy);
-      const fresh = await refreshResumeList();
-      await editingSession.dispatch({ type: 'replace-resumes', resumes: fresh });
-      await editingSession.dispatch({ type: 'switch-resume', resumeId: newId, discardDirty: true });
+      const result = await editingSession.dispatch({ type: 'create-resume', config: copy });
+      if (result.status === 'failed') throw new Error(result.error);
       setExpandedModuleTypes(new Set());
     } catch (e) {
       alert(`复制简历失败: ${e instanceof Error ? e.message : e}`);
@@ -275,19 +270,8 @@ export default function ResumeEditor({
       : '';
     if (!window.confirm(`确定删除简历「${target.name}」？${draftWarning}仅删除配置，wiki 数据不受影响。`)) return;
     try {
-      await api.deleteResume(target.id);
-      const fresh = await refreshResumeList();
-      if (fresh.length > 0) {
-        await editingSession.dispatch({
-          type: 'replace-resumes',
-          resumes: fresh,
-        });
-        await editingSession.dispatch({
-          type: 'switch-resume',
-          resumeId: fresh[0].id,
-          discardDirty: true,
-        });
-      }
+      const result = await editingSession.dispatch({ type: 'delete-current-resume' });
+      if (result.status === 'failed') throw new Error(result.error);
       setExpandedModuleTypes(new Set());
     } catch (e) {
       alert(`删除简历失败: ${e instanceof Error ? e.message : e}`);
@@ -514,18 +498,15 @@ export default function ResumeEditor({
     setSaveMsg('');
     try {
       if (!draft) throw new Error('没有可润色的简历草稿');
-      const requestResumeId = draft.id;
-      const result = await api.polishResume(structuredClone(draft), polishProvider);
-      await editingSession.dispatch({
-        type: 'merge-polish-result',
-        requestResumeId,
-        polish: result.config.polish,
+      const result = await editingSession.dispatch({
+        type: 'generate-polish',
+        provider: polishProvider,
       });
-      const saved = await editingSession.dispatch({ type: 'save' });
-      if (saved.status === 'failed') throw new Error(saved.error);
+      if (result.status === 'failed') throw new Error(result.error);
+      if (result.status !== 'polished') throw new Error('AI 润色事务未完成');
       setSaveMsg(
-        result.generated_count > 0
-          ? `已生成 ${result.generated_count} 条润色内容`
+        result.generatedCount > 0
+          ? `已生成 ${result.generatedCount} 条润色内容`
           : '没有可润色的项目或经历，已保留原文',
       );
     } catch (e) {
@@ -586,21 +567,20 @@ export default function ResumeEditor({
     setSaveMsg('');
     try {
       if (!draft) throw new Error('没有可润色的简历草稿');
-      const requestResumeId = draft.id;
       const requestConfig: ResumeConfig = { ...structuredClone(draft), polish: {
         ...(polish || {}),
         enabled: true,
         selected_fields: selectedPolishFields.length > 0 ? selectedPolishFields : DEFAULT_POLISH_FIELDS,
       } };
-      const result = await api.polishResume(requestConfig, polishProvider, { only: { path, field } });
-      await editingSession.dispatch({
-        type: 'merge-polish-result',
-        requestResumeId,
-        polish: result.config.polish,
+      const result = await editingSession.dispatch({
+        type: 'generate-polish',
+        provider: polishProvider,
+        only: { path, field },
+        config: requestConfig,
       });
-      const saved = await editingSession.dispatch({ type: 'save' });
-      if (saved.status === 'failed') throw new Error(saved.error);
-      setSaveMsg(result.generated_count > 0 ? '已换一版润色内容' : '未生成新的内容，请稍后重试');
+      if (result.status === 'failed') throw new Error(result.error);
+      if (result.status !== 'polished') throw new Error('AI 润色事务未完成');
+      setSaveMsg(result.generatedCount > 0 ? '已换一版润色内容' : '未生成新的内容，请稍后重试');
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setPolishProviderError(message);

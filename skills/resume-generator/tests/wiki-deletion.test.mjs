@@ -52,7 +52,7 @@ async function waitForServer(baseUrl) {
   throw new Error('API 服务启动超时');
 }
 
-test('删除清单会阻止已删除项目进入 Wiki 和简历生成结果', async (t) => {
+test('删除清单会阻止已删除项目进入 Career Knowledge HTTP adapter', async (t) => {
   const root = await createFixture();
   const port = 42000 + Math.floor(Math.random() * 1000);
   const baseUrl = `http://127.0.0.1:${port}`;
@@ -76,20 +76,6 @@ test('删除清单会阻止已删除项目进入 Wiki 和简历生成结果', as
   assert.equal(wikiResponse.status, 200);
   const wiki = await wikiResponse.json();
   assert.deepEqual(wiki.entities.map((item) => item.fields.name), ['保留项目']);
-
-  const resumeResponse = await fetch(`${baseUrl}/api/resume/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      config: {
-        template: 'tech-minimal',
-        modules: ['project'],
-      },
-    }),
-  });
-  assert.equal(resumeResponse.status, 200);
-  const resume = await resumeResponse.json();
-  assert.deepEqual(resume.sections[0].items.map((item) => item.name), ['保留项目']);
 
   const deletedResponse = await fetch(
     `${baseUrl}/api/wiki/projects/deleted-project.md`,

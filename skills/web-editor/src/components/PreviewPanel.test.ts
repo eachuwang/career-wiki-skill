@@ -3,12 +3,37 @@ import test from 'node:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { createServer } from 'vite';
+import type { ResumeConfig, TemplateConfig, WikiEntity } from '../types/index.ts';
+import { projectResume } from '../resume/projection.ts';
 
 /** SSR 测试只验证导出入口布局，不执行实际下载。 */
 function noOp(): void {}
 
-/** 通过 Vite 的公开 SSR 入口加载 TSX，避免测试依赖组件内部实现。 */
-async function renderPreview(overrides: Record<string, unknown> = {}): Promise<string> {
+interface PreviewFixture {
+  wiki?: WikiEntity[];
+  config?: Partial<ResumeConfig>;
+  template?: TemplateConfig | null;
+}
+
+const person: WikiEntity = {
+  path: 'persons/profile.md',
+  entity: 'person',
+  title: '',
+  trustTier: 'unverified',
+  sources: [],
+  relations: [],
+  links: [],
+  fields: {
+    name: '张三',
+    email: 'hello@example.com',
+    phone: '13800138000',
+    github: 'github.com/example',
+    website: 'example.com',
+  },
+};
+
+/** 通过 Resume Projection seam 生成视图，再用公开 SSR 入口验证渲染。 */
+async function renderPreview({ wiki = [person], config = {}, template = null }: PreviewFixture = {}): Promise<string> {
   const server = await createServer({
     appType: 'custom',
     logLevel: 'silent',
@@ -17,41 +42,20 @@ async function renderPreview(overrides: Record<string, unknown> = {}): Promise<s
 
   try {
     const previewModule = await server.ssrLoadModule('/src/components/PreviewPanel.tsx');
+    const resumeConfig: ResumeConfig = {
+      id: 'preview-test',
+      name: '测试简历',
+      template: template?.id || 'default',
+      created: '2026-08-13',
+      updated: '2026-08-13',
+      modules: ['person'],
+      ...config,
+    };
     return renderToStaticMarkup(
       createElement(previewModule.default, {
-        modules: [
-          {
-            id: 'person-module',
-            type: 'person',
-            label: '个人信息',
-            expanded: true,
-            overrides: {},
-            hiddenItemIds: [],
-          },
-        ],
-        wikiEntities: [
-          {
-            path: 'person/profile.md',
-            entity: 'person',
-            title: '',
-    trustTier: 'unverified',
-            sources: [],
-            relations: [],
-            links: [],
-            fields: {
-              name: '张三',
-              email: 'hello@example.com',
-              phone: '13800138000',
-              github: 'github.com/example',
-              website: 'example.com',
-            },
-          },
-        ],
-        template: null,
-        privacy: {},
-        resumeName: '测试简历',
+        view: projectResume({ wiki, config: resumeConfig, template }),
+        template,
         onOpenExport: noOp,
-        ...overrides,
       }),
     );
   } finally {
@@ -89,19 +93,13 @@ test('预览工具栏只保留一个导出入口', previewOwnsSingleExportAction
 
 test('内容编排中编辑项目字段后，预览立即显示该条目的覆盖值', async () => {
   const html = await renderPreview({
-    modules: [
-      {
-        id: 'project-module',
-        type: 'project',
-        label: '项目经验',
-        expanded: true,
-        overrides: {
-          'projects/data-agent.md': { description: '用户编辑后的项目描述。' },
-        },
-        hiddenItemIds: [],
+    config: {
+      modules: ['project'],
+      content_overrides: {
+        'projects/data-agent.md': { description: '用户编辑后的项目描述。' },
       },
-    ],
-    wikiEntities: [
+    },
+    wiki: [
       {
         path: 'projects/data-agent.md',
         entity: 'project',
@@ -139,17 +137,8 @@ test('内容编排中编辑项目字段后，预览立即显示该条目的覆�
 /** 旧模板未声明新字段时，项目预览也应兼容显示岗位职责和技术栈。 */
 async function previewShowsProjectResponsibilities(): Promise<void> {
   const html = await renderPreview({
-    modules: [
-      {
-        id: 'project-module',
-        type: 'project',
-        label: '项目经验',
-        expanded: true,
-        overrides: {},
-        hiddenItemIds: [],
-      },
-    ],
-    wikiEntities: [
+    config: { modules: ['project'] },
+    wiki: [
       {
         path: 'projects/data-agent.md',
         entity: 'project',
@@ -172,6 +161,8 @@ async function previewShowsProjectResponsibilities(): Promise<void> {
     template: {
       id: 'legacy-template',
       name: '旧模板',
+      style: 'legacy-template.css',
+      layout: 'single-column',
       sections: [
         {
           module: 'project',

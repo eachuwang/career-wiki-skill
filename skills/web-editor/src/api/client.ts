@@ -128,18 +128,6 @@ export async function getTemplates(): Promise<TemplateConfig[]> {
   return data.templates ?? [];
 }
 
-// ---------- 生成 + 导出 ----------
-
-/** 生成结构化简历 JSON */
-export async function generateResume(
-  config: ResumeConfig,
-): Promise<Record<string, unknown>> {
-  return request<Record<string, unknown>>('/api/resume/generate', {
-    method: 'POST',
-    body: JSON.stringify(config),
-  });
-}
-
 /** 获取 Agent 进行简历润色所需的原始事实和用户口吻样本。 */
 export async function getResumePolishContext(
   config: ResumeConfig,
@@ -174,19 +162,6 @@ export async function getPolishModels(
     body: JSON.stringify({ provider }),
   });
   return result.models ?? [];
-}
-
-/** 导出简历（json 格式直接下载，html/pdf 由前端处理） */
-export async function exportResumeJson(
-  config: ResumeConfig,
-): Promise<Blob> {
-  const resp = await fetch(BASE_URL + '/api/resume/export', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ config, format: 'json' }),
-  });
-  if (!resp.ok) throw new Error('导出 JSON 失败');
-  return resp.blob();
 }
 
 // ---------- Wiki 编译 ----------

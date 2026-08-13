@@ -2,9 +2,25 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   buildStandaloneResumeHtml,
+  createResumeJsonBlob,
   downloadResumePdf,
   type PdfLike,
 } from './export.ts';
+import type { ResumeView } from './projection.ts';
+
+test('JSON 导出逐字序列化预览使用的 ResumeView', async () => {
+  const view: ResumeView = {
+    resume: { id: 'ai', name: 'AI 简历', template: 'technical' },
+    person: null,
+    sections: [],
+    meta: { entity_count: 0, template: 'technical', resume_config: 'ai' },
+  };
+
+  const blob = createResumeJsonBlob(view);
+
+  assert.equal(blob.type, 'application/json');
+  assert.deepEqual(JSON.parse(await blob.text()), view);
+});
 
 test('HTML 导出复用预览标记并内嵌相同样式', () => {
   const html = buildStandaloneResumeHtml({

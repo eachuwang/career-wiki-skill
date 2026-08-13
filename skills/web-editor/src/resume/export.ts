@@ -10,6 +10,7 @@
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { A4_WIDTH_MM, A4_HEIGHT_MM } from './page.ts';
+import type { ResumeView } from './projection.ts';
 
 interface StandaloneResumeHtmlInput {
   title: string;
@@ -52,6 +53,11 @@ export interface SaveExportBlobInput {
   description: string;
   mimeType: string;
   extension: string;
+}
+
+/** JSON、预览、HTML 和 PDF 共用同一个 ResumeView，不在 adapter 中重算领域规则。 */
+export function createResumeJsonBlob(view: ResumeView): Blob {
+  return new Blob([JSON.stringify(view, null, 2)], { type: 'application/json' });
 }
 
 type SaveFilePicker = (options: {

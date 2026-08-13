@@ -45,7 +45,7 @@ resume-generator ──→ web-editor（前端调 API，含模板/多简历/脱�
 
 ### 简历润色边界
 
-简历生成时，Agent 可按“调用 `POST /api/resume/polish-context` → 根据 `selected_fields` 阅读原始字段和同一用户口吻样本 → 轻量润色 → 用原 `source_hash` 写入 `polish.entries` → 保存 → 再调用 generate/export”的顺序执行；Web 编辑器则由用户配置 OpenAI-compatible provider 和润色内容后调用 `POST /api/resume/polish`，生成后再保存。支持项目描述、个人优势和岗位职责；字段旁的「换一换」使用 `only: { path, field }` 只重新生成当前字段。API Key 仅保存在浏览器本地设置，不写入简历 JSON；没有可用推理能力时保留原文，不做伪润色。
+简历润色时，Agent 可按“调用 `POST /api/resume/polish-context` → 根据 `selected_fields` 阅读原始字段和同一用户口吻样本 → 轻量润色 → 用原 `source_hash` 写入 `polish.entries` → 保存”的顺序执行；Web 编辑器则由用户配置显式协议、Provider 和润色内容后调用 `POST /api/resume/polish`。浏览器端 Resume Projection 将 Wiki、配置和模板投影为预览、HTML、PDF、JSON 共用的 `ResumeView`。支持项目描述、个人优势和岗位职责；字段旁的「换一换」只重新生成当前字段。API Key 仅保存在浏览器本地设置，不写入简历 JSON；没有可用推理能力时保留原文。
 
 润色必须遵守：保留用户事实和词汇；短输入只做必要扩写；参考用户已有表达模仿句式；不补造数字、技术、结果；避免空泛的 AI 套话。Wiki 永远是事实源，润色只属于当前简历视角。Node 会校验 `source_hash`，原始 Wiki 变化后自动回退原文。
 

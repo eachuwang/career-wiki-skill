@@ -1,9 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import type { ExportResult, ResumeExportFormat } from '../resume/browserExport';
 import UiIcon from './UiIcon';
-
-export type ResumeExportFormat = 'pdf' | 'html' | 'json';
-export type ExportResult = 'saved' | 'cancelled';
 
 interface ExportDialogProps {
   open: boolean;

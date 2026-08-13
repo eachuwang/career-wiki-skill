@@ -117,6 +117,7 @@ test('批量润色通过 editingSession 生成并保存，工作流只暴露结�
 
   assert.equal(result.status, 'success');
   if (result.status === 'success') assert.equal(result.generatedCount, 2);
+  assert.equal(session.getSnapshot().draft?.polish?.enabled, true);
   assert.equal(session.getSnapshot().saveStatus, 'saved');
   assert.equal(workflow.getSnapshot().generating, false);
 });

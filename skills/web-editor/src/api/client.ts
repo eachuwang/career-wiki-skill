@@ -15,7 +15,32 @@ import type {
   ResumePolishProviderConfig,
 } from '../types';
 
-const BASE_URL = import.meta.env.VITE_API_URL || '';
+const BASE_URL = import.meta.env?.VITE_API_URL || '';
+
+/** 让服务端浏览器直接用当前预览 HTML/CSS 生成 PDF，避免 canvas 二次重绘。 */
+export async function generateResumePdf(html: string): Promise<Blob> {
+  const path = '/api/resume/pdf';
+  const resp = await fetch(BASE_URL + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ html }),
+  });
+  if (!resp.ok) {
+    let message = `HTTP ${resp.status}`;
+    try {
+      const body = await resp.json();
+      message = body.message || body.error || message;
+    } catch {
+      // Preserve the HTTP status when the server did not return JSON.
+    }
+    throw new Error(`API ${path} 失败: ${message}`);
+  }
+  const blob = await resp.blob();
+  if (blob.type !== 'application/pdf' || blob.size === 0) {
+    throw new Error('PDF 服务返回了无效文件');
+  }
+  return blob;
+}
 
 /** 通用请求函数 */
 async function request<T>(path: string, options?: RequestInit): Promise<T> {

@@ -2,9 +2,9 @@ import {
   buildStandaloneResumeHtml,
   collectDocumentCss,
   createResumeJsonBlob,
-  createResumePdfBlob,
   saveExportBlob,
 } from './export.ts';
+import { generateResumePdf } from '../api/client.ts';
 import type { ResumeView } from './projection.ts';
 
 export type ResumeExportFormat = 'pdf' | 'html' | 'json';
@@ -15,6 +15,10 @@ interface ExportResumePreviewInput {
   filename: string;
   resumeName: string;
   resumeView: ResumeView | null;
+  deps?: {
+    generatePdf?: (html: string) => Promise<Blob>;
+    saveBlob?: typeof saveExportBlob;
+  };
 }
 
 /** 浏览器导出适配器：隔离 DOM 查询、Blob 和文件选择器能力。 */
@@ -23,13 +27,21 @@ export async function exportResumePreview({
   filename,
   resumeName,
   resumeView,
+  deps = {},
 }: ExportResumePreviewInput): Promise<ExportResult> {
   const fullFilename = `${filename}.${format}`;
+  const saveBlob = deps.saveBlob ?? saveExportBlob;
   if (format === 'pdf') {
-    const resumeElement = document.querySelector<HTMLElement>('.print-area');
-    if (!resumeElement) throw new Error('预览尚未准备好，请稍后重试');
-    const blob = await createResumePdfBlob({ element: resumeElement });
-    return saveExportBlob({
+    const resumeMarkup = document.querySelector('.print-area')?.outerHTML;
+    if (!resumeMarkup) throw new Error('预览尚未准备好，请稍后重试');
+    const html = buildStandaloneResumeHtml({
+      title: resumeName,
+      resumeMarkup,
+      cssText: collectDocumentCss(),
+      pdf: true,
+    });
+    const blob = await (deps.generatePdf ?? generateResumePdf)(html);
+    return saveBlob({
       blob,
       filename: fullFilename,
       description: 'PDF 简历',
@@ -40,7 +52,7 @@ export async function exportResumePreview({
 
   if (format === 'json') {
     if (!resumeView) throw new Error('没有可导出的简历视图');
-    return saveExportBlob({
+    return saveBlob({
       blob: createResumeJsonBlob(resumeView),
       filename: fullFilename,
       description: 'JSON 简历数据',
@@ -56,7 +68,7 @@ export async function exportResumePreview({
     resumeMarkup,
     cssText: collectDocumentCss(),
   });
-  return saveExportBlob({
+  return saveBlob({
     blob: new Blob([fullHTML], { type: 'text/html' }),
     filename: fullFilename,
     description: 'HTML 简历',

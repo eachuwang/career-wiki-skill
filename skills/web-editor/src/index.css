@@ -1169,9 +1169,10 @@ button:disabled {
 
 .a4-content {
   width: 100%;
-  /* 建立独立格式化上下文，阻止子元素 margin 折叠穿出内容区，
-     保证分页测量与页面渲染一致，内容严格落在保护区域内 */
-  overflow: hidden;
+  /* 建立独立格式化上下文，阻止子元素 margin 折叠穿出内容区；
+     不用 overflow:hidden，避免字体行盒的亚像素溢出被裁掉。页面级
+     .a4-page 仍负责最终边界保护。 */
+  display: flow-root;
 }
 
 /* 分页测量容器：移出视口但保留真实排版尺寸，供 JS 计算每块所属页码 */

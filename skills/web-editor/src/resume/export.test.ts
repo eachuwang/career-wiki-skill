@@ -3,8 +3,6 @@ import test from 'node:test';
 import {
   buildStandaloneResumeHtml,
   createResumeJsonBlob,
-  downloadResumePdf,
-  type PdfLike,
 } from './export.ts';
 import type { ResumeView } from './projection.ts';
 
@@ -35,80 +33,24 @@ test('HTML 导出复用预览标记并内嵌相同样式', () => {
   assert.match(html, /<meta name="viewport"/);
 });
 
-/** 构建最小 PDF 替身，记录调用顺序与参数 */
-function createFakePdf(calls: string[]): PdfLike {
-  return {
-    addPage() {
-      calls.push('addPage');
+test('导出 HTML 与 JSON 都包含简历正文', async () => {
+  const view: ResumeView = {
+    resume: { id: 'ai', name: 'AI 简历', template: 'technical' },
+    person: {
+      path: 'person/wang',
+      type: 'person',
+      fields: { name: '王羿邱', headline: 'AI 应用工程师' },
     },
-    addImage(imageData, format, x, y, width, height) {
-      calls.push(`addImage:${imageData}:${format}:${x}:${y}:${width}:${height}`);
-    },
-    save(filename) {
-      calls.push(`save:${filename}`);
-    },
+    sections: [],
+    meta: { entity_count: 1, template: 'technical', resume_config: 'ai' },
   };
-}
-
-test('PDF 导出按 A4 逐页渲染，一页对应一个 .a4-page', async () => {
-  const calls: string[] = [];
-  const page1 = { tag: 'page-1' } as unknown as HTMLElement;
-  const page2 = { tag: 'page-2' } as unknown as HTMLElement;
-  const element = {
-    querySelectorAll: (selector: string) =>
-      selector === '.a4-page' ? [page1, page2] : [],
-  } as unknown as HTMLElement;
-
-  const rendered: HTMLElement[] = [];
-  await downloadResumePdf({
-    element,
-    filename: '产品经理简历.pdf',
-    deps: {
-      renderPage: async (pageElement) => {
-        rendered.push(pageElement);
-        return {
-          toDataURL: (type: string) => `data:${type};base64,xxx`,
-        } as HTMLCanvasElement;
-      },
-      createPdf: () => createFakePdf(calls),
-    },
+  const json = createResumeJsonBlob(view);
+  const html = buildStandaloneResumeHtml({
+    title: view.resume.name,
+    resumeMarkup: '<article class="resume-document">王羿邱</article>',
+    cssText: '',
   });
 
-  // 两页都被独立渲染
-  assert.equal(rendered.length, 2);
-  assert.equal(rendered[0], page1);
-  assert.equal(rendered[1], page2);
-
-  // 第 2 页前 addPage；每页 addImage；最后 save
-  assert.equal(calls[0].startsWith('addImage:data:image/jpeg;base64,xxx:JPEG:0:0:210:297'), true);
-  assert.equal(calls[1], 'addPage');
-  assert.equal(calls[2].startsWith('addImage:data:image/jpeg;base64,xxx:JPEG:0:0:210:297'), true);
-  assert.equal(calls[3], 'save:产品经理简历.pdf');
-});
-
-test('PDF 导出在没有 .a4-page 时退回渲染整个元素', async () => {
-  const calls: string[] = [];
-  const element = {
-    querySelectorAll: () => [],
-  } as unknown as HTMLElement;
-
-  const rendered: HTMLElement[] = [];
-  await downloadResumePdf({
-    element,
-    filename: '单页简历.pdf',
-    deps: {
-      renderPage: async (pageElement) => {
-        rendered.push(pageElement);
-        return {
-          toDataURL: () => 'data:image/jpeg;base64,xxx',
-        } as HTMLCanvasElement;
-      },
-      createPdf: () => createFakePdf(calls),
-    },
-  });
-
-  assert.equal(rendered.length, 1);
-  assert.equal(rendered[0], element);
-  assert.equal(calls.filter((c) => c === 'addPage').length, 0);
-  assert.equal(calls[0].startsWith('addImage:'), true);
+  assert.match(await json.text(), /王羿邱/);
+  assert.match(html, /王羿邱/);
 });

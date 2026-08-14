@@ -44,7 +44,7 @@ Career-Wiki-Skill 的前端 React 应用，包含两个页面：
 - **dnd-kit** — 编辑区内拖拽排序
 - **Tailwind CSS** — 样式
 - **vis-network** — 图谱可视化
-- **html2canvas + jsPDF** — 逐页渲染 A4 预览并在浏览器端下载 PDF
+- **Chromium + Playwright Core** — 复用预览 HTML/CSS 原生生成 A4 PDF
 
 ## 启动方式
 
@@ -161,7 +161,7 @@ skills/web-editor/
 
 | 格式 | 方式 | 说明 |
 |------|------|------|
-| PDF | `html2canvas + jsPDF` | 将 `.print-area` 中每个 `.a4-page` 独立渲染并按顺序写入 PDF，不调用打印对话框 |
+| PDF | `Chromium + Playwright Core` | 将 `.print-area` 的同一份 HTML/CSS 交给本地 API 的 Chromium 原生打印引擎生成 PDF，不调用打印对话框 |
 | HTML | `Blob` 下载 | 取 `.print-area` 的 outerHTML，包成完整 HTML 文件下载 |
 | JSON | `ResumeView` Blob | 浏览器直接序列化与预览相同的 Resume Projection 结果 |
 
@@ -245,7 +245,7 @@ npm run build    # 输出到 dist/
 
 5. **dnd-kit 拖拽需同时有 Sortable + Droppable。** 编辑区是 Droppable，模块卡片通过 `SortableContext` 支持排序；模块添加和移除通过「添加模块」选择器完成。
 
-6. **PDF 生成范围。** `html2canvas` 只渲染 `.print-area` 内的 `.a4-page`；不要把预览工具栏或缩放容器交给导出器，否则界面控件或缩放比例会进入 PDF。
+6. **PDF 生成范围。** 前端只提交 `.print-area` 的 HTML 和当前文档 CSS；本地 API 用 Chromium 的 screen media 与 A4 页面尺寸生成 PDF。不要把预览工具栏或缩放容器交给导出器。
 
 7. **覆盖不回写 wiki。** 编辑区运行时按 Wiki 路径保存条目级 `overrides`，持久化时写入当前简历配置的 `content_overrides`，不修改 wiki 源数据。展示优先级是“手动覆盖 > 有效 AI 润色 > Wiki 原文”——改简历只改当前简历视角。
 

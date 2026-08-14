@@ -11,6 +11,7 @@
     "test": "node --test tests/**/*.test.mjs"
   },
   "dependencies": {
-    "career-wiki-wiki-engine": "1.0.0"
+    "career-wiki-wiki-engine": "1.0.0",
+    "playwright-core": "^1.62.1"
   }
 }

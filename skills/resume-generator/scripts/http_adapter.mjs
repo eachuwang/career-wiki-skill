@@ -9,6 +9,7 @@ export const ENDPOINTS = Object.freeze([
   'POST /api/resume/polish-context',
   'POST /api/resume/polish',
   'POST /api/resume/polish-models',
+  'POST /api/resume/pdf',
   'POST /api/resume/save',
   'POST /api/resume/delete',
   'POST /api/template/save',
@@ -27,6 +28,15 @@ const JSON_HEADERS = Object.freeze({
 function sendJson(response, statusCode, value) {
   response.writeHead(statusCode, JSON_HEADERS);
   response.end(JSON.stringify(value, null, 2));
+}
+
+function sendPdf(response, pdf) {
+  response.writeHead(200, {
+    'Content-Type': 'application/pdf',
+    'Content-Length': pdf.length,
+    'Access-Control-Allow-Origin': '*',
+  });
+  response.end(pdf);
 }
 
 async function readBody(request) {
@@ -59,11 +69,12 @@ function routeErrorLabel(pathname) {
   if (pathname === '/api/template/css') return '读取 CSS 失败';
   if (pathname === '/api/resume/polish') return 'AI 润色失败';
   if (pathname === '/api/resume/polish-models') return '读取模型列表失败';
+  if (pathname === '/api/resume/pdf') return '生成 PDF 失败';
   if (pathname === '/api/wiki') return '读取 Wiki 失败';
   return '服务器错误';
 }
 
-export function createCareerWikiHttpAdapter({ knowledge, appState, polish }) {
+export function createCareerWikiHttpAdapter({ knowledge, appState, polish, pdf }) {
   return async function careerWikiHttpAdapter(request, response) {
     const url = new URL(request.url, 'http://localhost');
     const { pathname } = url;
@@ -137,6 +148,9 @@ export function createCareerWikiHttpAdapter({ knowledge, appState, polish }) {
       if (method === 'POST' && pathname === '/api/resume/polish-models') {
         const models = await polish.listModels(await readBody(request));
         return sendJson(response, 200, { models });
+      }
+      if (method === 'POST' && pathname === '/api/resume/pdf') {
+        return sendPdf(response, await pdf.render(await readBody(request)));
       }
       if (method === 'POST' && pathname === '/api/resume/save') {
         const body = await readBody(request);

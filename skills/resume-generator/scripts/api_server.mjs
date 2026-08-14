@@ -18,6 +18,8 @@ import {
   VERSION,
 } from './http_adapter.mjs';
 import { createResumePolish } from './resume_polish_application.mjs';
+import { chromium } from 'playwright-core';
+import { createResumePdfRenderer } from './resume_pdf.mjs';
 
 const DEFAULT_PORT = 3001;
 
@@ -41,6 +43,7 @@ async function start() {
     knowledge: createCareerKnowledge({ root }),
     appState,
     polish: createResumePolish({ root, appState }),
+    pdf: createResumePdfRenderer({ chromium }),
   });
   const server = createServer(adapter);
 

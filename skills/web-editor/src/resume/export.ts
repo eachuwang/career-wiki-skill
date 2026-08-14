@@ -1,50 +1,18 @@
 /**
  * resume/export.ts — HTML/PDF 导出
  *
- * PDF 导出按「逐页渲染」实现：预览中每个 `.a4-page` 对应 PDF 的一页，
- * 用 html2canvas 单独渲染成图、jsPDF 逐页写入。
- * 由于预览已按 A4 分页且每页带保护区域（padding），
- * 导出的 PDF 与预览完全一致，文字不会被页面边界截断。
+ * HTML 与 PDF 复用预览中的同一棵 DOM 和同一份 CSS。
+ * PDF 交给服务端 Chromium 原生打印引擎生成，避免 canvas 二次重绘
+ * 导致字体、Flex 与 SVG 的布局偏差。
  */
 
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
-import { A4_WIDTH_MM, A4_HEIGHT_MM } from './page.ts';
 import type { ResumeView } from './projection.ts';
 
 interface StandaloneResumeHtmlInput {
   title: string;
   resumeMarkup: string;
   cssText: string;
-}
-
-/** jsPDF 最小接口（便于测试注入替身） */
-export interface PdfLike {
-  addPage(format?: string, orientation?: string): void;
-  addImage(
-    imageData: string,
-    format: string,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-  ): void;
-  save(filename: string): void;
-  output?(type: 'blob'): Blob;
-}
-
-interface ResumePdfInput {
-  element: HTMLElement;
-  deps?: {
-    /** 渲染单个 A4 页面为 canvas；默认使用 html2canvas */
-    renderPage?: (element: HTMLElement) => Promise<HTMLCanvasElement>;
-    /** 创建 jsPDF 文档；默认使用 jspdf */
-    createPdf?: () => PdfLike;
-  };
-}
-
-interface DownloadResumePdfInput extends ResumePdfInput {
-  filename: string;
+  pdf?: boolean;
 }
 
 export interface SaveExportBlobInput {
@@ -120,6 +88,7 @@ export function buildStandaloneResumeHtml({
   title,
   resumeMarkup,
   cssText,
+  pdf = false,
 }: StandaloneResumeHtmlInput): string {
   return `<!DOCTYPE html>
 <html lang="zh-CN">
@@ -135,8 +104,14 @@ export function buildStandaloneResumeHtml({
     .no-print { display: none !important; }
     .paginate-measure { display: none !important; }
     /* 独立 HTML 文档视图：去掉预览用的阴影和外边距，接近最终文档外观 */
-    .a4-page { box-shadow: none; margin: 0 auto 16px; }
+    .a4-page { box-shadow: none; margin: ${pdf ? '0' : '0 auto 16px'}; }
     body { background: #fff; }
+    ${pdf ? `
+    @page { size: A4 portrait; margin: 0; }
+    html, body { width: 210mm; margin: 0; }
+    .a4-page { break-after: page; page-break-after: always; }
+    .a4-page:last-child { break-after: auto; page-break-after: auto; }
+    ` : ''}
   </style>
 </head>
 <body>${resumeMarkup}</body>
@@ -154,99 +129,4 @@ export function collectDocumentCss(): string {
       }
     })
     .join('\n');
-}
-
-/**
- * 直接把预览中的多张 A4 页面保存为 PDF。
- *
- * 每个 `.a4-page` 独立渲染为图片后按顺序写入 jsPDF，
- * 一页对一页，不依赖系统打印机或打印对话框。
- */
-async function renderResumePdf({
-  element,
-  deps = {},
-}: ResumePdfInput): Promise<PdfLike> {
-  const renderPage =
-    deps.renderPage ??
-    (async (pageElement: HTMLElement) =>
-      html2canvas(pageElement, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-      }));
-  const createPdf =
-    deps.createPdf ??
-    (() =>
-      new jsPDF({
-        unit: 'mm',
-        format: 'a4',
-        orientation: 'portrait',
-      }) as unknown as PdfLike);
-
-  // 优先取分页容器内的 A4 页面；无分页结构时退回渲染整个元素
-  const pages = Array.from(element.querySelectorAll<HTMLElement>('.a4-page'));
-  if (pages.length === 0) {
-    pages.push(element);
-  }
-
-  // 预览缩放（transform）会被 html2canvas 渲染进图片，
-  // 导出前临时移除，保证图片按 A4 原尺寸输出、文字清晰。
-  const shell = (element.closest?.('.preview-page-shell') as HTMLElement | null) ?? null;
-  const previousTransform = shell?.style.transform ?? null;
-  if (shell) {
-    shell.style.transform = 'none';
-  }
-
-  // 防御性隐藏：html2canvas 渲染时会克隆整个文档计算样式，
-  // 隐藏 .no-print 和 .paginate-measure 避免它们干扰渲染产物。
-  const hiddenEls = typeof document !== 'undefined'
-    ? Array.from(document.querySelectorAll<HTMLElement>('.no-print, .paginate-measure'))
-    : [];
-  const prevDisplay = hiddenEls.map((el) => el.style.display);
-  hiddenEls.forEach((el) => { el.style.display = 'none'; });
-
-  try {
-    const pdf = createPdf();
-    for (let i = 0; i < pages.length; i += 1) {
-      if (i > 0) {
-        pdf.addPage('a4', 'portrait');
-      }
-      const canvas = await renderPage(pages[i]);
-      const imageData = canvas.toDataURL('image/jpeg', 0.98);
-      // 图片铺满整张 A4 页面；保护区域由页面自身的 padding 保证
-      pdf.addImage(imageData, 'JPEG', 0, 0, A4_WIDTH_MM, A4_HEIGHT_MM);
-    }
-    return pdf;
-  } finally {
-    // 无论成败都恢复预览缩放，避免影响用户界面
-    if (shell) {
-      if (previousTransform) {
-        shell.style.transform = previousTransform;
-      } else {
-        shell.style.removeProperty('transform');
-      }
-    }
-    hiddenEls.forEach((el, i) => {
-      if (prevDisplay[i]) {
-        el.style.display = prevDisplay[i];
-      } else {
-        el.style.removeProperty('display');
-      }
-    });
-  }
-}
-
-export async function createResumePdfBlob(input: ResumePdfInput): Promise<Blob> {
-  const pdf = await renderResumePdf(input);
-  if (!pdf.output) throw new Error('当前 PDF 生成器不支持文件保存');
-  return pdf.output('blob');
-}
-
-export async function downloadResumePdf({
-  element,
-  filename,
-  deps,
-}: DownloadResumePdfInput): Promise<void> {
-  const pdf = await renderResumePdf({ element, deps });
-  pdf.save(filename);
 }

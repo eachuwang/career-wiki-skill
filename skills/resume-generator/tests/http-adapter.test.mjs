@@ -117,3 +117,31 @@ test('HTTP adapter 将无效 Wiki 查询映射为客户端错误', async (t) => 
     message: '不支持的 Career 实体类型：unknown',
   });
 });
+
+test('HTTP adapter 将当前预览 HTML 生成为 PDF 文件响应', async (t) => {
+  const calls = [];
+  const adapter = createCareerWikiHttpAdapter({
+    knowledge: {},
+    appState: {},
+    polish: {},
+    pdf: {
+      render: async (input) => {
+        calls.push(input);
+        return Buffer.from('%PDF-1.7 resume-content');
+      },
+    },
+  });
+  const server = await listen(adapter);
+  t.after(server.close);
+
+  const response = await fetch(`${server.baseUrl}/api/resume/pdf`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ html: '<article class="a4-page">王羿邱</article>' }),
+  });
+
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get('content-type'), 'application/pdf');
+  assert.deepEqual(calls, [{ html: '<article class="a4-page">王羿邱</article>' }]);
+  assert.match(Buffer.from(await response.arrayBuffer()).toString(), /^%PDF-1\.7 resume-content/);
+});

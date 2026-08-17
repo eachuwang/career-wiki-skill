@@ -93,6 +93,43 @@ test('简历投影按配置选择模块、模板字段和时间顺序生成 Resu
   assert.equal(view.meta.entity_count, 2);
 });
 
+test('经历与项目按结束时间降序:进行中在最前,最近结束的靠前', () => {
+  const wiki = [
+    entity('projects/early-start-late-end.md', 'project', {
+      name: '长周期项目',
+      start: '2020-01',
+      end: '2025-06',
+    }),
+    entity('projects/late-start-early-end.md', 'project', {
+      name: '短周期项目',
+      start: '2023-01',
+      end: '2024-01',
+    }),
+    entity('projects/ongoing.md', 'project', {
+      name: '进行中项目',
+      start: '2024-03',
+      end: 'present',
+    }),
+    entity('projects/open-ended.md', 'project', {
+      name: '未记录结束时间项目',
+      start: '2022-05',
+    }),
+  ];
+
+  const view = projectResume({ wiki, config: config(), template });
+
+  assert.deepEqual(
+    view.sections[0].items?.map((item) => item.path),
+    [
+      'projects/ongoing.md',
+      'projects/early-start-late-end.md',
+      'projects/late-start-early-end.md',
+      'projects/open-ended.md',
+    ],
+    'present 应排最前;按 end 降序而非 start;缺 end 回退 start',
+  );
+});
+
 test('简历投影按固定顺序处理润色、覆盖、隐藏、强调、隐私和分组', () => {
   const emphasizedProject = entity('projects/emphasized.md', 'project', {
     name: '重点项目',

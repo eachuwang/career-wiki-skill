@@ -55,7 +55,7 @@ async function renderPreview({ wiki = [person], config = {}, template = null }: 
       createElement(previewModule.default, {
         view: projectResume({ wiki, config: resumeConfig, template }),
         template,
-        onOpenExport: noOp,
+        onEditBlock: noOp,
       }),
     );
   } finally {
@@ -80,16 +80,40 @@ async function previewShowsContactIcons(): Promise<void> {
 
 test('预览区为每项联系方式渲染 SVG 图标', previewShowsContactIcons);
 
-/** 预览工具栏只保留一个导出入口，格式选择延后到导出面板。 */
-async function previewOwnsSingleExportActionSet(): Promise<void> {
+/** 导出入口移入顶部工具栏:预览区不再渲染导出按钮,格式选择延后到导出面板。 */
+async function previewHasNoExportAction(): Promise<void> {
   const html = await renderPreview();
 
-  assert.equal(html.match(/>\s*导出\s*</g)?.length, 1);
+  assert.equal(html.match(/>\s*导出\s*</g)?.length ?? 0, 0);
   assert.doesNotMatch(html, />\s*HTML\s*</);
   assert.doesNotMatch(html, />\s*JSON\s*</);
 }
 
-test('预览工具栏只保留一个导出入口', previewOwnsSingleExportActionSet);
+test('导出入口由顶部工具栏统一承载,预览区不渲染导出按钮', previewHasNoExportAction);
+
+/** 预览内容块携带编辑定位元数据(data-edit),支持点击文字定位到字段。 */
+async function previewBlocksCarryEditTargets(): Promise<void> {
+  const html = await renderPreview({
+    template: {
+      id: 'legacy-template',
+      name: '旧模板',
+      style: 'legacy-template.css',
+      layout: 'single-column',
+      sections: [
+        {
+          module: 'project',
+          title: '项目经验',
+          fields: ['name', 'role', 'start', 'end', 'description'],
+        },
+      ],
+    },
+  });
+
+  assert.match(html, /data-edit="1"/);
+  assert.match(html, /title="点击编辑"/);
+}
+
+test('预览内容块携带编辑定位元数据', previewBlocksCarryEditTargets);
 
 test('内容编排中编辑项目字段后，预览立即显示该条目的覆盖值', async () => {
   const html = await renderPreview({

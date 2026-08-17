@@ -85,10 +85,26 @@ function sectionFields(section: TemplateSection): string[] {
   return fields;
 }
 
-function temporalKey(fields: Record<string, unknown>): string {
-  for (const field of ['start', 'end', 'date']) {
-    if (fields[field]) return String(fields[field]);
+/**
+ * 条目时间排序键:结束时间优先(降序时最近结束的靠前)。
+ * 进行中(present/至今)视为最新,排在一切已结束条目之前;
+ * 缺 end 时回退 start,再回退 date。
+ */
+const PRESENT_END_KEY = '9999-99';
+
+export function temporalKey(fields: Record<string, unknown>): string {
+  const rawEnd = fields['end'];
+  if (rawEnd) {
+    const endText = String(rawEnd).trim();
+    if (endText.toLowerCase() === 'present' || endText === '至今') {
+      return PRESENT_END_KEY;
+    }
+    return endText;
   }
+  const rawStart = fields['start'];
+  if (rawStart) return String(rawStart);
+  const rawDate = fields['date'];
+  if (rawDate) return String(rawDate);
   return '';
 }
 

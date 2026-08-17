@@ -1,0 +1,187 @@
+/* ============================================================
+   base(元素)+ 共享组件:按钮/输入/徽章/空态/骨架/弹层动效
+   ============================================================ */
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+html, body, #root { margin: 0; height: 100%; }
+#root { overflow: hidden; }
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 22px;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+}
+
+/* 微妙颗粒纹理,打破纯平视觉 */
+body::after {
+  content: "";
+  position: fixed; inset: 0; z-index: var(--z-toast);
+  pointer-events: none;
+  opacity: var(--noise-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: var(--r-input); }
+::-webkit-scrollbar-thumb:hover { filter: brightness(1.3); }
+
+::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+
+button, input, select, textarea { font: inherit; }
+button, select { cursor: pointer; }
+
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible,
+.btn:focus-visible, .icon-btn:focus-visible, .nav-item:focus-visible, .input:focus-visible {
+  outline: 2px solid var(--accent); outline-offset: 2px;
+}
+
+button:disabled { cursor: not-allowed; }
+
+#app { display: flex; flex-direction: column; height: 100vh; height: 100dvh; overflow: hidden; }
+
+/* ---------- 控件基座 ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  height: 36px; padding: 0 14px; border: none; border-radius: var(--r-btn);
+  font-family: var(--font-sans); font-size: 14px; line-height: 22px;
+  cursor: pointer; background: transparent; color: var(--text-primary);
+  position: relative; overflow: hidden;
+  transition: background var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease), opacity var(--dur-fast) var(--ease);
+}
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.btn:active:not(:disabled) { transform: scale(0.98); }
+.btn-primary { background: var(--btn-primary-fill); color: var(--btn-primary-fg); }
+.btn-primary:hover:not(:disabled) { background: var(--btn-primary-hover); transform: translateY(-1px); }
+.btn-primary:active:not(:disabled) { transform: translateY(0) scale(0.98); }
+.btn-ghost:hover:not(:disabled) { background: var(--hover); }
+.btn-ghost:active:not(:disabled) { background: var(--active); }
+.btn-outline { border: 1px solid var(--border-l2); background: transparent; }
+.btn-outline:hover:not(:disabled) { background: var(--hover); }
+.btn-sm { height: 28px; padding: 0 10px; border-radius: var(--r-btn-sm); font-size: 12px; line-height: 18px; }
+
+/* 点击涟漪(纯 CSS:按下时从中心扩散) */
+.btn::after, .icon-btn::after, .toolbar-button::after, .toolbar-icon-button::after {
+  content: "";
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(circle at center, color-mix(in srgb, var(--text-primary) 16%, transparent) 0%, transparent 70%);
+  opacity: 0;
+  pointer-events: none;
+}
+.btn:active::after, .icon-btn:active::after, .toolbar-button:active::after, .toolbar-icon-button:active::after {
+  opacity: 1;
+  animation: ripple-fade 0.45s var(--ease-spring);
+}
+@keyframes ripple-fade {
+  0% { transform: scale(0.35); opacity: 0.9; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+.icon-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px; border: none; border-radius: 999px;
+  background: transparent; color: var(--text-secondary); cursor: pointer;
+  position: relative; overflow: hidden;
+  transition: background var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+.icon-btn:hover { background: var(--hover); color: var(--text-primary); }
+.icon-btn:active { transform: scale(0.94); }
+
+.input {
+  height: 32px; padding: 0 8px; border: 1px solid var(--border-l2); border-radius: var(--r-input);
+  background: var(--bg-input); color: var(--text-primary);
+  font-family: var(--font-sans); font-size: 14px; line-height: 22px;
+  font-variant-numeric: tabular-nums;
+  transition: border-color var(--dur-fast) var(--ease), box-shadow var(--dur-fast) var(--ease);
+}
+.input:hover:not(:focus) { border-color: var(--border-l3); }
+.input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+.input::placeholder { color: var(--text-caption); }
+select.input { cursor: pointer; }
+textarea.input { height: 88px; padding: 8px; resize: vertical; line-height: 22px; }
+
+/* ---------- 徽章 ---------- */
+.badge {
+  font-size: 11px; line-height: 18px; padding: 0 8px; border-radius: 999px;
+  border: 1px solid var(--border-l2); color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+.badge-high { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 40%, transparent); }
+.badge-medium { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 40%, transparent); }
+.badge-due { font-family: var(--font-mono); }
+
+.dot { width: 10px; height: 10px; border-radius: 50%; flex: none; position: relative; }
+.dot::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; background: inherit; opacity: 0.15; }
+
+/* ---------- 空态 ---------- */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 32px 16px; color: var(--text-tertiary);
+}
+.empty-state .empty-icon {
+  width: 40px; height: 40px; border-radius: var(--r-card);
+  background: var(--bg-layer-2); border: 1px solid var(--border-l1);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-caption); margin-bottom: 10px;
+}
+.empty-state .empty-title { font-size: 14px; font-weight: 600; color: var(--text-secondary); }
+.empty-state .empty-hint { font-size: 12px; line-height: 18px; margin-top: 4px; max-width: 260px; }
+
+/* ---------- 骨架加载 ---------- */
+.skeleton {
+  border-radius: var(--r-card);
+  background: linear-gradient(100deg, var(--bg-layer-2) 40%, var(--bg-layer-3) 50%, var(--bg-layer-2) 60%);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s var(--ease) infinite;
+}
+@keyframes shimmer { from { background-position: 120% 0; } to { background-position: -80% 0; } }
+
+/* ---------- 信息横幅 ---------- */
+.banner {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; border-radius: var(--r-card);
+  background: var(--accent-soft); color: var(--text-secondary);
+  font-size: 13px; line-height: 20px;
+}
+
+/* ---------- toast ---------- */
+.toast {
+  position: fixed; top: 24px; left: 50%; transform: translateX(-50%); z-index: var(--z-toast);
+  background: var(--btn-primary-fill); color: var(--btn-primary-fg);
+  border-radius: var(--r-card); padding: 10px 16px; font-size: 13px; line-height: 20px;
+  box-shadow: var(--shadow-3);
+  animation: toast-in 0.34s var(--ease-overshoot);
+}
+@keyframes toast-in {
+  0% { opacity: 0; transform: translate(-50%, -8px) scale(0.92); }
+  60% { opacity: 1; transform: translate(-50%, 0) scale(1.02); }
+  100% { transform: translate(-50%, 0) scale(1); }
+}
+
+/* ---------- 弹层/弹窗通用动效 ---------- */
+@keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+@keyframes popover-in {
+  from { opacity: 0; transform: translateY(-5px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes view-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* ---------- 动效降级 ---------- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

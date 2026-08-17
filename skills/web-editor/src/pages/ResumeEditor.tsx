@@ -10,14 +10,16 @@ import {
   useSensors,
 } from '@dnd-kit/core';
 
-import EditPanel from '../components/EditPanel';
 import ExportDialog from '../components/ExportDialog';
+import ModuleEditDialog from '../components/ModuleEditDialog';
+import ModuleSettings from '../components/ModuleSettings';
 import PolishControls from '../components/PolishControls';
 import PolishProviderSettings from '../components/PolishProviderSettings';
 import PreviewPanel from '../components/PreviewPanel';
 import PrivacyControls from '../components/PrivacyControls';
 import ResumeSelector from '../components/ResumeSelector';
 import TemplateSelector from '../components/TemplateSelector';
+import TopBar, { type TopBarPage } from '../components/TopBar';
 import UiIcon from '../components/UiIcon';
 import * as api from '../api/client';
 import { exportResumePreview, type ResumeExportFormat } from '../resume/browserExport';
@@ -30,19 +32,30 @@ import type {
   TemplateConfig,
   WikiEntity,
 } from '../types';
+import type { ReactNode } from 'react';
 
 interface ResumeEditorProps {
   wikiEntities: WikiEntity[];
   templates: TemplateConfig[];
   resumes: ResumeConfig[];
-  onRefreshWiki: () => void;
+  page: TopBarPage;
+  onNavigate: (page: TopBarPage) => void;
+  trailing?: ReactNode;
+}
+
+/** 预览点击编辑的定位目标 */
+export interface EditTarget {
+  path?: string;
+  field?: string;
 }
 
 export default function ResumeEditor({
   wikiEntities,
   templates,
   resumes,
-  onRefreshWiki,
+  page,
+  onNavigate,
+  trailing,
 }: ResumeEditorProps) {
   const [workspace] = useState(() => createResumeEditingWorkspace({
     resumes,
@@ -65,25 +78,17 @@ export default function ResumeEditor({
     workspace.getSnapshot,
     workspace.getSnapshot,
   );
-  const polishProviderAnchorRef = useRef<HTMLDivElement>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
   );
 
+  // 中央悬浮编辑窗状态
+  const [editingModuleId, setEditingModuleId] = useState<string | null>(null);
+  const [editTarget, setEditTarget] = useState<EditTarget>({});
+
   useEffect(() => {
     void workspace.dispatch({ type: 'replace-inputs', resumes, templates, wikiEntities });
   }, [resumes, templates, wikiEntities, workspace]);
-
-  useEffect(() => {
-    if (state.activeOverlay !== 'polish') return undefined;
-    const handlePointerDownOutside = (event: PointerEvent) => {
-      if (!polishProviderAnchorRef.current?.contains(event.target as Node)) {
-        void workspace.dispatch({ type: 'close-overlay' });
-      }
-    };
-    document.addEventListener('pointerdown', handlePointerDownOutside);
-    return () => document.removeEventListener('pointerdown', handlePointerDownOutside);
-  }, [state.activeOverlay, workspace]);
 
   const handleDragEnd = ({ active, over }: DragEndEvent) => {
     if (over && active.id !== over.id) {
@@ -107,12 +112,21 @@ export default function ResumeEditor({
     resumeView: state.resumeView,
   });
 
+  /** 点击预览文字 → 打开对应模块的中央编辑窗并定位到字段 */
+  const handleEditBlock = (moduleType: EntityType, path?: string, field?: string) => {
+    const module = state.modules.find((m) => m.type === moduleType);
+    if (!module) return;
+    setEditTarget({ path, field });
+    setEditingModuleId(module.id);
+  };
+
   const feedbackIsError = state.feedback?.tone === 'error';
+  const editingModule = state.modules.find((m) => m.id === editingModuleId) || null;
 
   return (
     <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={handleDragEnd}>
       <div className="h-full flex flex-col">
-        <div className="editor-toolbar no-print">
+        <TopBar page={page} onNavigate={onNavigate} trailing={trailing}>
           <div className="toolbar-document-group">
             <ResumeSelector
               resumes={state.resumes}
@@ -150,7 +164,7 @@ export default function ResumeEditor({
           </div>
 
           <div className="toolbar-utilities-group">
-            <div className="polish-provider-anchor" ref={polishProviderAnchorRef}>
+            <div className="polish-provider-anchor">
               <PolishControls
                 enabled={state.polishEnabled}
                 hasEntries={Object.keys(state.polish?.entries || {}).length > 0}
@@ -204,22 +218,24 @@ export default function ResumeEditor({
           </div>
 
           <div className="toolbar-actions">
-            <div className="editor-view-switch" role="group" aria-label="编辑器视图">
-              <button
-                type="button"
-                aria-pressed={state.view === 'edit'}
-                onClick={() => void workspace.dispatch({ type: 'set-view', view: 'edit' })}
-              >
-                编辑
-              </button>
-              <button
-                type="button"
-                aria-pressed={state.view === 'preview'}
-                onClick={() => void workspace.dispatch({ type: 'set-view', view: 'preview' })}
-              >
-                预览
-              </button>
-            </div>
+            <ModuleSettings
+              modules={state.modules}
+              wikiEntities={state.resumeWikiEntities}
+              onApplyModules={handleModuleSelection}
+              onOpenModule={(moduleId) => {
+                setEditTarget({});
+                setEditingModuleId(moduleId);
+              }}
+            />
+            <button
+              onClick={() => {
+                void workspace.dispatch({ type: 'toggle-overlay', overlay: 'export' });
+              }}
+              className="toolbar-button primary"
+              title="导出简历"
+            >
+              <UiIcon name="download" size={16} /> 导出
+            </button>
             <button
               onClick={() => void workspace.dispatch({ type: 'save' })}
               disabled={state.saving}
@@ -227,78 +243,63 @@ export default function ResumeEditor({
             >
               <UiIcon name="save" size={16} /> {state.saving ? '保存中…' : '保存'}
             </button>
-            <button
-              onClick={onRefreshWiki}
-              className="toolbar-icon-button"
-              title="重新编译 Wiki"
-              aria-label="重新编译 Wiki"
-            >
-              <UiIcon name="refresh" size={18} />
-            </button>
           </div>
+        </TopBar>
 
-          {state.feedback && state.activeOverlay !== 'polish' && (
-            <span
-              className={`save-status ${feedbackIsError ? 'is-error' : ''}`}
-              role={feedbackIsError ? 'alert' : 'status'}
-            >
-              {state.feedback.message}
-            </span>
-          )}
-        </div>
+        {state.feedback && state.activeOverlay !== 'polish' && (
+          <span
+            className={'save-status' + (feedbackIsError ? ' is-error' : '')}
+            role={feedbackIsError ? 'alert' : 'status'}
+          >
+            {state.feedback.message}
+          </span>
+        )}
 
-        <div className={`editor-workspace workspace-view-${state.view}`}>
-          <div className="edit-pane no-print">
-            <EditPanel
-              modules={state.modules}
-              wikiEntities={state.resumeWikiEntities}
-              onApplyModules={handleModuleSelection}
-              onMove={(moduleId, direction) => {
-                void workspace.dispatch({ type: 'move-module', moduleId, direction });
-              }}
-              onToggleExpand={(moduleId) => {
-                void workspace.dispatch({ type: 'toggle-module', moduleId });
-              }}
-              onOverrideField={(moduleId, itemPath, field, value) => {
-                void workspace.dispatch({ type: 'override-field', moduleId, itemPath, field, value });
-              }}
-              onToggleItemVisibility={(moduleId, itemId) => {
-                void workspace.dispatch({ type: 'toggle-item-visibility', moduleId, itemId });
-              }}
-              onRemoveModule={(moduleId) => {
-                void workspace.dispatch({ type: 'remove-module', moduleId });
-              }}
-              polish={state.polishEnabled ? state.polish : undefined}
-              polishGeneratingKey={state.polishGeneratingKey}
-              onRegeneratePolish={(path, field) => {
-                void workspace.dispatch({ type: 'regenerate-polish', path, field });
-              }}
-            />
-          </div>
-
+        <div className="editor-workspace">
           <div className="preview-pane">
             {state.resumeView && (
               <PreviewPanel
                 view={state.resumeView}
                 template={state.currentTemplate}
-                onOpenExport={() => {
-                  void workspace.dispatch({ type: 'toggle-overlay', overlay: 'export' });
-                }}
+                onEditBlock={handleEditBlock}
               />
             )}
           </div>
         </div>
-      </div>
 
-      <ExportDialog
-        open={state.activeOverlay === 'export'}
-        resumeName={state.resumeName}
-        privacyEnabledCount={Object.values(state.privacy).filter(Boolean).length}
-        onClose={() => {
-          void workspace.dispatch({ type: 'close-overlay' });
-        }}
-        onExport={handleExport}
-      />
+        <ExportDialog
+          open={state.activeOverlay === 'export'}
+          resumeName={state.resumeName}
+          privacyEnabledCount={Object.values(state.privacy).filter(Boolean).length}
+          onClose={() => {
+            void workspace.dispatch({ type: 'close-overlay' });
+          }}
+          onExport={handleExport}
+        />
+
+        {editingModule && (
+          <ModuleEditDialog
+            module={editingModule}
+            wikiEntities={state.resumeWikiEntities}
+            initialTarget={editTarget}
+            onClose={() => {
+              setEditingModuleId(null);
+              setEditTarget({});
+            }}
+            onOverrideField={(moduleId, itemPath, field, value) => {
+              void workspace.dispatch({ type: 'override-field', moduleId, itemPath, field, value });
+            }}
+            onToggleItemVisibility={(moduleId, itemId) => {
+              void workspace.dispatch({ type: 'toggle-item-visibility', moduleId, itemId });
+            }}
+            polish={state.polishEnabled ? state.polish : undefined}
+            polishGeneratingKey={state.polishGeneratingKey}
+            onRegeneratePolish={(path, field) => {
+              void workspace.dispatch({ type: 'regenerate-polish', path, field });
+            }}
+          />
+        )}
+      </div>
     </DndContext>
   );
 }

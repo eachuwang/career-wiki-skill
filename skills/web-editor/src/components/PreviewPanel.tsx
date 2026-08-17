@@ -1,10 +1,12 @@
 /**
  * PreviewPanel — 右侧实时预览
  *
- * 简历按「多张 A4 纸」模型渲染：先以隐藏测量容器计算每个内容块
- * 应归属的页码（块级分页，任何文字行都不会被页边界切断），
- * 再按页渲染多个 210×297mm 的 A4 页面，并实时显示总页数。
- * 每页四边为保护区域（上下 15mm、左右 16mm），内容只出现在保护区域内。
+ * 简历按「多张 A4 纸」模型渲染:先以隐藏测量容器计算每个内容块
+ * 应归属的页码(块级分页,任何文字行都不会被页边界切断),
+ * 再按页渲染多个 210×297mm 的 A4 页面,并实时显示总页数。
+ * 每页四边为保护区域(上下 15mm、左右 16mm),内容只出现在保护区域内。
+ *
+ * 点击预览中的内容块可定位到对应模块/条目/字段(编辑入口在中央编辑窗)。
  */
 
 import { useState, useMemo, useEffect, useLayoutEffect, useRef, useCallback } from 'react';
@@ -12,6 +14,7 @@ import { createPortal } from 'react-dom';
 import type { ReactNode } from 'react';
 import type {
   TemplateConfig,
+  EntityType,
 } from '../types';
 import type { ResumeView, ResumeViewItem, ResumeViewSection } from '../resume/projection.ts';
 
@@ -26,34 +29,46 @@ import {
 } from '../resume/page.ts';
 import UiIcon from './UiIcon';
 
+/** 预览内容块的编辑定位目标 */
+export interface EditBlockTarget {
+  module: EntityType;
+  path?: string;
+  field?: string;
+}
+
 interface PreviewPanelProps {
   view: ResumeView;
   template: TemplateConfig | null;
-  onOpenExport: () => void;
+  onEditBlock?: (module: EntityType, path?: string, field?: string) => void;
 }
 
-/** 单页内容区高度（px），留 1px 余量防止块恰好溢出页面 */
+/** 单页内容区高度(px),留 1px 余量防止块恰好溢出页面 */
 const PAGE_CONTENT_HEIGHT_PX = Math.floor(mmToPx(CONTENT_HEIGHT_MM) - 1);
 
 /** 一个可独立分页的内容块 */
 interface ResumeBlock {
   key: string;
   node: ReactNode;
+  edit?: EditBlockTarget;
+  /** 所属条目路径:悬浮高亮以条目为粒度,同路径的块一起高亮 */
+  itemPath?: string;
+  /** 节标题块:内含节标题 + 首条 lead,高亮只作用于内部 lead */
+  isSectionHead?: boolean;
 }
 
-/** 窄屏首次进入预览时自动适配 A4 宽度，避免页面级横向滚动。 */
+/** 窄屏首次进入预览时自动适配 A4 宽度,避免页面级横向滚动。 */
 function getInitialZoom(): number {
   if (typeof window === 'undefined' || window.innerWidth >= 900) return 0.72;
   return Math.max(0.4, Math.min(0.72, (window.innerWidth - 40) / (A4_WIDTH_MM * 3.7795)));
 }
 
-/** 格式化日期：present → 至今，YYYY-MM → YYYY.MM，其他原样返回 */
+/** 格式化日期:present → 至今,YYYY-MM → YYYY.MM,其他原样返回 */
 function formatDate(value: unknown): string {
   const s = String(value ?? '').trim();
   if (!s) return '';
   if (s.toLowerCase() === 'present' || s === '至今') return '至今';
   const m = /^(\d{4})-(\d{2})/.exec(s);
-  return m ? `${m[1]}.${m[2]}` : s;
+  return m ? m[1] + '.' + m[2] : s;
 }
 
 /** 把已完成领域规则处理的 ResumeView section 渲染成可分页内容块。 */
@@ -69,14 +84,16 @@ function renderModuleBlocks(
   const blocks: ResumeBlock[] = [];
 
   /**
-   * 把「标题 + 首条内容」合并为一个头部块，保证标题不会孤立在页尾；
-   * 其余内容条各自成块，供分页算法按块移动。
+   * 把「标题 + 首条内容」合并为一个头部块,保证标题不会孤立在页尾;
+   * 其余内容条各自成块,供分页算法按块移动。
    */
   const pushSection = (first: ResumeBlock, rest: ResumeBlock[]): void => {
     blocks.push(
       title
         ? {
-            key: `${section.module}-head`,
+            key: section.module + '-head',
+            itemPath: first.itemPath,
+            isSectionHead: true,
             node: (
               <div className="section-head">
                 <h2 className="section-title">{title}</h2>
@@ -89,10 +106,10 @@ function renderModuleBlocks(
     blocks.push(...rest);
   };
 
-  // group_by 处理（技能按分类分组）
+  // group_by 处理(技能按分类分组,组合文本不可单字段编辑)
   if (section.grouped) {
     const groupedBlocks = (section.groups || []).map((group) => ({
-      key: `${section.module}-group-${group.key}`,
+      key: section.module + '-group-' + group.key,
       node: (
         <div className="skill-group resume-skill-row">
           <div className="skill-group-title resume-skill-category">
@@ -103,7 +120,7 @@ function renderModuleBlocks(
               .map((entity) => {
                 const name = String(entity.fields.name || '');
                 const level = String(entity.fields.level || '');
-                return level ? `${name}（${level}）` : name;
+                return level ? name + '（' + level + '）' : name;
               })
               .filter(Boolean)
               .join(' · ')}
@@ -115,10 +132,12 @@ function renderModuleBlocks(
     return blocks;
   }
 
-  // 单字段模块（如个人优势 content）：没有标题/副标题结构，直接按段落渲染
+  // 单字段模块(如个人优势 content):没有标题/副标题结构,直接按段落渲染
   if (fields.length === 1) {
     const summaryBlocks = items.map((e, i) => ({
-      key: `${section.module}-summary-${e.path || i}`,
+      key: section.module + '-summary-' + (e.path || i),
+      edit: { module: section.module, path: e.path, field: fields[0] },
+      itemPath: e.path,
       node: (
         <div className="entry resume-summary">
           {String(e.fields[fields[0]] || '')}
@@ -129,9 +148,9 @@ function renderModuleBlocks(
     return blocks;
   }
 
-  // 普通模块：逐条列出。
-  // 版式约定：第一行主标题（公司/项目名/学校），
-  // 第二行左侧副标题（职位/角色/学位），右侧日期区间，
+  // 普通模块:逐条列出。
+  // 版式约定:第一行主标题(公司/项目名/学校),
+  // 第二行左侧副标题(职位/角色/学位),右侧日期区间,
   // 其余字段作为详细内容逐行展示。
   const startIdx = fields.indexOf('start');
   const titleField = fields[0];
@@ -145,15 +164,15 @@ function renderModuleBlocks(
       f !== 'end',
   );
 
-  // 细粒度分块：title+sub 独占一个 entry-lead 块，每个描述字段各自成块。
-  // 跨页边界下移的只是单个描述字段（高度小），留白大幅缩小，第一页内容区
-  // 被尽量填满；title+sub 块很小、极少跨页，不会孤行。
+  // 细粒度分块:title+sub 独占一个 entry-lead 块,每个描述字段各自成块。
   const headItems = items.map((e, i) => {
     const startText = formatDate(e.fields.start);
     const endText = formatDate(e.fields.end);
-    const dateRange = startText ? `${startText} - ${endText || '至今'}` : endText;
+    const dateRange = startText ? startText + ' - ' + (endText || '至今') : endText;
     return {
-      key: `${section.module}-entry-${e.path || i}-head`,
+      key: section.module + '-entry-' + (e.path || i) + '-head',
+      edit: { module: section.module, path: e.path, field: titleField },
+      itemPath: e.path,
       node: (
         <div className="entry entry-lead">
           <div className="entry-title">
@@ -177,7 +196,9 @@ function renderModuleBlocks(
     };
   });
   const descItem = (e: ResumeViewItem, i: number, f: string): ResumeBlock => ({
-    key: `${section.module}-entry-${e.path || i}-desc-${f}`,
+    key: section.module + '-entry-' + (e.path || i) + '-desc-' + f,
+    edit: { module: section.module, path: e.path, field: f },
+    itemPath: e.path,
     node: (
       <div className="entry-desc entry-desc-block">
         {section.module === 'project' && f === 'description' && (
@@ -207,12 +228,159 @@ function renderModuleBlocks(
 export default function PreviewPanel({
   view,
   template,
-  onOpenExport,
+  onEditBlock,
 }: PreviewPanelProps) {
   const [zoom, setZoom] = useState(getInitialZoom);
+  // 悬浮高亮:以条目为粒度,同 path 的块一起高亮
+  const [hoveredPath, setHoveredPath] = useState<string | null>(null);
+  // 每页一个单一覆盖框元素(rAF 驱动实时定位)
+  const frameRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
-    /** 仅在视口尺寸变化时重新适配，日常缩放仍由用户控制。 */
+    if (!hoveredPath) return undefined;
+    let raf = 0;
+    const update = () => {
+      const scroll = scrollRef.current;
+      const panning = scroll?.classList.contains('panning');
+      if (panning) {
+        for (const frame of frameRefs.current) {
+          if (frame) frame.style.display = 'none';
+        }
+        raf = requestAnimationFrame(update);
+        return;
+      }
+      const hoveredBlocks = Array.from(
+        document.querySelectorAll<HTMLElement>('.paginate-block.block-hovered'),
+      );
+      // 按所属页分组
+      const byPage = new Map<number, HTMLElement[]>();
+      for (const el of hoveredBlocks) {
+        const pageEl = el.closest<HTMLElement>('.a4-page');
+        const page = pageEl ? Number(pageEl.dataset.page || 1) : 1;
+        const list = byPage.get(page);
+        if (list) list.push(el);
+        else byPage.set(page, [el]);
+      }
+      // 先全部隐藏
+      for (const frame of frameRefs.current) {
+        if (frame) frame.style.display = 'none';
+      }
+      for (const [page, els] of byPage) {
+        const frame = frameRefs.current[page - 1];
+        const pageEl = els[0].closest<HTMLElement>('.a4-page');
+        if (!frame || !pageEl) continue;
+        let left = Infinity, right = -Infinity, top = Infinity, bottom = -Infinity;
+        const pageRect = pageEl.getBoundingClientRect();
+        for (const el of els) {
+          // 节标题块只取内部 lead,排除节标题本身
+          const target = el.classList.contains('is-section-head')
+            ? el.querySelector<HTMLElement>('.entry-lead') || el
+            : el;
+          const r = target.getBoundingClientRect();
+          left = Math.min(left, r.left);
+          right = Math.max(right, r.right);
+          top = Math.min(top, r.top);
+          bottom = Math.max(bottom, r.bottom);
+        }
+        // frame 位于缩放容器内,视口坐标需换算为布局坐标(除以 zoom)
+        const stage = document.querySelector<HTMLElement>('.preview-stage');
+        const zoomNow = stage
+          ? stage.getBoundingClientRect().width / (A4_WIDTH_MM * mmToPx(1))
+          : 1;
+        frame.style.left = (left - pageRect.left) / zoomNow + 'px';
+        frame.style.top = (top - pageRect.top) / zoomNow + 'px';
+        frame.style.width = (right - left) / zoomNow + 'px';
+        frame.style.height = (bottom - top) / zoomNow + 'px';
+        frame.style.display = 'block';
+      }
+      raf = requestAnimationFrame(update);
+    };
+    raf = requestAnimationFrame(update);
+    return () => cancelAnimationFrame(raf);
+  }, [hoveredPath]);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const panRef = useRef({ down: false, moved: false, x: 0, y: 0, sl: 0, st: 0 });
+  const prevZoomRef = useRef(zoom);
+
+  /** 原地缩放:仅改变 zoom,纸张位置不动 */
+  const applyZoom = (next: number) => {
+    setZoom(Math.max(0.35, Math.min(2, next)));
+  };
+
+  // Ctrl/Cmd + 滚轮,以及 Mac 触控板捏合(浏览器以 ctrlKey wheel 派发)= 缩放;
+  // 普通滚轮/双指滚动保持原生页面滚动。步长限幅,抑制捏合事件跳跃。
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return undefined;
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey && !event.metaKey) return;
+      event.preventDefault();
+      const delta = Math.max(-50, Math.min(50, event.deltaY));
+      const factor = Math.exp(-delta * 0.002);
+      setZoom((prev) => Math.max(0.35, Math.min(2, prev * factor)));
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 点击拖动平移纸张:按下(空白/纸张)→ 拖动超过阈值进入平移模式;
+  // 未拖动时保持原点击行为(如点击文字打开编辑窗)。
+  // 拖动监听挂到 window,避免 pointer capture 与合成事件互相干扰。
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    const target = event.target as HTMLElement;
+    if (target.closest('button, input, textarea, select, label, a')) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    panRef.current = {
+      down: true,
+      moved: false,
+      x: event.clientX,
+      y: event.clientY,
+      sl: el.scrollLeft,
+      st: el.scrollTop,
+    };
+    el.classList.add('pan-ready');
+
+    const onMove = (moveEvent: PointerEvent) => {
+      const pan = panRef.current;
+      if (!pan.down) return;
+      const dx = moveEvent.clientX - pan.x;
+      const dy = moveEvent.clientY - pan.y;
+      if (!pan.moved && Math.hypot(dx, dy) < 4) return;
+      if (!pan.moved) {
+        pan.moved = true;
+        el.classList.remove('pan-ready');
+        el.classList.add('panning');
+      }
+      el.scrollLeft = pan.sl - dx;
+      el.scrollTop = pan.st - dy;
+    };
+    const onUp = () => {
+      el.classList.remove('pan-ready');
+      el.classList.remove('panning');
+      panRef.current.down = false;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  };
+
+  // 平移结束后抑制本次 click,避免拖动误触「点击编辑」
+  const handleClickCapture = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (panRef.current.moved) {
+      event.stopPropagation();
+      event.preventDefault();
+      panRef.current.moved = false;
+    }
+  };
+
+  useEffect(() => {
+    /** 仅在视口尺寸变化时重新适配,日常缩放仍由用户控制。 */
     const fitPreviewToViewport = () => setZoom(getInitialZoom());
     window.addEventListener('resize', fitPreviewToViewport);
     fitPreviewToViewport();
@@ -220,12 +388,14 @@ export default function PreviewPanel({
   }, []);
 
   const templateClass = template?.id || 'default';
-  /** 生成全部可分页内容块（头部 + 各模块） */
+  /** 生成全部可分页内容块(头部 + 各模块) */
   const blocks = useMemo(() => {
     const list: ResumeBlock[] = [];
     if (view.person) {
       list.push({
         key: 'person-header',
+        edit: { module: 'person', path: view.person.path },
+        itemPath: view.person.path,
         node: (
           <ResumeHeader
             personData={view.person}
@@ -240,21 +410,20 @@ export default function PreviewPanel({
     return list;
   }, [view]);
 
-  // 测量容器与块元素的引用，供分页计算读取真实排版高度
+  // 测量容器与块元素的引用,供分页计算读取真实排版高度
   const measureRef = useRef<HTMLDivElement>(null);
   const blockElsRef = useRef<(HTMLDivElement | null)[]>([]);
   const [pageIndexes, setPageIndexes] = useState<number[] | null>(null);
 
   /**
-   * 读取测量容器中每个块的真实排版位置，计算各自页码。
-   * 页码结果相同则保留旧引用，避免 setState 触发无谓重渲染。
+   * 读取测量容器中每个块的真实排版位置,计算各自页码。
+   * 页码结果相同则保留旧引用,避免 setState 触发无谓重渲染。
    */
   const runPagination = useCallback(() => {
     const rects = blockElsRef.current
       .filter((el): el is HTMLDivElement => el != null)
       .map((el) => ({ top: el.offsetTop, height: el.offsetHeight }));
     if (rects.length === 0) {
-      // 保持相同引用，避免 setState 触发无谓重渲染
       setPageIndexes((prev) => (prev && prev.length === 0 ? prev : []));
       return;
     }
@@ -271,12 +440,12 @@ export default function PreviewPanel({
     });
   }, []);
 
-  // 内容或模板变化后重新测量并分页（同步执行，避免闪烁）
+  // 内容或模板变化后重新测量并分页(同步执行,避免闪烁)
   useLayoutEffect(() => {
     runPagination();
   }, [runPagination, blocks, templateClass]);
 
-  // 测量容器尺寸变化（编辑/预览视图切换、字体加载等）时重新分页
+  // 测量容器尺寸变化(编辑/预览视图切换、字体加载等)时重新分页
   useEffect(() => {
     const el = measureRef.current;
     if (!el) return;
@@ -285,70 +454,45 @@ export default function PreviewPanel({
     return () => observer.disconnect();
   }, [runPagination]);
 
-  /** 按页码分组内容块；未分页前先按一页兜底渲染 */
+  /** 按页码分组内容块;未分页前先按一页兜底渲染 */
   const pageGroups = useMemo(() => {
     if (!pageIndexes) return null;
-    // 页码必须与内容块一一对应；长度不一致说明分页结果已过期
-    // （如删除/新增模块后尚未重算），此时回退单页兜底渲染，
-    // 避免按旧页码越界访问 blocks 导致渲染崩溃。
+    // 页码必须与内容块一一对应;长度不一致说明分页结果已过期
     if (pageIndexes.length !== blocks.length) return null;
     const groups: ResumeBlock[][] = [];
     pageIndexes.forEach((page, i) => {
       (groups[page] = groups[page] || []).push(blocks[i]);
     });
-    // 无内容时也保留一张空白 A4 页，避免「共 0 页」的歧义
+    // 无内容时也保留一张空白 A4 页,避免「共 0 页」的歧义
     return groups.length > 0 ? groups : [[]];
   }, [pageIndexes, blocks]);
 
   const pageCount = pageGroups?.length ?? 1;
 
-  return (
-    <div className="h-full flex flex-col">
-      {/* 预览工具栏 */}
-      <div className="preview-toolbar no-print">
-        <div className="preview-heading">
-          <div className="text-sm font-semibold text-ink-800">预览</div>
-          <div className="preview-meta">A4 · {pageCount} 页</div>
-        </div>
-        <div className="preview-toolbar-spacer" />
-        <div className="zoom-controls" role="group" aria-label="预览缩放">
-          <button
-            onClick={() => setZoom((z) => Math.max(0.35, z - 0.1))}
-            className="icon-button"
-            aria-label="缩小预览"
-          >
-            <UiIcon name="minus" size={17} />
-          </button>
-          <span className="text-xs text-ink-400 w-12 text-center">
-            {Math.round(zoom * 100)}%
-          </span>
-          <button
-            onClick={() => setZoom((z) => Math.min(2, z + 0.1))}
-            className="icon-button"
-            aria-label="放大预览"
-          >
-            <UiIcon name="plus" size={17} />
-          </button>
-        </div>
-        <button
-          onClick={onOpenExport}
-          className="toolbar-button primary"
-          title="导出简历"
-        >
-          <UiIcon name="download" size={16} /> 导出
-        </button>
-      </div>
+  /**
+   * 中心保持不动的缩放:
+   * - 水平:纸张视觉中心 = 容器中心(stage 宽度 = 纸张视觉宽度且水平居中),
+   *   缩放时中心天然不动,无需补偿;
+   * - 垂直:保持「缩放前视口中心所指向的内容点」始终位于视口中心,
+   *   即缩放围绕可视区域中心进行;接近顶部/底部时受滚动范围钳制。
+   */
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const prev = prevZoomRef.current;
+    if (prev === zoom) return;
+    const viewportCenter = el.scrollTop + el.clientHeight / 2;
+    el.scrollTop = viewportCenter * (zoom / prev) - el.clientHeight / 2;
+    prevZoomRef.current = zoom;
+  }, [zoom]);
 
-      {/* 隐藏测量容器：portal 到 body，避免被 display:none 的预览容器影响布局，
-          与分页容器使用同一块结构，仅用于读取排版高度 */}
+  return (
+    <div className="h-full flex flex-col relative">
+      {/* 隐藏测量容器:portal 到 body */}
       {typeof document !== 'undefined' &&
         createPortal(
           <div className="paginate-measure" aria-hidden ref={measureRef}>
-            {/* 套上与可见页一致的 resume-document + templateClass 作用域，
-                否则 .resume-document 下设定的 font-size/line-height/色彩在
-                测量容器中失效，块高被高估、分页把过多块挤进下一页，
-                可见页内容区底部出现大段空白。 */}
-            <div className={`resume-document ${templateClass}`}>
+            <div className={'resume-document ' + templateClass}>
               <div className="a4-content">
                 {blocks.map((block, i) => (
                   <div
@@ -368,19 +512,24 @@ export default function PreviewPanel({
         )}
 
       {/* 预览内容 */}
-      <div className="resume-preview-scroll no-print">
+      <div
+        ref={scrollRef}
+        className="resume-preview-scroll no-print"
+        onPointerDown={handlePointerDown}
+        onClickCapture={handleClickCapture}
+      >
         <div
           className="preview-stage"
           style={{
-            width: `${A4_WIDTH_MM * zoom}mm`,
-            minHeight: `${A4_HEIGHT_MM * pageCount * zoom}mm`,
+            width: A4_WIDTH_MM * zoom + 'mm',
+            minHeight: A4_HEIGHT_MM * pageCount * zoom + 'mm',
           }}
         >
           <div
             className="preview-page-shell"
-            style={{ transform: `scale(${zoom})` }}
+            style={{ transform: 'scale(' + zoom + ')' }}
           >
-            <div className={`print-area resume-pages resume-document ${templateClass}`}>
+            <div className={'print-area resume-pages resume-document ' + templateClass}>
               {(pageGroups ?? [blocks]).map((group, pageIndex) => (
                 <section
                   className="a4-page"
@@ -388,8 +537,49 @@ export default function PreviewPanel({
                   data-page={pageIndex + 1}
                 >
                   <div className="a4-content">
+                    {hoveredPath && (
+                      <div
+                        className="hover-frame"
+                        data-page={pageIndex + 1}
+                        ref={(el) => {
+                          frameRefs.current[pageIndex] = el;
+                        }}
+                      />
+                    )}
                     {group.map((block) => (
-                      <div key={block.key} className="paginate-block">
+                      <div
+                        key={block.key}
+                        className={
+                          'paginate-block' +
+                          (hoveredPath && hoveredPath === block.itemPath
+                            ? ' block-hovered'
+                            : '') +
+                          (block.isSectionHead ? ' is-section-head' : '')
+                        }
+                        data-edit={block.edit ? '1' : undefined}
+                        title={block.edit ? '点击编辑' : undefined}
+                        onMouseEnter={
+                          block.itemPath && !block.isSectionHead
+                            ? () => setHoveredPath(block.itemPath || null)
+                            : undefined
+                        }
+                        onMouseLeave={
+                          block.itemPath && !block.isSectionHead
+                            ? () => setHoveredPath((current) =>
+                                current === block.itemPath ? null : current)
+                            : undefined
+                        }
+                        onClick={
+                          block.edit && onEditBlock
+                            ? () =>
+                                onEditBlock(
+                                  block.edit!.module,
+                                  block.edit!.path,
+                                  block.edit!.field,
+                                )
+                            : undefined
+                        }
+                      >
                         {block.node}
                       </div>
                     ))}
@@ -400,11 +590,34 @@ export default function PreviewPanel({
           </div>
         </div>
       </div>
+
+      {/* 悬浮缩放控件(含页数) */}
+      <div className="zoom-controls floating-zoom no-print" role="group" aria-label="预览缩放">
+        <span className="preview-meta floating-page-count">{pageCount} 页</span>
+        <div className="preview-toolbar-divider" />
+        <button
+          onClick={() => applyZoom(zoom - 0.1)}
+          className="icon-button"
+          aria-label="缩小预览"
+        >
+          <UiIcon name="minus" size={17} />
+        </button>
+        <span className="text-xs text-ink-400 w-12 text-center">
+          {Math.round(zoom * 100)}%
+        </span>
+        <button
+          onClick={() => applyZoom(zoom + 0.1)}
+          className="icon-button"
+          aria-label="放大预览"
+        >
+          <UiIcon name="plus" size={17} />
+        </button>
+      </div>
     </div>
   );
 }
 
-/** 简历头部（个人信息） */
+/** 简历头部(个人信息) */
 function ResumeHeader({
   personData,
   resumeName,

@@ -156,17 +156,32 @@ export async function getResumePolishContext(
   });
 }
 
+/** 读取保存在当前用户目录中的 AI Provider 公共配置（不包含 API Key）。 */
+export async function getPolishProvider(): Promise<ResumePolishProviderConfig> {
+  return request<ResumePolishProviderConfig>('/api/resume/polish-provider');
+}
+
+/** 将 AI Provider 配置保存到当前用户目录；响应不会返回 API Key。 */
+export async function savePolishProvider(
+  provider: ResumePolishProviderConfig,
+): Promise<ResumePolishProviderConfig> {
+  return request<ResumePolishProviderConfig>('/api/resume/polish-provider', {
+    method: 'POST',
+    body: JSON.stringify(provider),
+  });
+}
+
 /** 点击 AI 润色后生成当前简历视角的润色结果。 */
 export async function polishResume(
   config: ResumeConfig,
-  provider: ResumePolishProviderConfig,
+  _provider: ResumePolishProviderConfig,
   options?: { only?: { path: string; field: ResumePolishField } },
 ): Promise<{ config: ResumeConfig; generated_count: number; candidate_count: number }> {
   return request<{ config: ResumeConfig; generated_count: number; candidate_count: number }>(
     '/api/resume/polish',
     {
       method: 'POST',
-      body: JSON.stringify({ config, provider, ...options }),
+      body: JSON.stringify({ config, ...options }),
     },
   );
 }

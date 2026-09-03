@@ -5,6 +5,7 @@ import type {
 } from '../types';
 import {
   DEFAULT_POLISH_FIELDS,
+  POLISH_FIELD_OPTIONS,
   getSelectedPolishFields,
 } from './polish.ts';
 import type {
@@ -22,10 +23,10 @@ export const DEFAULT_POLISH_PROVIDER: ResumePolishProviderConfig = {
   timeout_ms: 60000,
 };
 
-/** 浏览器配置的最小持久化接口；生产实现和测试实现可以独立替换。 */
+/** 本地配置的最小持久化接口；生产实现和测试实现可以独立替换。 */
 export interface ResumePolishProviderStorage {
   load(): unknown;
-  save(provider: ResumePolishProviderConfig): void;
+  save(provider: ResumePolishProviderConfig): unknown | Promise<unknown>;
 }
 
 /** AI 模型列表查询的最小接口；润色生成仍由 editingSession 统一提交。 */
@@ -59,6 +60,8 @@ export interface ResumePolishWorkflow {
   ): Promise<ResumePolishWorkflowOutcome>;
   fetchModels(provider: ResumePolishProviderConfig): Promise<ResumePolishWorkflowOutcome>;
   regenerate(path: string, field: ResumePolishField): Promise<ResumePolishWorkflowOutcome>;
+  regenerateAll(): Promise<ResumePolishWorkflowOutcome>;
+  selectVariant(index: number): Promise<ResumePolishWorkflowOutcome>;
 }
 
 interface CreateResumePolishWorkflowInput {
@@ -77,6 +80,7 @@ function normalizeProvider(raw: unknown): ResumePolishProviderConfig {
       ? parsed.base_url
       : DEFAULT_POLISH_PROVIDER.base_url,
     api_key: typeof parsed.api_key === 'string' ? parsed.api_key : '',
+    ...(parsed.api_key_configured === true ? { api_key_configured: true } : {}),
     model: typeof parsed.model === 'string' ? parsed.model : '',
     timeout_ms: typeof parsed.timeout_ms === 'number'
       ? Math.min(180000, Math.max(10000, parsed.timeout_ms))
@@ -88,26 +92,19 @@ export function isPolishProviderConfigured(provider: ResumePolishProviderConfig)
   return Boolean(
     provider.protocol &&
       provider.base_url.trim() &&
-      provider.api_key.trim() &&
+      (provider.api_key.trim() || provider.api_key_configured === true) &&
       provider.model.trim(),
   );
 }
 
-export function createBrowserPolishProviderStorage(): ResumePolishProviderStorage {
+function createMemoryPolishProviderStorage(): ResumePolishProviderStorage {
   return {
-    load() {
-      if (typeof window === 'undefined') return null;
-      try {
-        const raw = window.localStorage.getItem(POLISH_PROVIDER_STORAGE_KEY);
-        return raw ? JSON.parse(raw) : null;
-      } catch {
-        return null;
-      }
-    },
-    save(provider) {
-      if (typeof window === 'undefined') return;
-      window.localStorage.setItem(POLISH_PROVIDER_STORAGE_KEY, JSON.stringify(provider));
-    },
+    load: () => null,
+    save: (provider) => ({
+      ...provider,
+      api_key: '',
+      api_key_configured: Boolean(provider.api_key),
+    }),
   };
 }
 
@@ -132,7 +129,7 @@ function createConfigWithPolish(
 export function createResumePolishWorkflow({
   session,
   modelClient,
-  storage = createBrowserPolishProviderStorage(),
+  storage = createMemoryPolishProviderStorage(),
 }: CreateResumePolishWorkflowInput): ResumePolishWorkflow {
   let snapshot: ResumePolishWorkflowSnapshot = {
     provider: normalizeProvider(storage.load()),
@@ -237,8 +234,17 @@ export function createResumePolishWorkflow({
           : result;
       }
 
-      const hasCachedPolish = Object.keys(polish?.entries || {}).length > 0;
-      if (!isPolishProviderConfigured(snapshot.provider) && hasCachedPolish) {
+      const selectedFields = getSelectedPolishFields(polish);
+      const cachedFields = new Set(
+        Object.values(polish?.entries || {}).flatMap((entry) =>
+          Object.entries(entry.fields || {})
+            .filter(([, value]) => typeof value === 'string' && value.trim())
+            .map(([field]) => field),
+        ),
+      );
+      const missingCachedFields = selectedFields.filter((field) => !cachedFields.has(field));
+      const hasCachedPolish = selectedFields.length > 0 && missingCachedFields.length === 0;
+      if (hasCachedPolish) {
         const result = await saveDraft(
           { ...(polish || {}), enabled: true },
           '保存 AI 润色设置失败',
@@ -249,7 +255,12 @@ export function createResumePolishWorkflow({
       }
 
       if (!isPolishProviderConfigured(snapshot.provider)) {
-        const error = '请先选择协议并配置 Base URL、API Key 和模型';
+        const missingLabels = missingCachedFields.map((field) =>
+          POLISH_FIELD_OPTIONS.find((option) => option.field === field)?.label || field,
+        );
+        const error = cachedFields.size > 0 && missingLabels.length > 0
+          ? `${missingLabels.join('、')}尚未生成，请先配置 Base URL、API Key 和模型`
+          : '请先选择协议并配置 Base URL、API Key 和模型';
         setError(error);
         return { status: 'needs-config', error };
       }
@@ -257,7 +268,7 @@ export function createResumePolishWorkflow({
       const requestConfig = createConfigWithPolish(draft, {
         ...(polish || {}),
         enabled: true,
-        selected_fields: getSelectedPolishFields(polish),
+        selected_fields: selectedFields,
       });
       return generate(snapshot.provider, undefined, requestConfig);
     },
@@ -269,13 +280,18 @@ export function createResumePolishWorkflow({
       }
 
       const nextProvider = normalizeProvider(provider);
-      let storageError = '';
+      let storedProvider = nextProvider;
       try {
-        storage.save(nextProvider);
-      } catch {
-        storageError = '浏览器无法保存本地配置，但本次仍可继续使用';
+        const stored = await storage.save(nextProvider);
+        if (stored) storedProvider = normalizeProvider(stored);
+      } catch (cause) {
+        const error = cause instanceof Error && cause.message
+          ? cause.message
+          : '本地 AI Provider 配置保存失败';
+        setError(error);
+        return { status: 'failed', error, phase: 'save' };
       }
-      update({ provider: nextProvider });
+      update({ provider: storedProvider });
 
       const draft = session.getSnapshot().draft;
       const nextPolish: ResumePolishConfig = {
@@ -284,7 +300,7 @@ export function createResumePolishWorkflow({
       };
       const result = await saveDraft(nextPolish, '保存 AI 润色设置失败');
       if (result.status !== 'success') return result;
-      setError(storageError);
+      setError('');
       return { ...result, message: 'AI 润色模型和内容选择已保存' };
     },
     async fetchModels(provider) {
@@ -326,6 +342,48 @@ export function createResumePolishWorkflow({
         selected_fields: selectedFields.length > 0 ? selectedFields : DEFAULT_POLISH_FIELDS,
       });
       return generate(provider, { path, field }, requestConfig);
+    },
+    async regenerateAll() {
+      if (!isPolishProviderConfigured(snapshot.provider)) {
+        const error = '请先选择协议并配置 Base URL、API Key 和模型';
+        setError(error);
+        return { status: 'needs-config', error };
+      }
+      const draft = session.getSnapshot().draft;
+      if (!draft) {
+        const error = '没有可润色的简历草稿';
+        setError(error);
+        return { status: 'failed', error, phase: 'generate' };
+      }
+      const selectedFields = getSelectedPolishFields(draft.polish);
+      const requestConfig = createConfigWithPolish(draft, {
+        ...(draft.polish || {}),
+        enabled: true,
+        selected_fields: selectedFields.length > 0 ? selectedFields : DEFAULT_POLISH_FIELDS,
+      });
+      return generate(snapshot.provider, undefined, requestConfig);
+    },
+    async selectVariant(index) {
+      const draft = session.getSnapshot().draft;
+      const variant = draft?.polish?.variants?.[index];
+      if (!draft?.polish || !variant) {
+        const error = '润色版本无效';
+        setError(error);
+        return { status: 'invalid', error };
+      }
+      const entries = Object.fromEntries(
+        Object.entries(variant.entries).map(([path, entry]) => [
+          path,
+          { source_hash: entry.source_hash, fields: entry.fields, updated_at: new Date().toISOString() },
+        ]),
+      );
+      const result = await saveDraft(
+        { ...draft.polish, entries, selected_variant: index },
+        '保存 AI 润色设置失败',
+      );
+      if (result.status !== 'success') return result;
+      setError('');
+      return { ...result, message: `已切换到版本 ${index + 1}` };
     },
   };
 }

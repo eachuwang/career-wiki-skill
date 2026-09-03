@@ -18,6 +18,7 @@ import {
   VERSION,
 } from './http_adapter.mjs';
 import { createResumePolish } from './resume_polish_application.mjs';
+import { createResumePolishProviderStore } from './resume_polish_provider_store.mjs';
 import { chromium } from 'playwright-core';
 import { createResumePdfRenderer } from './resume_pdf.mjs';
 
@@ -39,10 +40,22 @@ async function start() {
   const root = await resolveWikiRoot();
   const port = Number.parseInt(process.env.PORT || String(DEFAULT_PORT), 10);
   const appState = createCareerWikiAppState({ root });
+  const environmentProvider = {
+    protocol: process.env.RESUME_POLISH_PROTOCOL || '',
+    base_url: process.env.RESUME_POLISH_BASE_URL || '',
+    api_key: process.env.RESUME_POLISH_API_KEY || '',
+    model: process.env.RESUME_POLISH_MODEL || '',
+  };
+  const providerStore = createResumePolishProviderStore({
+    filePath: join(homedir(), '.career_wiki', '.career-wiki-skill', 'polish-provider.json'),
+    fallbackProvider: Object.values(environmentProvider).every(Boolean)
+      ? environmentProvider
+      : null,
+  });
   const adapter = createCareerWikiHttpAdapter({
     knowledge: createCareerKnowledge({ root }),
     appState,
-    polish: createResumePolish({ root, appState }),
+    polish: createResumePolish({ root, appState, providerStore }),
     pdf: createResumePdfRenderer({ chromium }),
   });
   const server = createServer(adapter);

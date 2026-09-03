@@ -15,6 +15,7 @@ import type {
   WikiEntity,
   TemplateConfig,
   ResumeConfig,
+  ResumePolishProviderConfig,
 } from './types';
 import UiIcon from './components/UiIcon';
 
@@ -27,6 +28,7 @@ export default function App() {
   const [wiki, setWiki] = useState<WikiSnapshot | null>(null);
   const [templates, setTemplates] = useState<TemplateConfig[]>([]);
   const [resumes, setResumes] = useState<ResumeConfig[]>([]);
+  const [polishProvider, setPolishProvider] = useState<ResumePolishProviderConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -35,14 +37,16 @@ export default function App() {
     setLoading(true);
     setError('');
     try {
-      const [wikiData, tplData, resumeData] = await Promise.all([
+      const [wikiData, tplData, resumeData, providerData] = await Promise.all([
         api.getWiki(),
         api.getTemplates(),
         api.getResumes(),
+        api.getPolishProvider(),
       ]);
       setWiki(wikiData);
       setTemplates(tplData);
       setResumes(resumeData);
+      setPolishProvider(providerData);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -109,11 +113,12 @@ export default function App() {
     <div className="h-full flex flex-col bg-ink-100">
       {/* 页面内容:顶栏由各页面渲染(TopBar) */}
       <div className="flex-1 overflow-hidden">
-        {page === 'editor' ? (
+        {page === 'editor' && polishProvider ? (
           <ResumeEditor
             wikiEntities={wikiEntities}
             templates={templates}
             resumes={resumes}
+            polishProvider={polishProvider}
             page={page}
             onNavigate={setPage}
             trailing={topBarTrailing}

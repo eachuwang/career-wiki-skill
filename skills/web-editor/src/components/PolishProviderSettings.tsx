@@ -19,7 +19,7 @@ interface PolishProviderSettingsProps {
   onFetchModels: (provider: ResumePolishProviderConfig) => void;
 }
 
-/** 模型 provider 配置;请求协议由用户明确选择,API Key 仅由父层保存到浏览器本地。
+/** 模型 provider 配置;请求协议由用户明确选择,API Key 由本地 API 保存到用户目录。
  *  以居中悬浮窗呈现(遮罩 + 卡片),Esc 或点击遮罩关闭。 */
 export default function PolishProviderSettings({
   provider,
@@ -35,12 +35,15 @@ export default function PolishProviderSettings({
   const [draft, setDraft] = useState(provider);
   const [draftSelectedFields, setDraftSelectedFields] = useState(selectedFields);
 
+  // draft 只在开关窗口或 provider 真正变化时重置；selectedFields 引用每次
+  // snapshot 都重新计算，不能作为重置 provider 表单的触发条件。
   useEffect(() => {
-    if (open) {
-      setDraft(provider);
-      setDraftSelectedFields(selectedFields);
-    }
-  }, [open, provider, selectedFields]);
+    if (open) setDraft(provider);
+  }, [open, provider]);
+
+  useEffect(() => {
+    if (open) setDraftSelectedFields(selectedFields);
+  }, [open, selectedFields]);
 
   // 悬浮窗内按 Esc 关闭
   useEffect(() => {
@@ -157,7 +160,14 @@ export default function PolishProviderSettings({
         </label>
         <label className="polish-settings-field">
           <span>API Key</span>
-          <input type="password" value={draft.api_key} onChange={(event) => update('api_key', event.target.value)} placeholder="sk-..." spellCheck={false} autoComplete="off" />
+          <input
+            type="password"
+            value={draft.api_key}
+            onChange={(event) => update('api_key', event.target.value)}
+            placeholder={draft.api_key_configured ? '已保存在本机，留空保持不变' : 'sk-...'}
+            spellCheck={false}
+            autoComplete="off"
+          />
         </label>
         <label className="polish-settings-field">
           <span>模型</span>
@@ -185,7 +195,7 @@ export default function PolishProviderSettings({
           </button>
           <button type="button" className="toolbar-button primary compact" onClick={() => onSave(draft, draftSelectedFields)}>保存配置</button>
         </div>
-        <p className="polish-settings-hint">每批最多处理 2 条,超时或服务繁忙时自动重试一次。Key 仅保存在本浏览器。</p>
+        <p className="polish-settings-hint">每批最多处理 2 条,超时或服务繁忙时自动重试一次。Key 仅保存在本机用户目录，浏览器不会持久化。</p>
         {error && <p className="polish-settings-error" role="alert">{error}</p>}
       </div>
     </div>

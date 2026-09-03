@@ -25,6 +25,7 @@ interface ModuleEditDialogProps {
   initialTarget: EditTarget;
   onClose: () => void;
   onOverrideField: (moduleId: string, itemPath: string, field: string, value: unknown) => void;
+  onRestoreField: (moduleId: string, itemPath: string, field: string) => void;
   onToggleItemVisibility: (moduleId: string, itemId: string) => void;
   polish?: ResumePolishConfig;
   polishGeneratingKey?: string | null;
@@ -50,6 +51,7 @@ export default function ModuleEditDialog({
   initialTarget,
   onClose,
   onOverrideField,
+  onRestoreField,
   onToggleItemVisibility,
   polish,
   polishGeneratingKey,
@@ -170,6 +172,11 @@ export default function ModuleEditDialog({
                       itemPath={selected.path}
                       inputId={fieldInputId(module.id, selectedIndex, field)}
                       onOverride={onOverrideField}
+                      isOverridden={Object.prototype.hasOwnProperty.call(
+                        module.overrides[selected.path] || {},
+                        field,
+                      )}
+                      onRestore={onRestoreField}
                       polish={polish}
                       polishSelectedFields={polishSelectedFields}
                       polishGeneratingKey={polishGeneratingKey}

@@ -39,6 +39,11 @@ export interface ResumeContentOrchestration {
     field: string,
     value: unknown,
   ): Promise<ResumeContentOrchestrationResult>;
+  restoreField(
+    moduleId: string,
+    itemPath: string,
+    field: string,
+  ): Promise<ResumeContentOrchestrationResult>;
   toggleItemVisibility(
     moduleId: string,
     itemId: string,
@@ -221,6 +226,20 @@ export function createResumeContentOrchestration({
             }
           : item,
       );
+      return editModules(nextModules);
+    },
+    async restoreField(moduleId, itemPath, field) {
+      const module = snapshot.modules.find((item) => item.id === moduleId);
+      if (!module) return { status: 'updated' };
+      const nextModules = snapshot.modules.map((item) => {
+        if (item.id !== moduleId) return item;
+        const overrides = { ...item.overrides };
+        const itemOverrides = { ...(overrides[itemPath] || {}) };
+        delete itemOverrides[field];
+        if (Object.keys(itemOverrides).length === 0) delete overrides[itemPath];
+        else overrides[itemPath] = itemOverrides;
+        return { ...item, overrides };
+      });
       return editModules(nextModules);
     },
     async toggleItemVisibility(moduleId, itemId) {

@@ -4,6 +4,7 @@ import type { ResumeConfig, ResumePolishProviderConfig } from '../types';
 import { createResumeEditingSession } from './editingSession.ts';
 import {
   createResumePolishWorkflow,
+  isPolishProviderConfigured,
   type ResumePolishProviderStorage,
 } from './polishWorkflow.ts';
 
@@ -45,6 +46,7 @@ function memoryStorage(initial: unknown = null): ResumePolishProviderStorage & {
 
 function createWorkflow(options: {
   initialProvider?: unknown;
+  storage?: ResumePolishProviderStorage;
 } = {}) {
   const saved: ResumeConfig[] = [];
   const session = createResumeEditingSession({
@@ -58,7 +60,7 @@ function createWorkflow(options: {
       candidate_count: options?.only ? 1 : 2,
     }),
   });
-  const storage = memoryStorage(options.initialProvider);
+  const storage = options.storage || memoryStorage(options.initialProvider);
   const workflow = createResumePolishWorkflow({
     session,
     storage,
@@ -108,6 +110,30 @@ test('保存 provider 同时保存当前简历字段选择，并使用 storage a
   assert.deepEqual(workflow.getSnapshot().provider, provider);
   assert.deepEqual(session.getSnapshot().draft?.polish?.selected_fields, ['content']);
   assert.equal(saved.length, 1);
+});
+
+test('服务端已保存密钥时前端不保留 API Key 明文', async () => {
+  const publicProvider = {
+    ...provider,
+    api_key: '',
+    api_key_configured: true,
+  };
+  let submittedProvider: ResumePolishProviderConfig | null = null;
+  const storage: ResumePolishProviderStorage = {
+    load: () => publicProvider,
+    save: async (next) => {
+      submittedProvider = structuredClone(next);
+      return publicProvider;
+    },
+  };
+  const { workflow } = createWorkflow({ storage });
+
+  assert.equal(isPolishProviderConfigured(workflow.getSnapshot().provider), true);
+  await workflow.saveProvider(provider, ['content']);
+
+  assert.equal(submittedProvider?.api_key, 'test-key');
+  assert.deepEqual(workflow.getSnapshot().provider, publicProvider);
+  assert.equal(workflow.getSnapshot().provider.api_key, '');
 });
 
 test('批量润色通过 editingSession 生成并保存，工作流只暴露结果摘要', async () => {

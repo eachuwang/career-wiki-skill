@@ -24,6 +24,7 @@ import UiIcon from '../components/UiIcon';
 import * as api from '../api/client';
 import { exportResumePreview, type ResumeExportFormat } from '../resume/browserExport';
 import { createResumeEditingWorkspace } from '../resume/editingWorkspace';
+import { POLISH_PROVIDER_STORAGE_KEY } from '../resume/polishWorkflow';
 import type {
   EntityType,
   ResumeConfig,
@@ -38,6 +39,7 @@ interface ResumeEditorProps {
   wikiEntities: WikiEntity[];
   templates: TemplateConfig[];
   resumes: ResumeConfig[];
+  polishProvider: ResumePolishProviderConfig;
   page: TopBarPage;
   onNavigate: (page: TopBarPage) => void;
   trailing?: ReactNode;
@@ -53,6 +55,7 @@ export default function ResumeEditor({
   wikiEntities,
   templates,
   resumes,
+  polishProvider,
   page,
   onNavigate,
   trailing,
@@ -65,6 +68,10 @@ export default function ResumeEditor({
     deleteResume: api.deleteResume,
     polishResume: api.polishResume,
     modelClient: { getModels: api.getPolishModels },
+    polishProviderStorage: {
+      load: () => polishProvider,
+      save: api.savePolishProvider,
+    },
     templateRepository: {
       list: api.getTemplates,
       getCss: api.getTemplateCss,
@@ -85,6 +92,10 @@ export default function ResumeEditor({
   // 中央悬浮编辑窗状态
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null);
   const [editTarget, setEditTarget] = useState<EditTarget>({});
+
+  useEffect(() => {
+    window.localStorage.removeItem(POLISH_PROVIDER_STORAGE_KEY);
+  }, []);
 
   useEffect(() => {
     void workspace.dispatch({ type: 'replace-inputs', resumes, templates, wikiEntities });
@@ -172,11 +183,19 @@ export default function ResumeEditor({
                 selectedFieldCount={state.selectedPolishFields.length}
                 providerConfigured={state.polishProviderConfigured}
                 settingsOpen={state.activeOverlay === 'polish'}
+                variants={state.polishVariants}
+                selectedVariant={state.polishSelectedVariant}
                 onChange={(enabled) => {
                   void workspace.dispatch({ type: 'toggle-polish', enabled });
                 }}
                 onOpenSettings={() => {
                   void workspace.dispatch({ type: 'open-polish-settings' });
+                }}
+                onRegenerateAll={() => {
+                  void workspace.dispatch({ type: 'regenerate-all-polish' });
+                }}
+                onSelectVariant={(index) => {
+                  void workspace.dispatch({ type: 'select-polish-variant', index });
                 }}
               />
               <PolishProviderSettings
@@ -288,6 +307,9 @@ export default function ResumeEditor({
             }}
             onOverrideField={(moduleId, itemPath, field, value) => {
               void workspace.dispatch({ type: 'override-field', moduleId, itemPath, field, value });
+            }}
+            onRestoreField={(moduleId, itemPath, field) => {
+              void workspace.dispatch({ type: 'restore-field', moduleId, itemPath, field });
             }}
             onToggleItemVisibility={(moduleId, itemId) => {
               void workspace.dispatch({ type: 'toggle-item-visibility', moduleId, itemId });

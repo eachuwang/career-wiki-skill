@@ -13,6 +13,9 @@ import {
   listProviderModels,
 } from './resume_polish_provider.mjs';
 
+/** 全量润色时生成的多温度版本档位；中间档为默认选中。 */
+const POLISH_TEMPERATURES = [0.3, 0.7, 1.0];
+
 function applicationError(message, statusCode, details = {}) {
   return Object.assign(new Error(message), { statusCode, ...details });
 }
@@ -74,6 +77,8 @@ async function buildContext(root, config, only) {
       ]) {
         if (entity.fields[field] !== undefined) source[field] = entity.fields[field];
       }
+      const targetFields = selectedFields.filter((field) => source[field]);
+      if (targetFields.length === 0) continue;
       const status = getPolishStatus(entity.fields, entity.path, {
         ...config,
         polish: { ...(config.polish || {}), selected_fields: selectedFields },
@@ -84,7 +89,7 @@ async function buildContext(root, config, only) {
         name: entity.fields.name || entity.fields.company || '',
         source,
         source_hash: buildPolishSourceHash(entity.fields),
-        target_fields: selectedFields.filter((field) => source[field]),
+        target_fields: targetFields,
         status,
       });
       for (const field of selectedFields) {
@@ -130,11 +135,37 @@ async function buildContext(root, config, only) {
 export function createResumePolish({
   root,
   appState,
+  providerStore,
   now = () => new Date(),
   generateEntries = generatePolishEntries,
   listModels = listProviderModels,
 }) {
+  const providers = providerStore || {
+    getPublic: async () => ({
+      protocol: 'openai',
+      base_url: 'https://api.openai.com/v1',
+      api_key: '',
+      api_key_configured: false,
+      model: '',
+      timeout_ms: 60000,
+    }),
+    save: async (provider) => ({
+      ...provider,
+      api_key: '',
+      api_key_configured: Boolean(provider?.api_key),
+    }),
+    resolve: async (provider) => provider,
+  };
+
   return {
+    async getProvider() {
+      return providers.getPublic();
+    },
+
+    async saveProvider(provider) {
+      return providers.save(provider);
+    },
+
     async buildContext(request = {}) {
       const config = await resolveConfig(appState, request);
       return buildContext(root, config, resolveOnly(request.only));
@@ -142,36 +173,97 @@ export function createResumePolish({
 
     async generate(request = {}) {
       const config = await resolveConfig(appState, request);
-      const context = await buildContext(root, config, resolveOnly(request.only));
-      const entries = await generateEntries(context, request.provider);
-      const existingEntries = config.polish?.entries || {};
-      const mergedEntries = { ...existingEntries };
-      for (const entry of entries) {
-        mergedEntries[entry.path] = {
-          source_hash: entry.source_hash,
-          fields: {
-            ...(existingEntries[entry.path]?.fields || {}),
-            ...entry.fields,
+      const only = resolveOnly(request.only);
+      const context = await buildContext(root, config, only);
+      const provider = await providers.resolve(request.provider);
+
+      const existingVariants = config.polish?.variants || [];
+      const existingIndex = Number.isInteger(config.polish?.selected_variant)
+        ? config.polish.selected_variant
+        : existingVariants.length > 0
+          ? Math.floor(existingVariants.length / 2)
+          : Math.floor(POLISH_TEMPERATURES.length / 2);
+
+      if (only) {
+        const temperature = existingVariants[existingIndex]?.temperature
+          || POLISH_TEMPERATURES[Math.min(existingIndex, POLISH_TEMPERATURES.length - 1)]
+          || 0.7;
+        const entries = await generateEntries(context, provider, { temperature });
+        const existingEntries = config.polish?.entries || {};
+        const mergedEntries = { ...existingEntries };
+        for (const entry of entries) {
+          mergedEntries[entry.path] = {
+            source_hash: entry.source_hash,
+            fields: { ...(existingEntries[entry.path]?.fields || {}), ...entry.fields },
+            updated_at: now().toISOString(),
+          };
+        }
+        const variants = existingVariants.map((variant, index) => {
+          if (index !== existingIndex) return variant;
+          const variantEntries = { ...variant.entries };
+          for (const entry of entries) {
+            variantEntries[entry.path] = { source_hash: entry.source_hash, fields: entry.fields };
+          }
+          return { ...variant, entries: variantEntries };
+        });
+        return {
+          config: {
+            ...config,
+            polish: {
+              ...(config.polish || {}),
+              enabled: true,
+              entries: mergedEntries,
+              variants,
+            },
           },
-          updated_at: now().toISOString(),
+          generated_count: entries.length,
+          candidate_count: context.candidates.length,
         };
       }
+
+      const temperatures = Array.isArray(request.variants) && request.variants.length > 0
+        ? request.variants.map(Number).filter((value) => Number.isFinite(value))
+        : POLISH_TEMPERATURES;
+      const selectedIndex = Number.isInteger(request.selected_variant)
+        ? Math.min(Math.max(request.selected_variant, 0), temperatures.length - 1)
+        : Math.floor(temperatures.length / 2);
+
+      const variants = [];
+      for (const temperature of temperatures) {
+        const entryList = await generateEntries(context, provider, { temperature });
+        variants.push({
+          temperature,
+          entries: Object.fromEntries(
+            entryList.map((entry) => [entry.path, { source_hash: entry.source_hash, fields: entry.fields }]),
+          ),
+        });
+      }
+      const selected = variants[selectedIndex] || variants[0];
+      const entries = Object.fromEntries(
+        Object.entries(selected.entries).map(([path, entry]) => [
+          path,
+          { source_hash: entry.source_hash, fields: entry.fields, updated_at: now().toISOString() },
+        ]),
+      );
+
       return {
         config: {
           ...config,
           polish: {
             ...(config.polish || {}),
             enabled: true,
-            entries: mergedEntries,
+            entries,
+            variants,
+            selected_variant: selectedIndex,
           },
         },
-        generated_count: entries.length,
+        generated_count: Object.keys(selected.entries).length,
         candidate_count: context.candidates.length,
       };
     },
 
     async listModels(request = {}) {
-      return listModels(request.provider || {});
+      return listModels(await providers.resolve(request.provider));
     },
   };
 }

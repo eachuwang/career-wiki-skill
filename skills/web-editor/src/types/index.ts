@@ -142,11 +142,20 @@ export interface ResumePolishEntry {
   updated_at?: string;
 }
 
+/** 多温度生成的整体版本；entries 结构与 ResumePolishConfig.entries 一致。 */
+export interface ResumePolishVariant {
+  temperature: number;
+  entries: Record<string, ResumePolishEntry>;
+}
+
 export interface ResumePolishConfig {
   enabled?: boolean;
   /** 用户选择要生成的内容字段；尚未配置时界面使用默认选项。 */
   selected_fields?: ResumePolishField[];
   entries?: Record<string, ResumePolishEntry>;
+  /** 多温度生成的版本缓存；entries 指向 selected_variant 对应版本。 */
+  variants?: ResumePolishVariant[];
+  selected_variant?: number;
 }
 
 /** 当前简历对 Wiki 条目字段的展示覆盖；key 为 Wiki 相对路径，不回写 Wiki。 */
@@ -155,11 +164,13 @@ export type ResumeContentOverrides = Record<string, Record<string, unknown>>;
 /** 用户在浏览器中配置的模型协议。请求与响应解析必须使用同一协议。 */
 export type ResumePolishProtocol = 'openai' | 'anthropic';
 
-/** 用户在浏览器中配置的模型连接信息；不会写入简历 JSON。 */
+/** 用户本机保存的模型连接信息；不会写入简历 JSON。 */
 export interface ResumePolishProviderConfig {
   protocol: ResumePolishProtocol;
   base_url: string;
   api_key: string;
+  /** 服务端已保存密钥，但不向浏览器返回明文。 */
+  api_key_configured?: boolean;
   model: string;
   timeout_ms: number;
 }

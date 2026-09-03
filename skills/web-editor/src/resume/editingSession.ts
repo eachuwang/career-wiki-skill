@@ -287,9 +287,10 @@ export function createResumeEditingSession({
           editDraft({
             polish: polishChangedWhileGenerating
               ? {
-                  ...(result.config.polish || {}),
                   ...latestPolish,
                   entries: result.config.polish?.entries || latestPolish?.entries || {},
+                  variants: result.config.polish?.variants || latestPolish?.variants || [],
+                  selected_variant: result.config.polish?.selected_variant ?? latestPolish?.selected_variant,
                 }
               : result.config.polish,
           });

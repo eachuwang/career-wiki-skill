@@ -132,19 +132,30 @@ function renderModuleBlocks(
     return blocks;
   }
 
-  // 单字段模块(如个人优势 content):没有标题/副标题结构,直接按段落渲染
+  // 单字段模块(如个人优势 content):标题与内容分开渲染,内容块保持可编辑。
   if (fields.length === 1) {
-    const summaryBlocks = items.map((e, i) => ({
-      key: section.module + '-summary-' + (e.path || i),
-      edit: { module: section.module, path: e.path, field: fields[0] },
-      itemPath: e.path,
-      node: (
-        <div className="entry resume-summary">
-          {String(e.fields[fields[0]] || '')}
-        </div>
-      ),
-    }));
-    pushSection(summaryBlocks[0], summaryBlocks.slice(1));
+    if (title) {
+      blocks.push({
+        key: section.module + '-title',
+        node: (
+          <div className="section-head">
+            <h2 className="section-title">{title}</h2>
+          </div>
+        ),
+      });
+    }
+    for (const e of items) {
+      blocks.push({
+        key: section.module + '-summary-' + (e.path || blocks.length),
+        edit: { module: section.module, path: e.path, field: fields[0] },
+        itemPath: e.path,
+        node: (
+          <div className="entry resume-summary">
+            {String(e.fields[fields[0]] || '')}
+          </div>
+        ),
+      });
+    }
     return blocks;
   }
 

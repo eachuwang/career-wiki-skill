@@ -208,6 +208,35 @@
 .polish-settings-button:active { transform: scale(0.92); }
 .polish-settings-button.is-unconfigured { color: var(--warning); }
 
+/* 顶栏「重新生成」按钮 */
+.polish-refresh-button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 26px; height: 26px; flex: 0 0 26px;
+  border: none; border-radius: 999px; cursor: pointer;
+  color: var(--text-secondary); background: transparent;
+  font-size: 15px; line-height: 1;
+  transition: color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease), transform var(--dur-fast) var(--ease);
+}
+.polish-refresh-button:hover { color: var(--accent); background: var(--accent-soft); }
+.polish-refresh-button:active { transform: scale(0.92); }
+.polish-refresh-button:disabled { cursor: wait; opacity: 0.65; }
+
+/* 多温度版本切换 */
+.polish-variants {
+  display: inline-flex; align-items: center; gap: 2px;
+  padding: 1px; border-radius: 999px;
+  background: var(--bg-layer-2);
+}
+.polish-variant-option {
+  min-width: 30px; height: 22px; padding: 0 7px;
+  border: none; border-radius: 999px; cursor: pointer;
+  color: var(--text-secondary); background: transparent;
+  font-size: 10px; font-weight: 700; font-variant-numeric: tabular-nums;
+  transition: color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease);
+}
+.polish-variant-option:hover { color: var(--accent); }
+.polish-variant-option.is-active { color: #fff; background: var(--accent); }
+
 /* 开关 */
 .polish-switch {
   position: relative; width: 32px; height: 19px; padding: 0;
@@ -486,11 +515,22 @@
   text-align: right; text-overflow: ellipsis; white-space: nowrap;
   padding-top: 9px;
 }
-.field-editor.is-multiline .polish-regenerate-button {
+.field-editor-actions {
   grid-column: 2;
-  justify-self: start;
+  display: flex; min-height: 20px; align-items: center; gap: 10px;
   margin-top: -6px;
 }
+.field-editor-actions .polish-regenerate-button { margin-top: 0; }
+.manual-override-status {
+  color: color-mix(in srgb, var(--warning) 78%, var(--text-primary));
+  font-size: 10px; font-weight: 700;
+}
+.field-restore-button {
+  padding: 0; border: 0;
+  color: var(--accent); background: transparent; cursor: pointer;
+  font-size: 11px; font-weight: 700;
+}
+.field-restore-button:hover { color: var(--accent-strong); text-decoration: underline; }
 .field-editor-input {
   min-width: 0; min-height: 32px;
   border: 1px solid var(--border-l2); border-radius: var(--r-input);

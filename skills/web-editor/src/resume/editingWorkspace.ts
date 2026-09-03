@@ -5,6 +5,7 @@ import type {
   ResumeConfig,
   ResumePolishField,
   ResumePolishProviderConfig,
+  ResumePolishVariant,
   TemplateConfig,
   WikiEntity,
 } from '../types/index.ts';
@@ -53,6 +54,8 @@ export interface ResumeEditingWorkspaceSnapshot {
   polishGenerating: boolean;
   polishGeneratingKey: string | null;
   polishProviderError: string;
+  polishVariants: ResumePolishVariant[];
+  polishSelectedVariant: number;
   modules: ModuleInstance[];
   resumeWikiEntities: WikiEntity[];
   resumeView: ResumeView | null;
@@ -82,13 +85,16 @@ export type ResumeEditingWorkspaceCommand =
   | { type: 'move-module-before'; activeId: string; overId: string }
   | { type: 'toggle-module'; moduleId: string }
   | { type: 'override-field'; moduleId: string; itemPath: string; field: string; value: unknown }
+  | { type: 'restore-field'; moduleId: string; itemPath: string; field: string }
   | { type: 'toggle-item-visibility'; moduleId: string; itemId: string }
   | { type: 'remove-module'; moduleId: string }
   | { type: 'toggle-polish'; enabled: boolean }
   | { type: 'open-polish-settings' }
   | { type: 'save-polish-provider'; provider: ResumePolishProviderConfig; selectedFields: ResumePolishField[] }
   | { type: 'fetch-polish-models'; provider: ResumePolishProviderConfig }
-  | { type: 'regenerate-polish'; path: string; field: ResumePolishField };
+  | { type: 'regenerate-polish'; path: string; field: ResumePolishField }
+  | { type: 'regenerate-all-polish' }
+  | { type: 'select-polish-variant'; index: number };
 
 export type ResumeEditingWorkspaceResult =
   | { status: 'completed' }
@@ -240,6 +246,8 @@ export function createResumeEditingWorkspace({
       polishGenerating: polishSnapshot.generating,
       polishGeneratingKey: polishSnapshot.generatingKey,
       polishProviderError: polishSnapshot.error,
+      polishVariants: polish?.variants || [],
+      polishSelectedVariant: polish && typeof polish.selected_variant === 'number' ? polish.selected_variant : 1,
       modules: contentOrchestration.getSnapshot().modules,
       resumeWikiEntities: getResumeWikiEntities(),
       resumeView: draft
@@ -507,6 +515,18 @@ export function createResumeEditingWorkspace({
         return { status: 'completed' };
       }
 
+      if (command.type === 'restore-field') {
+        const result = await contentOrchestration.restoreField(
+          command.moduleId,
+          command.itemPath,
+          command.field,
+        );
+        reportContentResult(result);
+        if (result.status === 'failed') return { status: 'failed', error: result.error };
+        setFeedback('已恢复 AI/Wiki 内容', 'success');
+        return { status: 'completed' };
+      }
+
       if (command.type === 'toggle-item-visibility') {
         reportContentResult(await contentOrchestration.toggleItemVisibility(
           command.moduleId,
@@ -570,6 +590,29 @@ export function createResumeEditingWorkspace({
           const error = `重新生成失败：${result.error}`;
           setFeedback(error, 'error');
           return { status: 'failed', error };
+        }
+        setFeedback(result.message, 'success');
+        return { status: 'completed' };
+      }
+
+      if (command.type === 'regenerate-all-polish') {
+        setFeedback('', 'info');
+        const result = await polishWorkflow.regenerateAll();
+        if (result.status === 'needs-config') setOverlay('polish');
+        if (result.status !== 'success') {
+          const error = `重新生成失败：${result.error}`;
+          setFeedback(error, 'error');
+          return { status: 'failed', error };
+        }
+        setFeedback(result.message, 'success');
+        return { status: 'completed' };
+      }
+
+      if (command.type === 'select-polish-variant') {
+        const result = await polishWorkflow.selectVariant(command.index);
+        if (result.status !== 'success') {
+          setFeedback(result.error, 'error');
+          return { status: 'failed', error: result.error };
         }
         setFeedback(result.message, 'success');
         return { status: 'completed' };

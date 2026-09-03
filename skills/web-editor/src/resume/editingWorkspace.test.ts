@@ -72,6 +72,7 @@ function memoryStorage(value: unknown = provider): ResumePolishProviderStorage {
 function createWorkspace(options: {
   configs?: ResumeConfig[];
   confirms?: boolean[];
+  providerStorageValue?: unknown;
   scheduledFeedback?: Array<{ callback: () => void; delay: number }>;
 } = {}) {
   const saved: ResumeConfig[] = [];
@@ -121,7 +122,7 @@ function createWorkspace(options: {
         return confirmAnswers.shift() ?? true;
       },
     },
-    polishProviderStorage: memoryStorage(),
+    polishProviderStorage: memoryStorage(options.providerStorageValue),
     now: () => new Date('2026-08-13T00:00:00.000Z'),
     ...(options.scheduledFeedback ? {
       feedbackScheduler: {
@@ -223,4 +224,77 @@ test('润色动作更新预览并通过工作区反馈成功结果', async () =>
   assert.equal(snapshot.resumeWikiEntities[0].fields.description, '润色描述');
   assert.equal(snapshot.resumeView?.sections[0].items?.[0].fields.description, '润色描述');
   assert.equal(snapshot.feedback?.tone, 'success');
+});
+
+test('新选择的润色字段没有缓存时不会静默启用旧结果', async () => {
+  const { workspace } = createWorkspace({
+    providerStorageValue: null,
+    configs: [resume({
+      polish: {
+        enabled: false,
+        selected_fields: ['description', 'content'],
+        entries: {
+          'projects/mail.md': {
+            source_hash: buildPolishSourceHash(wikiEntities[0].fields),
+            fields: { description: '润色描述' },
+          },
+        },
+      },
+    })],
+  });
+
+  const result = await workspace.dispatch({ type: 'toggle-polish', enabled: true });
+
+  assert.equal(result.status, 'failed');
+  assert.equal(workspace.getSnapshot().polishEnabled, false);
+  assert.equal(workspace.getSnapshot().activeOverlay, 'polish');
+  assert.match(workspace.getSnapshot().feedback?.message || '', /个人优势|配置/);
+});
+
+test('恢复继承内容仅移除当前字段覆盖并立即显示 AI 结果', async () => {
+  const { workspace } = createWorkspace({
+    configs: [resume({
+      polish: {
+        enabled: true,
+        selected_fields: ['description'],
+        entries: {
+          'projects/mail.md': {
+            source_hash: buildPolishSourceHash(wikiEntities[0].fields),
+            fields: { description: '润色描述' },
+          },
+        },
+      },
+      content_overrides: {
+        'projects/mail.md': {
+          description: '手动描述',
+          role: '手动角色',
+        },
+      },
+    })],
+  });
+
+  assert.equal(
+    workspace.getSnapshot().resumeView?.sections[0].items?.[0].fields.description,
+    '手动描述',
+  );
+
+  const result = await workspace.dispatch({
+    type: 'restore-field',
+    moduleId: 'module-project',
+    itemPath: 'projects/mail.md',
+    field: 'description',
+  });
+
+  assert.equal(result.status, 'completed');
+  assert.deepEqual(workspace.getSnapshot().draft?.content_overrides, {
+    'projects/mail.md': { role: '手动角色' },
+  });
+  assert.equal(
+    workspace.getSnapshot().resumeView?.sections[0].items?.[0].fields.description,
+    '润色描述',
+  );
+  assert.deepEqual(workspace.getSnapshot().feedback, {
+    message: '已恢复 AI/Wiki 内容',
+    tone: 'success',
+  });
 });

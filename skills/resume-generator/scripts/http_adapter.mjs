@@ -6,6 +6,8 @@ export const ENDPOINTS = Object.freeze([
   'GET /api/wiki/:entity/:id',
   'GET /api/resumes',
   'GET /api/templates',
+  'GET /api/resume/polish-provider',
+  'POST /api/resume/polish-provider',
   'POST /api/resume/polish-context',
   'POST /api/resume/polish',
   'POST /api/resume/polish-models',
@@ -69,6 +71,7 @@ function routeErrorLabel(pathname) {
   if (pathname === '/api/template/css') return '读取 CSS 失败';
   if (pathname === '/api/resume/polish') return 'AI 润色失败';
   if (pathname === '/api/resume/polish-models') return '读取模型列表失败';
+  if (pathname === '/api/resume/polish-provider') return 'AI Provider 配置失败';
   if (pathname === '/api/resume/pdf') return '生成 PDF 失败';
   if (pathname === '/api/wiki') return '读取 Wiki 失败';
   return '服务器错误';
@@ -138,6 +141,12 @@ export function createCareerWikiHttpAdapter({ knowledge, appState, polish, pdf }
       if (method === 'GET' && pathname === '/api/templates') {
         const templates = await appState.listTemplates();
         return sendJson(response, 200, { templates, total: templates.length });
+      }
+      if (method === 'GET' && pathname === '/api/resume/polish-provider') {
+        return sendJson(response, 200, await polish.getProvider());
+      }
+      if (method === 'POST' && pathname === '/api/resume/polish-provider') {
+        return sendJson(response, 200, await polish.saveProvider(await readBody(request)));
       }
       if (method === 'POST' && pathname === '/api/resume/polish-context') {
         return sendJson(response, 200, await polish.buildContext(await readBody(request)));

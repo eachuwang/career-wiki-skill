@@ -32,7 +32,7 @@ Career-Wiki-Skill 的前端 React 应用，包含两个页面：
 - 用户说"从当前简历隐藏项目" / "不在这份简历显示项目" → 当前简历的 `hide.items`；只影响当前简历，不删除 Wiki 实体
 - 用户说"复制/删除模板" → 顶栏模板下拉 + 操作按钮，调 templates API
 - 用户说"预览脱敏效果""隐藏敏感信息" → 隐私预览 6 个开关实时生效
-- 用户说"润色简历""优化项目描述" → 用户在顶栏选择 OpenAI-compatible 或 Anthropic Messages 协议，再配置 Base URL、API Key、模型和润色内容；前端调用 `/api/resume/polish` 生成并保存 `polish.entries`，只展示通过校验的结果
+- 用户说"润色简历""优化项目描述" → 用户在顶栏选择 OpenAI-compatible 或 Anthropic Messages 协议，再配置 Base URL、API Key、模型和润色内容；API Key 由本地 API 保存到用户目录，浏览器不持久化；前端调用 `/api/resume/polish` 生成并保存 `polish.entries`，只展示通过校验的结果
 - 编辑器顶部「AI 润色」开关关闭时显示 Wiki 中的用户原始输入，开启时显示已生成且通过原文指纹校验的润色结果；没有润色结果时仍显示原文
 
 **不用于：** 生成简历数据（用 resume-generator）；采访与 Wiki 编译（用 interview / wiki-engine）。模板管理、多简历管理、隐私脱敏已并入本前端，不再作为独立 skill。
@@ -193,6 +193,8 @@ skills/web-editor/
 | GET | `/api/wiki/:entity/:id` | 获取单个实体详情 |
 | GET | `/api/resumes` | 获取所有简历配置 |
 | GET | `/api/templates` | 获取所有模板 |
+| GET | `/api/resume/polish-provider` | 获取不含 API Key 的本地 Provider 状态 |
+| POST | `/api/resume/polish-provider` | 将 Provider 保存到本机用户目录 |
 | POST | `/api/resume/polish-context` | 提供 Agent 润色所需的原始事实和用户口吻样本 |
 | POST | `/api/resume/polish` | 生成当前简历的 AI 润色结果 |
 | POST | `/api/resume/polish-models` | 拉取用户配置 provider 的模型列表 |

@@ -145,3 +145,51 @@ test('HTTP adapter 将当前预览 HTML 生成为 PDF 文件响应', async (t) =
   assert.deepEqual(calls, [{ html: '<article class="a4-page">王羿邱</article>' }]);
   assert.match(Buffer.from(await response.arrayBuffer()).toString(), /^%PDF-1\.7 resume-content/);
 });
+
+test('HTTP adapter 保存本地 Provider 且永不向浏览器返回 API Key', async (t) => {
+  const calls = [];
+  const publicConfig = {
+    protocol: 'openai',
+    base_url: 'https://example.com/v1',
+    api_key: '',
+    api_key_configured: true,
+    model: 'model-a',
+    timeout_ms: 60000,
+  };
+  const adapter = createCareerWikiHttpAdapter({
+    knowledge: {},
+    appState: {},
+    pdf: {},
+    polish: {
+      getProvider: async () => publicConfig,
+      saveProvider: async (provider) => {
+        calls.push(provider);
+        return publicConfig;
+      },
+    },
+  });
+  const server = await listen(adapter);
+  t.after(server.close);
+
+  const saveResponse = await fetch(`${server.baseUrl}/api/resume/polish-provider`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      protocol: 'openai',
+      base_url: 'https://example.com/v1',
+      api_key: 'secret-key',
+      model: 'model-a',
+      timeout_ms: 60000,
+    }),
+  });
+  const saved = await saveResponse.json();
+
+  assert.equal(saveResponse.status, 200);
+  assert.equal(JSON.stringify(saved).includes('secret-key'), false);
+  assert.deepEqual(saved, publicConfig);
+  assert.equal(calls[0].api_key, 'secret-key');
+
+  const getResponse = await fetch(`${server.baseUrl}/api/resume/polish-provider`);
+  assert.equal(getResponse.status, 200);
+  assert.deepEqual(await getResponse.json(), publicConfig);
+});

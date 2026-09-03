@@ -17,6 +17,8 @@ interface FieldEditorProps {
   itemPath: string;
   inputId: string;
   onOverride: (moduleId: string, itemPath: string, field: string, value: unknown) => void;
+  isOverridden?: boolean;
+  onRestore?: (moduleId: string, itemPath: string, field: string) => void;
   polish?: ResumePolishConfig;
   polishSelectedFields: ResumePolishField[];
   polishGeneratingKey?: string | null;
@@ -46,6 +48,8 @@ export default function FieldEditor({
   itemPath,
   inputId,
   onOverride,
+  isOverridden = false,
+  onRestore,
   polish,
   polishSelectedFields,
   polishGeneratingKey,
@@ -107,15 +111,33 @@ export default function FieldEditor({
           className="field-editor-input"
         />
       )}
-      {canRegenerate && polishField && onRegeneratePolish && (
-        <button
-          type="button"
-          className="polish-regenerate-button"
-          disabled={isRegenerating}
-          onClick={() => onRegeneratePolish(itemPath, polishField)}
-        >
-          {isRegenerating ? '生成中…' : '换一换'}
-        </button>
+      {(isOverridden || (canRegenerate && polishField && onRegeneratePolish)) && (
+        <div className="field-editor-actions">
+          {isOverridden && (
+            <>
+              <span className="manual-override-status">手动内容优先</span>
+              {onRestore && (
+                <button
+                  type="button"
+                  className="field-restore-button"
+                  onClick={() => onRestore(moduleId, itemPath, field)}
+                >
+                  恢复 AI/Wiki 内容
+                </button>
+              )}
+            </>
+          )}
+          {canRegenerate && polishField && onRegeneratePolish && (
+            <button
+              type="button"
+              className="polish-regenerate-button"
+              disabled={isRegenerating}
+              onClick={() => onRegeneratePolish(itemPath, polishField)}
+            >
+              {isRegenerating ? '生成中…' : '换一换'}
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

@@ -36,7 +36,7 @@ node skills/resume-generator/scripts/api_server.mjs
 
 - `PORT`：监听端口，默认 `3001`。
 - `WIKI_ROOT`：数据根目录；缺失时读取 `~/.career_wiki/.career-wiki-skill/config.json`，再回退到 `~/.career_wiki/`。
-- `RESUME_POLISH_PROTOCOL`、`RESUME_POLISH_BASE_URL`、`RESUME_POLISH_API_KEY`、`RESUME_POLISH_MODEL`：服务端 AI Provider 兜底配置。正常 Web 请求优先使用浏览器提交的显式 provider。
+- `RESUME_POLISH_PROTOCOL`、`RESUME_POLISH_BASE_URL`、`RESUME_POLISH_API_KEY`、`RESUME_POLISH_MODEL`：服务端 AI Provider 兜底配置。Web 编辑器配置默认保存到当前用户目录。
 - `RESUME_POLISH_PROVIDER=mock`：仅用于测试。
 
 运行时依赖由 `skills/package.json` workspace 管理。
@@ -50,6 +50,8 @@ node skills/resume-generator/scripts/api_server.mjs
 | GET | `/api/wiki/:entity/:id` | 返回单个 Career 实体 |
 | GET | `/api/resumes` | 返回全部简历配置 |
 | GET | `/api/templates` | 返回全部模板配置 |
+| GET | `/api/resume/polish-provider` | 返回本地 Provider 公共配置，不返回 API Key |
+| POST | `/api/resume/polish-provider` | 将 Provider 保存到当前用户目录 |
 | POST | `/api/resume/polish-context` | 返回润色候选、原始事实、用户口吻样本和指纹 |
 | POST | `/api/resume/polish` | 调用显式协议的 Provider，返回带 `polish.entries` 的配置 |
 | POST | `/api/resume/polish-models` | 拉取 OpenAI-compatible Provider 的模型列表 |
@@ -93,7 +95,7 @@ Career Knowledge 模块拥有目录遍历、严格 OKF 校验、实体解析、�
 
 ### Web Provider 模式
 
-`POST /api/resume/polish` 的 `provider.protocol` 必须显式为：
+先通过 `POST /api/resume/polish-provider` 保存配置；API Key 写入 `~/.career_wiki/.career-wiki-skill/polish-provider.json`（权限 `0600`），不会返回或持久化到浏览器。随后 `POST /api/resume/polish` 从本地配置解析协议：
 
 - `openai`：调用 OpenAI-compatible Chat Completions，并使用对应响应 JSON 提取器。
 - `anthropic`：调用 Anthropic Messages，并使用对应响应 JSON 提取器。

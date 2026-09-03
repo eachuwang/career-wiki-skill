@@ -50,7 +50,7 @@ Interview ──→ raw Markdown ──→ Wiki compile ──→ Structured kno
 - **Complete project knowledge archival** — Project descriptions, responsibilities, tech stacks, challenges, solutions, outcomes, and learnings are stored separately; original answers stay in raw sources while structured fields enter the Wiki.
 - **Multiple resume views** — Generate multiple role-specific resumes from one Wiki and hide irrelevant projects or fields without changing the source knowledge base.
 - **Visual editing and live preview** — A minimal editor supports module ordering, field overrides, item visibility, template switching, and A4 preview.
-- **Direct PDF download** — Generate and download the rendered PDF directly from the preview, with HTML, JSON, and OKF export also supported.
+- **Direct PDF download** — Generate and download the rendered PDF directly from the preview, with HTML and JSON exports; the knowledge directory is already a portable OKF bundle.
 - **Readable Wiki graph** — Browse entity nodes, relationships, legends, and details to understand connections between projects and skills.
 
 ---
@@ -62,7 +62,7 @@ Interview ──→ raw Markdown ──→ Wiki compile ──→ Structured kno
 | 1 | **env-init** | SKILL.md + Python script | Environment checks, data directory initialization, dependency setup |
 | 2 | **interview** | SKILL.md only | Sequential interviews, project context discovery, raw Markdown output |
 | 3 | **file-parser** | SKILL.md only | Extract content from PDFs/images/documents into raw sources |
-| 4 | **wiki-engine** | SKILL.md + Node scripts | Schema definition, compile/lint, OKF import/export |
+| 4 | **wiki-engine** | SKILL.md + Node scripts | Strict OKF v0.2 compile/lint and one-time legacy migration |
 | 5 | **resume-generator** | SKILL.md + Node API server | Query Wiki data and assemble resume JSON from templates |
 | 6 | **web-editor** | SKILL.md + React app | Visual editing, multiple resumes, template management, privacy masking, live preview, Wiki graph, and PDF export |
 
@@ -107,21 +107,23 @@ Pure local Markdown + YAML frontmatter, Git-friendly, with no database dependenc
 
 ```
 ~/.career_wiki/
-├── sources/
-│   ├── raw/               ← Interview output + parsed file sources
-│   └── uploads/           ← Original uploaded files
-├── wiki/                  ← Compiled structured pages (do not edit manually)
+├── knowledge/             ← Portable OKF v0.2 bundle
+│   ├── index.md
+│   ├── references/
+│   │   ├── raw/           ← Interview and extracted Reference concepts
+│   │   └── uploads/       ← Original uploaded files
 │   ├── persons/
 │   ├── experiences/
 │   ├── projects/
 │   ├── skills/
 │   └── ...
-├── resumes/               ← Resume configurations (one JSON per resume)
-├── templates/             ← Resume templates (JSON + CSS)
-└── .career-wiki-skill/    ← Runtime state
+└── .career-wiki-skill/    ← App state, outside the OKF bundle
+    ├── resumes/
+    ├── templates/
+    └── backups/
 ```
 
-The schema lives in the `wiki-engine` SKILL.md rather than `profile.json`, consistent with the OKF philosophy.
+`knowledge/` is itself the strict OKF v0.2 bundle, not a private Wiki awaiting export. Concepts use `type`, object-array `sources`, `generated/verified`, and standard Markdown links; application state is physically separated.
 
 ---
 
@@ -189,8 +191,8 @@ The `web-editor` skill starts the React frontend with module ordering, field edi
 | 01 | **Skills orchestrate; they do not execute** | SKILL.md guides the agent, LLM reasoning performs the work, and scripts handle deterministic operations. |
 | 02 | **Cross-agent compatibility** | Uses common tools such as Bash, Python, and Node instead of agent-specific APIs. |
 | 03 | **Local-first data** | User data lives in `~/.career_wiki/`, with user-controlled synchronization such as Git or a local drive. |
-| 04 | **Wiki as a build artifact** | Rebuild from raw sources; do not edit Wiki pages manually. Change raw data and recompile. |
-| 05 | **OKF export** | Supports import and export in Google's OKF format for cross-system exchange. |
+| 04 | **Knowledge as a build artifact** | Rebuild from Reference concepts; do not edit generated pages manually. |
+| 05 | **Native OKF storage** | `knowledge/` directly follows OKF v0.2, with no private compatibility format. |
 
 ---
 
@@ -214,11 +216,11 @@ All SKILL.md files have passed the runtime compatibility scan with no single-age
 
 | Component | Technology |
 |-----------|------------|
-| Wiki data | Markdown + YAML frontmatter + wikilinks |
+| Wiki data | OKF v0.2 Markdown + YAML frontmatter + standard Markdown links |
 | API server | Node.js + gray-matter (plain `node:http`, no framework) |
-| Web frontend | React 18 + Vite + dnd-kit + Tailwind CSS + vis-network + html2pdf.js |
+| Web frontend | React 18 + Vite + dnd-kit + Tailwind CSS + vis-network + html2canvas + jsPDF |
 | Python scripts | Environment checks using the standard library |
-| Export formats | PDF (directly from A4 preview) / HTML / JSON / OKF |
+| Export formats | PDF (directly from A4 preview) / HTML / JSON; the knowledge layer is native OKF |
 | Template system | JSON configuration + CSS styles |
 
 ---

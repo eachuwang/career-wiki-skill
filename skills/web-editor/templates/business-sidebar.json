@@ -14,7 +14,7 @@
     {
       "module": "person",
       "title": "联系方式",
-      "fields": ["name", "title", "email", "phone", "location"],
+      "fields": ["name", "current_title", "email", "phone", "location"],
       "column": "sidebar"
     },
     {

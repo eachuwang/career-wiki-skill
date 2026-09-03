@@ -10,7 +10,7 @@
 export const POLISH_FIELDS = ['description', 'responsibilities', 'content'];
 export const DEFAULT_POLISH_FIELDS = [...POLISH_FIELDS];
 
-/** 返回当前配置允许生成的字段；旧配置默认兼容全部支持的字段。 */
+/** 返回当前配置允许生成的字段；尚未配置时使用产品默认值。 */
 export function getSelectedPolishFields(config = {}) {
   if (!Array.isArray(config?.polish?.selected_fields)) return DEFAULT_POLISH_FIELDS;
   return POLISH_FIELDS.filter((field) => config.polish.selected_fields.includes(field));
@@ -61,8 +61,8 @@ function getEntry(config, path) {
   if (!entries || typeof entries !== 'object') return null;
   const raw = entries[path];
   if (!raw || typeof raw !== 'object') return null;
-  const fields = raw.fields && typeof raw.fields === 'object' ? raw.fields : raw;
-  return { ...raw, fields };
+  if (!raw.fields || typeof raw.fields !== 'object') return null;
+  return raw;
 }
 
 /**

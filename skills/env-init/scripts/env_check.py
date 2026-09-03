@@ -17,6 +17,7 @@ import os
 import shutil
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 
@@ -25,7 +26,7 @@ from pathlib import Path
 NODE_MIN_MAJOR = 18
 PYTHON_MIN_TUPLE = (3, 9)
 
-WIKI_SUBDIRS = [
+KNOWLEDGE_SUBDIRS = [
     "persons",
     "experiences",
     "projects",
@@ -39,13 +40,13 @@ WIKI_SUBDIRS = [
 ]
 
 ALL_DIRS = [
-    "sources/raw",
-    "sources/uploads",
-    "sources/raw/uploads",
-    *[f"wiki/{d}" for d in WIKI_SUBDIRS],
-    "resumes",
-    "templates",
+    *[f"knowledge/{d}" for d in KNOWLEDGE_SUBDIRS],
+    "knowledge/references/raw/uploads",
+    "knowledge/references/uploads",
     ".career-wiki-skill",
+    ".career-wiki-skill/resumes",
+    ".career-wiki-skill/templates",
+    ".career-wiki-skill/backups",
 ]
 
 
@@ -130,9 +131,10 @@ def check_npm() -> tuple[bool, str]:
 
 
 def check_gray_matter() -> tuple[bool, str]:
-    """gray-matter 是 wiki 引擎的 Node 依赖，不达标会被 SKILL.md 的 npm install 步骤装上。
+    """gray-matter 是 skills workspace 中 wiki-engine 的 Node 依赖。
     这里只做信息性检查，不阻断。"""
-    rc, out, _ = run_cmd("npm list gray-matter 2>/dev/null")
+    skills_dir = Path(__file__).resolve().parents[2]
+    rc, out, _ = run_cmd(f'npm list --prefix "{skills_dir}" gray-matter --depth=0 2>/dev/null')
     if rc == 0 and "gray-matter" in out:
         return True, f"✅ gray-matter 已安装"
     return False, "⚠️  gray-matter 未安装（将由 npm install 自动安装）"
@@ -157,12 +159,25 @@ def write_config(root: Path) -> bool:
     if cfg_path.exists():
         return False
     cfg = {
-        "version": "1.0",
+        "version": "2.0",
+        "okf_version": "0.2",
         "root": str(root),
-        "created": None,  # Agent 会填实际时间
+        "created": datetime.now().astimezone().isoformat(timespec="seconds"),
     }
     cfg_path.parent.mkdir(parents=True, exist_ok=True)
     cfg_path.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
+    return True
+
+
+def write_bundle_index(root: Path) -> bool:
+    """创建 OKF v0.2 bundle 根索引。已有索引不覆盖。"""
+    index_path = root / "knowledge" / "index.md"
+    if index_path.exists():
+        return False
+    index_path.write_text(
+        '---\nokf_version: "0.2"\n---\n\n# Career Wiki\n',
+        encoding="utf-8",
+    )
     return True
 
 
@@ -218,12 +233,15 @@ def main() -> int:
         print(f"  📁 数据目录已存在: {root}")
 
     created = ensure_dirs(root)
+    index_written = write_bundle_index(root)
     if created:
         print(f"  ✅ 新建 {len(created)} 个子目录:")
         for c in created:
             print(f"     - {c}")
     else:
         print("  ✅ 所有子目录已存在，无需创建")
+    if index_written:
+        print("  ✅ 创建 knowledge/index.md（OKF v0.2）")
 
     # 3. config.json
     print("\n[3/3] 配置文件")
@@ -238,7 +256,7 @@ def main() -> int:
     print("环境检查完成")
     print("=" * 50)
     print(f"数据目录: {root}")
-    print(f"  -> 如果 gray-matter 未安装，请在仓库根目录运行: npm install")
+    print(f"  -> 如果 gray-matter 未安装，请在仓库的 skills/ 目录运行: npm install")
     print(f"  -> 环境就绪，可以开始用采访 skill（F02）或文件解析 skill（F03）了")
     return 0
 

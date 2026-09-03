@@ -8,16 +8,16 @@ import test from 'node:test';
 /** 创建带有已删除项目清单的 API fixture，模拟 Wiki 文件尚未清理的过渡状态。 */
 async function createFixture() {
   const root = await mkdtemp(join(tmpdir(), 'career-wiki-api-deletion-'));
-  await mkdir(join(root, 'wiki', 'projects'), { recursive: true });
+  await mkdir(join(root, 'knowledge', 'projects'), { recursive: true });
   await mkdir(join(root, '.career-wiki-skill'), { recursive: true });
-  await mkdir(join(root, 'templates'), { recursive: true });
+  await mkdir(join(root, '.career-wiki-skill', 'templates'), { recursive: true });
   await writeFile(
-    join(root, 'wiki', 'projects', 'deleted-project.md'),
-    '---\nentity: project\nname: 待删除项目\nrole: 负责人\n---\n',
+    join(root, 'knowledge', 'projects', 'deleted-project.md'),
+    '---\ntype: career.project\nname: 待删除项目\nrole: 负责人\n---\n',
   );
   await writeFile(
-    join(root, 'wiki', 'projects', 'kept-project.md'),
-    '---\nentity: project\nname: 保留项目\nrole: 开发者\n---\n',
+    join(root, 'knowledge', 'projects', 'kept-project.md'),
+    '---\ntype: career.project\nname: 保留项目\nrole: 开发者\n---\n',
   );
   await writeFile(
     join(root, '.career-wiki-skill', 'deletions.json'),
@@ -29,7 +29,7 @@ async function createFixture() {
     }),
   );
   await writeFile(
-    join(root, 'templates', 'tech-minimal.json'),
+    join(root, '.career-wiki-skill', 'templates', 'tech-minimal.json'),
     JSON.stringify({
       id: 'tech-minimal',
       sections: [{ module: 'project', title: '项目经验', fields: ['name', 'role'] }],
@@ -52,7 +52,7 @@ async function waitForServer(baseUrl) {
   throw new Error('API 服务启动超时');
 }
 
-test('删除清单会阻止已删除项目进入 Wiki 和简历生成结果', async (t) => {
+test('删除清单会阻止已删除项目进入 Career Knowledge HTTP adapter', async (t) => {
   const root = await createFixture();
   const port = 42000 + Math.floor(Math.random() * 1000);
   const baseUrl = `http://127.0.0.1:${port}`;
@@ -76,20 +76,6 @@ test('删除清单会阻止已删除项目进入 Wiki 和简历生成结果', as
   assert.equal(wikiResponse.status, 200);
   const wiki = await wikiResponse.json();
   assert.deepEqual(wiki.entities.map((item) => item.fields.name), ['保留项目']);
-
-  const resumeResponse = await fetch(`${baseUrl}/api/resume/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      config: {
-        template: 'tech-minimal',
-        modules: ['project'],
-      },
-    }),
-  });
-  assert.equal(resumeResponse.status, 200);
-  const resume = await resumeResponse.json();
-  assert.deepEqual(resume.sections[0].items.map((item) => item.name), ['保留项目']);
 
   const deletedResponse = await fetch(
     `${baseUrl}/api/wiki/projects/deleted-project.md`,

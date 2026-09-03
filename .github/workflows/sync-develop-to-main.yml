@@ -1,0 +1,52 @@
+name: Sync develop to main
+
+on:
+  schedule:
+    # 每周一 UTC 02:00(北京时间 10:00)
+    - cron: '0 2 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  sync:
+    name: Create sync PR when develop is ahead
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check whether develop is ahead of main
+        id: check
+        run: |
+          git fetch origin develop main
+          AHEAD=$(git rev-list --count origin/main..origin/develop)
+          echo "ahead=$AHEAD" >> "$GITHUB_OUTPUT"
+
+      - name: Reuse existing open sync PR
+        id: existing
+        if: steps.check.outputs.ahead != '0'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          EXISTING=$(gh pr list --base main --head develop --state open --json number -q '.[0].number' || true)
+          echo "number=$EXISTING" >> "$GITHUB_OUTPUT"
+
+      - name: Create sync PR
+        if: >-
+          steps.check.outputs.ahead != '0' &&
+          steps.existing.outputs.number == ''
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr create \
+            --base main \
+            --head develop \
+            --title "chore: sync develop to main" \
+            --body "定期同步:develop 领先 main。请在 review 并确认 CI 通过后合并。"

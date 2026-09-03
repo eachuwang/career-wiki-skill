@@ -4,7 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
-    branches: [main]
+    branches: [main, develop]
   merge_group:
   workflow_dispatch:
 
@@ -30,21 +30,15 @@ jobs:
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: skills/resume-generator/package-lock.json
+          cache-dependency-path: skills/package-lock.json
 
-      - name: Install resume generator dependencies
-        working-directory: skills/resume-generator
+      - name: Install skill runtime dependencies
+        working-directory: skills
         run: npm ci
 
-      - name: Test resume generator
-        working-directory: skills/resume-generator
+      - name: Test skill contracts and runtime
+        working-directory: skills
         run: npm test
-
-      - name: Test wiki engine
-        run: node --test skills/wiki-engine/tests/**/*.test.mjs
-
-      - name: Test interview skill
-        run: node --test skills/interview/tests/**/*.test.mjs
 
   web-editor:
     name: Web editor

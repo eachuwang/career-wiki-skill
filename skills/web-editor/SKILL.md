@@ -20,7 +20,7 @@ Career-Wiki-Skill 的前端 React 应用，包含两个页面：
 1. **简历编辑器** — 内容编排区（按需添加/排序/编辑/删除）→ 右侧实时预览（按模板渲染）
 2. **Wiki 图谱** — vis-network 渲染实体关系图，点击节点查看详情，缺口分析
 
-**核心理念：** 前端是展示层，不做数据持久化。所有数据通过 resume-generator API server 获取，编辑覆盖和 Agent 生成的轻量润色结果都只存简历配置 JSON，不回写 Wiki。
+**核心理念：** React 页面只渲染快照并 dispatch 用户意图。`Resume Editing Session` 负责草稿、保存、切换、新建、复制、删除和异步润色合并事务；`Resume Projection` 负责所有展示规则。数据通过 resume-generator 获取，编辑覆盖和润色结果只存简历配置 JSON，不回写 Wiki。
 
 ## 何时触发
 
@@ -32,7 +32,7 @@ Career-Wiki-Skill 的前端 React 应用，包含两个页面：
 - 用户说"从当前简历隐藏项目" / "不在这份简历显示项目" → 当前简历的 `hide.items`；只影响当前简历，不删除 Wiki 实体
 - 用户说"复制/删除模板" → 顶栏模板下拉 + 操作按钮，调 templates API
 - 用户说"预览脱敏效果""隐藏敏感信息" → 隐私预览 6 个开关实时生效
-- 用户说"润色简历""优化项目描述" → 用户在顶栏配置 OpenAI-compatible Base URL、API Key、模型和润色内容；前端调用 `/api/resume/polish` 生成并保存 `polish.entries`，只展示通过校验的结果
+- 用户说"润色简历""优化项目描述" → 用户在顶栏选择 OpenAI-compatible 或 Anthropic Messages 协议，再配置 Base URL、API Key、模型和润色内容；API Key 由本地 API 保存到用户目录，浏览器不持久化；前端调用 `/api/resume/polish` 生成并保存 `polish.entries`，只展示通过校验的结果
 - 编辑器顶部「AI 润色」开关关闭时显示 Wiki 中的用户原始输入，开启时显示已生成且通过原文指纹校验的润色结果；没有润色结果时仍显示原文
 
 **不用于：** 生成简历数据（用 resume-generator）；采访与 Wiki 编译（用 interview / wiki-engine）。模板管理、多简历管理、隐私脱敏已并入本前端，不再作为独立 skill。
@@ -41,10 +41,10 @@ Career-Wiki-Skill 的前端 React 应用，包含两个页面：
 
 - **React 18** + **TypeScript**
 - **Vite** — 构建工具 + 开发服务器
-- **dnd-kit** — 拖拽排序（模块库拖入 + 编辑区内排序）
+- **dnd-kit** — 编辑区内拖拽排序
 - **Tailwind CSS** — 样式
 - **vis-network** — 图谱可视化
-- **html2pdf.js** — 浏览器端生成并下载 PDF
+- **Chromium + Playwright Core** — 复用预览 HTML/CSS 原生生成 A4 PDF
 
 ## 启动方式
 
@@ -105,6 +105,9 @@ skills/web-editor/
     │   └── GraphCanvas.tsx      ← vis-network 图谱画布
     ├── api/
     │   └── client.ts            ← API client（封装 fetch 调用）
+    ├── resume/
+    │   ├── editingSession.ts    ← 草稿、持久化与异步合并事务
+    │   └── projection.ts        ← 预览与导出的唯一投影接口
     └── types/
         └── index.ts            ← TypeScript 类型定义
 ```
@@ -133,16 +136,16 @@ skills/web-editor/
 
 ### 交互流程
 
-1. **按需添加模块** — 点击内容编排区的「添加模块」，勾选一个或多个模块后加入编排区；已添加模块会标记为已添加
+1. **按需添加模块** — 点击内容编排区的「添加模块」，勾选要保留在当前简历预览/导出中的模块后应用；取消勾选会从当前简历移除，不会删除或修改 Wiki
 2. **编辑覆盖** — 点击模块展开，可编辑字段。输入时立即更新右侧预览，保存为当前简历 JSON 的 `content_overrides[Wiki相对路径][字段名]`，**不回写 wiki**；重新打开当前简历时恢复，PDF/HTML/JSON 导出使用同一覆盖结果
 3. **子项隐藏/恢复** — 项目、经历等条目可从当前简历隐藏并恢复；保存为 `hide.items`，预览与导出同步生效，Wiki 数据不变。要从知识库删除实体，必须退出编辑器并触发 wiki-engine 的删除流程。
 4. **排序** — 编辑区内拖拽模块卡片上下排序
-5. **删除** — 点击模块卡片右上角 ✕ 删除
+5. **删除** — 点击模块卡片右上角 ✕ 从当前简历预览/导出中移除；不删除或修改 Wiki
 6. **右侧实时预览** — 按选中模板渲染，编辑改动实时反映到预览
 8. **模板切换** — 顶栏下拉框切换模板，预览即时更新
 9. **缩放** — 预览区有 +/− 按钮缩放
 10. **脱敏** — 顶栏脱敏开关实时控制预览中的字段脱敏
-11. **AI 润色显示** — 顶栏「AI 润色」开关默认关闭；齿轮按钮配置模型并选择项目描述、个人优势、岗位职责等内容；支持拉取 `/v1/models` 或手填模型。关闭显示原始输入，开启显示已校验的 `polish.entries`；已生成字段旁提供「换一换」，只重新生成当前条目的当前字段，切换即时影响编辑区、预览和导出
+11. **AI 润色显示** — 顶栏「AI 润色」开关默认关闭；齿轮按钮选择 OpenAI-compatible / Anthropic Messages 协议，配置模型并选择项目描述、个人优势、岗位职责等内容；OpenAI-compatible 支持拉取 `/v1/models`，Anthropic 需手填模型。关闭显示原始输入，开启显示已校验的 `polish.entries`；已生成字段旁提供「换一换」，只重新生成当前条目的当前字段，切换即时影响编辑区、预览和导出
 
 ### 导出
 
@@ -158,9 +161,9 @@ skills/web-editor/
 
 | 格式 | 方式 | 说明 |
 |------|------|------|
-| PDF | `html2pdf.js` | 将 `.print-area` 的 A4 预览在浏览器端生成并直接下载，不调用打印对话框 |
+| PDF | `Chromium + Playwright Core` | 将 `.print-area` 的同一份 HTML/CSS 交给本地 API 的 Chromium 原生打印引擎生成 PDF，不调用打印对话框 |
 | HTML | `Blob` 下载 | 取 `.print-area` 的 outerHTML，包成完整 HTML 文件下载 |
-| JSON | API server | 调 `/api/resume/export` 接口，后端组装结构化简历 JSON |
+| JSON | `ResumeView` Blob | 浏览器直接序列化与预览相同的 Resume Projection 结果 |
 
 ## Wiki 图谱页面
 
@@ -190,18 +193,20 @@ skills/web-editor/
 | GET | `/api/wiki/:entity/:id` | 获取单个实体详情 |
 | GET | `/api/resumes` | 获取所有简历配置 |
 | GET | `/api/templates` | 获取所有模板 |
-| POST | `/api/resume/generate` | 生成结构化简历 JSON |
+| GET | `/api/resume/polish-provider` | 获取不含 API Key 的本地 Provider 状态 |
+| POST | `/api/resume/polish-provider` | 将 Provider 保存到本机用户目录 |
 | POST | `/api/resume/polish-context` | 提供 Agent 润色所需的原始事实和用户口吻样本 |
 | POST | `/api/resume/polish` | 生成当前简历的 AI 润色结果 |
 | POST | `/api/resume/polish-models` | 拉取用户配置 provider 的模型列表 |
 | POST | `/api/resume/save` | 保存简历配置 |
-| POST | `/api/resume/export` | 导出简历（JSON 格式） |
 | PUT | `/api/wiki/refresh` | 触发 wiki 重新 compile |
 | GET | `/api/health` | 健康检查 |
 
-## 脱敏实现
+## Resume Projection
 
-前端预览时实时脱敏（对应 F07 决议 Q16 选 C）。脱敏逻辑在 `PreviewPanel.tsx` 的 `maskValue()` 函数中：
+`src/resume/projection.ts` 的 `projectResume({ wiki, config, template })` 是简历展示规则的唯一接口。固定顺序为：选择模块 → 应用有效润色 → 手动覆盖 → 隐藏条目/字段 → 排序/强调 → 隐私 → 分组。`PreviewPanel`、HTML、PDF 和 JSON 只消费最终 `ResumeView`。
+
+脱敏在 Resume Projection 中执行：
 
 | 字段 | 规则 | 示例 |
 |------|------|------|
@@ -210,6 +215,10 @@ skills/web-editor/
 | 邮箱 | 首字母 + `***` + 域名 | wang@example.com → w***@example.com |
 
 用户在顶栏勾选脱敏开关，预览实时更新。导出时用同一份脱敏配置。
+
+## Resume Editing Session
+
+`src/resume/editingSession.ts` 的 `getSnapshot / subscribe / dispatch` 是简历编辑事务的唯一接口。React 页面通过命令表达修改、保存、切换、新建、复制、删除和生成润色；会话负责串行保存、失败保留草稿、破坏性操作保护，以及异步润色返回时合并请求期间的最新用户修改。
 
 ## 构建产物
 
@@ -236,9 +245,9 @@ npm run build    # 输出到 dist/
 
 4. **vis-network 动态导入。** `GraphCanvas.tsx` 用 `import('vis-network/standalone')` 动态加载，避免首屏加载 vis-network 的重量级代码。如果看到图谱不渲染，检查浏览器控制台是否有动态 import 错误。
 
-5. **dnd-kit 拖拽需同时有 Draggable + Droppable。** 模块库的卡片是 Draggable，编辑区是 Droppable。少了任一方拖拽都不生效。排序用的是 `SortableContext`。
+5. **dnd-kit 拖拽需同时有 Sortable + Droppable。** 编辑区是 Droppable，模块卡片通过 `SortableContext` 支持排序；模块添加和移除通过「添加模块」选择器完成。
 
-6. **PDF 生成范围。** `html2pdf.js` 只接收 `.print-area`，不要传入预览工具栏或缩放容器，否则导出内容会带入界面控件或缩放比例。
+6. **PDF 生成范围。** 前端只提交 `.print-area` 的 HTML 和当前文档 CSS；本地 API 用 Chromium 的 screen media 与 A4 页面尺寸生成 PDF。不要把预览工具栏或缩放容器交给导出器。
 
 7. **覆盖不回写 wiki。** 编辑区运行时按 Wiki 路径保存条目级 `overrides`，持久化时写入当前简历配置的 `content_overrides`，不修改 wiki 源数据。展示优先级是“手动覆盖 > 有效 AI 润色 > Wiki 原文”——改简历只改当前简历视角。
 

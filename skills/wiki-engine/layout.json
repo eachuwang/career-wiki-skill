@@ -1,0 +1,9 @@
+{
+  "bundle": "knowledge",
+  "referencesRaw": "knowledge/references/raw",
+  "referencesUploads": "knowledge/references/uploads",
+  "state": ".career-wiki-skill",
+  "resumes": ".career-wiki-skill/resumes",
+  "templates": ".career-wiki-skill/templates",
+  "backups": ".career-wiki-skill/backups"
+}

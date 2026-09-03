@@ -3,6 +3,7 @@
  *
  * 用 vis-network 渲染实体关系图。
  * 点击节点查看详情。
+ * 配色跟随主题 token(暗/浅),由 theme prop 驱动重建。
  */
 
 import { useEffect, useRef, useState } from 'react';
@@ -25,11 +26,18 @@ interface GraphCanvasProps {
   onSelectNode: (entity: WikiEntity | null) => void;
 }
 
+/** 读取主题 token(带兜底,防止早期渲染时变量缺失) */
+function themeVar(name: string, fallback: string): string {
+  const value = getComputedStyle(document.documentElement)
+    .getPropertyValue(name)
+    .trim();
+  return value || fallback;
+}
+
 /** 把 wiki 快照转成 vis-network 的 nodes + edges */
 function buildGraph(wiki: WikiSnapshot): { nodes: GraphNode[]; edges: GraphEdge[] } {
   const nodes: GraphNode[] = wiki.entities.map((e) => {
-    const name =
-      String(e.fields.name || e.fields.company || e.fields.title || e.path.split('/').pop() || e.entity);
+    const name = e.title || String(e.path.split('/').pop() || e.entity);
     return {
       id: e.path,
       label: name,
@@ -58,11 +66,18 @@ export default function GraphCanvas({
   const networkRef = useRef<Network | null>(null);
   const [showGaps, setShowGaps] = useState(false);
 
-  // 初始化/更新图谱
+  // 初始化/更新图谱(theme 变化时按新 token 重建配色)
   useEffect(() => {
     if (!containerRef.current || !wiki) return;
 
-    // 动态导入 vis-network（避免 SSR 问题 + 按需加载）
+    const nodeText = themeVar('--graph-node-text', '#172033');
+    const nodeFontBg = themeVar('--graph-node-font-bg', 'rgba(248, 250, 252, 0.92)');
+    const edgeColor = themeVar('--graph-edge', '#94a3b8');
+    const edgeHighlight = themeVar('--graph-edge-highlight', '#2563eb');
+    const edgeFont = themeVar('--graph-edge-font', '#475569');
+    const edgeFontBg = themeVar('--graph-edge-font-bg', 'rgba(248, 250, 252, 0.9)');
+
+    // 动态导入 vis-network(避免 SSR 问题 + 按需加载)
     import('vis-network/standalone').then(({ Network, DataSet }) => {
       const { nodes: graphNodes, edges: graphEdges } = buildGraph(wiki);
 
@@ -84,12 +99,12 @@ export default function GraphCanvas({
             border: gapPaths.has(n.id) ? '#c0392b' : '#2c3e50',
           },
           font: {
-            color: '#172033',
+            color: nodeText,
             size: 14,
             face: 'system-ui, PingFang SC, Microsoft YaHei, sans-serif',
-            background: 'rgba(248, 250, 252, 0.92)',
+            background: nodeFontBg,
             strokeWidth: 2,
-            strokeColor: '#f8fafc',
+            strokeColor: nodeFontBg,
           },
           shape: gapPaths.has(n.id) ? 'diamond' : 'dot',
           size: gapPaths.has(n.id) ? 20 : 15,
@@ -100,13 +115,13 @@ export default function GraphCanvas({
         graphEdges.map((e) => ({
           ...e,
           arrows: 'to',
-          color: { color: '#94a3b8', highlight: '#2563eb' },
+          color: { color: edgeColor, highlight: edgeHighlight },
           font: {
             size: 11,
-            color: '#475569',
-            background: 'rgba(248, 250, 252, 0.9)',
+            color: edgeFont,
+            background: edgeFontBg,
             strokeWidth: 2,
-            strokeColor: '#f8fafc',
+            strokeColor: edgeFontBg,
           },
         })),
       );
@@ -163,7 +178,7 @@ export default function GraphCanvas({
   return (
     <div className="h-full flex">
       {/* 图谱画布 */}
-      <div className="flex-1 relative bg-ink-50">
+      <div className="flex-1 relative graph-canvas">
         <div ref={containerRef} className="w-full h-full" />
         <div className="graph-canvas-actions no-print">
           <label className="graph-toggle">
@@ -177,7 +192,7 @@ export default function GraphCanvas({
           </label>
         </div>
         {/* 图例 */}
-        <div className="absolute bottom-4 left-4 bg-white/95 rounded-lg shadow p-3 text-ink-800 no-print">
+        <div className="absolute bottom-4 left-4 bg-[var(--graph-node-font-bg)] rounded-lg shadow p-3 text-ink-800 no-print">
           <div className="text-xs font-semibold text-ink-800 mb-2">实体类型</div>
           <div className="space-y-1">
             {legend.map(([type, color]) => (
@@ -191,7 +206,7 @@ export default function GraphCanvas({
             ))}
             {showGaps && (
               <div className="flex items-center gap-2 text-xs text-ink-800 pt-1 border-t border-ink-200 mt-1">
-                <span className="w-3 h-3 rotate-45 bg-red-400" />
+                <span className="w-3 h-3 rotate-45 bg-[var(--danger)]" />
                 缺口/孤立
               </div>
             )}
@@ -201,7 +216,7 @@ export default function GraphCanvas({
 
       {/* 节点详情侧栏 */}
       {selectedNode && (
-        <div className="w-80 border-l border-ink-200 bg-white overflow-y-auto p-4 no-print">
+        <div className="w-80 border-l border-ink-200 bg-[var(--bg-layer-2)] overflow-y-auto p-4 no-print">
           <div className="flex items-center justify-between mb-3">
             <span
               className="px-2 py-0.5 rounded text-xs font-semibold"
@@ -259,17 +274,17 @@ function NodeDetail({ entity }: { entity: WikiEntity }) {
       )}
 
       <div>
-        <div className="text-xs font-semibold text-ink-700 mb-1">置信度</div>
+        <div className="text-xs font-semibold text-ink-700 mb-1">信任等级</div>
         <span
           className={`text-xs px-2 py-0.5 rounded ${
-            entity.confidence === 'verified'
-              ? 'bg-green-100 text-green-700'
-              : entity.confidence === 'extracted'
-                ? 'bg-yellow-100 text-yellow-700'
-                : 'bg-orange-100 text-orange-700'
+            entity.trustTier === 'human-reviewed'
+              ? 'bg-[color-mix(in_srgb,var(--success)_15%,transparent)] text-[var(--success)]'
+              : entity.trustTier === 'machine-confirmed'
+                ? 'bg-[color-mix(in_srgb,var(--warning)_15%,transparent)] text-[var(--warning)]'
+                : 'bg-[color-mix(in_srgb,var(--danger)_15%,transparent)] text-[var(--danger)]'
           }`}
         >
-          {entity.confidence}
+          {entity.trustTier}
         </span>
       </div>
 

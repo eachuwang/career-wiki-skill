@@ -7,6 +7,7 @@ import type {
   ResumeHide,
   ResumePolishConfig,
 } from '../types';
+import { MODULE_LIBRARY } from '../types/index.ts';
 
 interface CreateResumeConfigInput {
   resumeName: string;
@@ -19,7 +20,48 @@ interface CreateResumeConfigInput {
   today?: string;
 }
 
-/** 从保存配置中恢复指定模块的隐藏条目，同时兼容仅含 fields 的旧配置。 */
+/** 将可持久化简历配置投影为编辑区模块；展开状态仍由 React 管理。 */
+export function projectResumeModules(
+  config: ResumeConfig | null,
+  wikiEntities: Array<{ path: string; entity: EntityType }>,
+  expandedTypes: ReadonlySet<EntityType> = new Set(),
+): ModuleInstance[] {
+  return (config?.modules || []).map((type) => {
+    const def = MODULE_LIBRARY.find((module) => module.type === type);
+    return {
+      id: `module-${type}`,
+      type,
+      label: def?.label || type,
+      expanded: expandedTypes.has(type),
+      overrides: getModuleContentOverrides(config?.content_overrides, type, wikiEntities),
+      hiddenItemIds: getHiddenItemIds(config?.hide, type),
+    };
+  });
+}
+
+/** 从编辑区模块提取可持久化草稿字段，不携带 expanded 等界面状态。 */
+export function getModuleDraftPatch(
+  baseConfig: ResumeConfig,
+  modules: ModuleInstance[],
+): Pick<ResumeConfig, 'modules' | 'hide' | 'content_overrides'> {
+  const next = createResumeConfig({
+    resumeName: baseConfig.name,
+    resumeId: baseConfig.id,
+    templateId: baseConfig.template,
+    privacy: baseConfig.privacy || {},
+    modules,
+    baseConfig,
+    polish: baseConfig.polish,
+    today: baseConfig.updated,
+  });
+  return {
+    modules: next.modules,
+    hide: next.hide,
+    content_overrides: next.content_overrides,
+  };
+}
+
+/** 从保存配置中恢复指定模块的隐藏条目。字段级隐藏由投影层单独处理。 */
 export function getHiddenItemIds(
   hide: ResumeHide[] | undefined,
   module: EntityType,
@@ -41,6 +83,27 @@ export function getModuleContentOverrides(
   return Object.fromEntries(
     Object.entries(contentOverrides || {}).filter(([path]) => paths.has(path)),
   );
+}
+
+/**
+ * 将模块选择器的勾选结果同步到当前简历编排。
+ * 已存在的模块实例会被保留，以免丢失编辑内容、隐藏项和排序；
+ * 取消勾选只移除当前简历视角中的模块，不触碰 Wiki 数据。
+ */
+export function reconcileModuleSelection(
+  currentModules: ModuleInstance[],
+  selectedTypes: EntityType[],
+  createModule: (type: EntityType) => ModuleInstance,
+): ModuleInstance[] {
+  const uniqueSelectedTypes = [...new Set(selectedTypes)];
+  const selectedTypeSet = new Set(uniqueSelectedTypes);
+  const retainedModules = currentModules.filter((module) => selectedTypeSet.has(module.type));
+  const retainedTypes = new Set(retainedModules.map((module) => module.type));
+  const addedModules = uniqueSelectedTypes
+    .filter((type) => !retainedTypes.has(type))
+    .map(createModule);
+
+  return [...retainedModules, ...addedModules];
 }
 
 /**

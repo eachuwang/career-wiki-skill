@@ -14,7 +14,7 @@
     {
       "module": "person",
       "title": "",
-      "fields": ["name", "title", "email", "phone", "location"]
+      "fields": ["name", "current_title", "email", "phone", "location"]
     },
     {
       "module": "education",
@@ -31,7 +31,7 @@
     {
       "module": "publication",
       "title": "发表论文",
-      "fields": ["title", "venue", "date", "url"]
+      "fields": ["publication_title", "venue", "date", "url"]
     },
     {
       "module": "award",

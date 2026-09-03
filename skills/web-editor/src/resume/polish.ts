@@ -8,7 +8,7 @@ export const POLISH_FIELD_OPTIONS: Array<{ field: ResumePolishField; label: stri
   { field: 'responsibilities', label: '岗位职责', description: '在项目或工作中的具体职责' },
 ];
 
-/** 返回当前简历选中的润色字段；旧配置默认兼容全部支持的字段。 */
+/** 返回当前简历选中的润色字段；尚未配置时使用界面默认值。 */
 export function getSelectedPolishFields(config?: ResumePolishConfig): ResumePolishField[] {
   if (!Array.isArray(config?.selected_fields)) return DEFAULT_POLISH_FIELDS;
   return POLISH_FIELDS.filter((field) => config.selected_fields?.includes(field));

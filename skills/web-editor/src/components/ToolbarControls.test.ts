@@ -54,6 +54,7 @@ test('隐私设置默认收起，仅显示启用数量摘要', async () => {
 test('AI 模型配置允许用户调整请求超时秒数', async () => {
   const html = await renderComponent('/src/components/PolishProviderSettings.tsx', {
     provider: {
+      protocol: 'openai',
       base_url: 'https://api.openai.com/v1',
       api_key: '',
       model: '',
@@ -77,6 +78,7 @@ test('AI 模型配置允许用户调整请求超时秒数', async () => {
 test('AI 模型配置允许选择项目描述、个人优势和岗位职责', async () => {
   const html = await renderComponent('/src/components/PolishProviderSettings.tsx', {
     provider: {
+      protocol: 'openai',
       base_url: 'https://api.openai.com/v1',
       api_key: '',
       model: '',
@@ -97,4 +99,28 @@ test('AI 模型配置允许选择项目描述、个人优势和岗位职责', as
   assert.match(html, /个人优势/);
   assert.match(html, /岗位职责/);
   assert.equal(html.match(/type="checkbox"/g)?.length, 3);
+});
+
+test('AI 模型配置提供显式协议选择', async () => {
+  const html = await renderComponent('/src/components/PolishProviderSettings.tsx', {
+    provider: {
+      protocol: 'openai',
+      base_url: 'https://api.openai.com/v1',
+      api_key: '',
+      model: '',
+      timeout_ms: 60000,
+    },
+    selectedFields: ['description'],
+    open: true,
+    models: [],
+    loadingModels: false,
+    error: '',
+    onClose: () => undefined,
+    onSave: () => undefined,
+    onFetchModels: () => undefined,
+  });
+
+  assert.match(html, /AI 润色协议/);
+  assert.match(html, /OpenAI-compatible/);
+  assert.match(html, /Anthropic Messages/);
 });

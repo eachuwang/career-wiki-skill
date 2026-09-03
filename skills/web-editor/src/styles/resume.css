@@ -1,0 +1,288 @@
+/* ============================================================
+   A4 简历投影:白纸与简历文档排版(主题无关,预览/HTML/PDF 共用)
+   从原 index.css 精确迁移,勿改尺寸与分页规则
+   ============================================================ */
+
+/* 多张 A4 页面容器:预览时页面之间留出间距 */
+.resume-pages {
+  width: 210mm;
+  box-sizing: border-box;
+}
+
+/* 单张 A4 纸:四边为保护区域(上下 15mm、左右 16mm),
+   文字只允许出现在保护区域内,杜绝被页面边界截断 */
+.a4-page {
+  position: relative;
+  width: 210mm;
+  height: 297mm;
+  box-sizing: border-box;
+  padding: 15mm 16mm;
+  margin-bottom: 24px;
+  background: var(--paper-bg);
+  box-shadow: var(--paper-shadow);
+  overflow: hidden;
+}
+
+.a4-page:last-child {
+  margin-bottom: 0;
+}
+
+.a4-content {
+  width: 100%;
+  /* 建立独立格式化上下文,阻止子元素 margin 折叠穿出内容区;
+     不用 overflow:hidden,避免字体行盒的亚像素溢出被裁掉。页面级
+     .a4-page 仍负责最终边界保护。 */
+  display: flow-root;
+}
+
+/* 分页测量容器:移出视口但保留真实排版尺寸,供 JS 计算每块所属页码 */
+.paginate-measure {
+  position: fixed;
+  left: -9999px;
+  top: 0;
+  width: 178mm;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.preview-page-shell {
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 210mm;
+  transform-origin: top left;
+  transition: transform 0.15s ease;
+}
+
+/* ---------- 简历文档排版 ---------- */
+
+/* 调研结论:A4、单栏、可抽取文本、适度留白与单一深色强调。 */
+.resume-document {
+  --resume-accent: #1f4e79;
+  --resume-text: #172033;
+  --resume-muted: #586579;
+  --resume-rule: #cdd6df;
+  color: var(--resume-text);
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif;
+  font-size: 10.5pt;
+  line-height: 1.38;
+  text-align: left;
+}
+
+.resume-document.academic-plain {
+  --resume-accent: #222;
+  font-family: 'Times New Roman', 'Songti SC', SimSun, serif;
+}
+
+.resume-document.business-sidebar {
+  --resume-accent: #17324d;
+}
+
+.resume-document.creative-color {
+  --resume-accent: #5c4b8a;
+}
+
+/* 模块头部块:标题与首条内容同块,承担原 .preview-section 的间距 */
+.section-head {
+  margin-top: 5.2mm;
+}
+
+.resume-header {
+  margin: 0 0 6mm;
+  padding: 0 0 4mm;
+  border-bottom: 1.5px solid var(--resume-accent);
+}
+
+.resume-header h1 {
+  margin: 0;
+  color: var(--resume-text);
+  font-size: 21pt;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.02em;
+}
+
+.resume-headline {
+  margin-top: 1.5mm;
+  color: var(--resume-accent);
+  font-size: 11pt;
+  font-weight: 600;
+}
+
+.resume-contact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1mm 0;
+  margin-top: 2.5mm;
+  color: var(--resume-muted);
+  font-size: 9.5pt;
+  line-height: 1.3;
+}
+
+.resume-contact-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 1mm;
+  overflow-wrap: anywhere;
+}
+
+.resume-contact-icon {
+  flex: 0 0 auto;
+  color: var(--resume-accent);
+}
+
+.resume-contact-item:not(:last-child)::after {
+  content: '·';
+  margin: 0 2.2mm;
+  color: #9aa5b3;
+}
+
+.section-title {
+  margin: 0 0 2.8mm;
+  padding: 0 0 1.2mm;
+  border-bottom: 1px solid var(--resume-rule);
+  color: var(--resume-accent);
+  font-size: 11.5pt;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: 0.08em;
+  break-after: avoid-page;
+}
+
+.entry {
+  margin: 0 0 3.8mm;
+  break-inside: avoid-page;
+  page-break-inside: avoid;
+}
+
+/* 条目拆分为细粒度分页块:title+sub 独占 lead 块,每个描述字段各自成块。
+   lead → desc:desc 的 1.4mm 上间距;desc → lead:3.8mm 条目间距。
+   这样跨页边界下移的只是单个描述字段(高度小),第一页底部留白大幅缩小。 */
+.entry-lead {
+  margin: 3.8mm 0 0;
+  break-inside: avoid-page;
+  page-break-inside: avoid;
+}
+
+.section-title + .entry-lead {
+  margin-top: 0;
+}
+
+.entry-desc-block {
+  margin-bottom: 0;
+  break-inside: avoid-page;
+  page-break-inside: avoid;
+}
+
+.entry-title {
+  color: var(--resume-text);
+  font-size: 10.5pt;
+  font-weight: 700;
+  line-height: 1.32;
+}
+
+.entry-sub {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 4mm;
+  margin-top: 0.8mm;
+}
+
+.entry-role {
+  min-width: 0;
+  color: #344258;
+  font-weight: 500;
+}
+
+.entry-date {
+  color: var(--resume-muted);
+  font-size: 9.5pt;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.entry-desc,
+.resume-summary {
+  margin-top: 1.4mm;
+  color: #354257;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.entry-desc-label {
+  color: var(--resume-text);
+  font-weight: 700;
+}
+
+.resume-skill-row {
+  display: grid;
+  grid-template-columns: 23mm minmax(0, 1fr);
+  gap: 3mm;
+  margin-bottom: 1.8mm;
+  break-inside: avoid-page;
+}
+
+.resume-skill-category {
+  color: var(--resume-text);
+  font-weight: 700;
+}
+
+.resume-skill-list {
+  color: #354257;
+}
+
+/* ---------- 打印样式(导出 PDF 用,精确保留) ---------- */
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 0;
+  }
+
+  html,
+  body {
+    width: 210mm;
+    min-height: 297mm;
+    background: #fff !important;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+  .print-area,
+  .print-area * {
+    visibility: visible;
+  }
+  .print-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 210mm;
+    margin: 0;
+    box-shadow: none !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  .a4-page {
+    width: 210mm;
+    height: 297mm;
+    padding: 15mm 16mm;
+    margin: 0;
+    box-shadow: none !important;
+    break-after: page;
+    page-break-after: always;
+  }
+  .a4-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+  .preview-page-shell {
+    transform: none !important;
+  }
+  .paginate-measure {
+    display: none !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+}

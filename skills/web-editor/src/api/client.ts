@@ -15,7 +15,32 @@ import type {
   ResumePolishProviderConfig,
 } from '../types';
 
-const BASE_URL = import.meta.env.VITE_API_URL || '';
+const BASE_URL = import.meta.env?.VITE_API_URL || '';
+
+/** 让服务端浏览器直接用当前预览 HTML/CSS 生成 PDF，避免 canvas 二次重绘。 */
+export async function generateResumePdf(html: string): Promise<Blob> {
+  const path = '/api/resume/pdf';
+  const resp = await fetch(BASE_URL + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ html }),
+  });
+  if (!resp.ok) {
+    let message = `HTTP ${resp.status}`;
+    try {
+      const body = await resp.json();
+      message = body.message || body.error || message;
+    } catch {
+      // Preserve the HTTP status when the server did not return JSON.
+    }
+    throw new Error(`API ${path} 失败: ${message}`);
+  }
+  const blob = await resp.blob();
+  if (blob.type !== 'application/pdf' || blob.size === 0) {
+    throw new Error('PDF 服务返回了无效文件');
+  }
+  return blob;
+}
 
 /** 通用请求函数 */
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
@@ -47,9 +72,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 
 /** 获取整个 wiki 快照（所有实体 + 关系） */
 export async function getWiki(): Promise<WikiSnapshot> {
-  const data = await request<WikiSnapshot>('/api/wiki');
-  // 兼容旧版 API server（不返回 allRelations）
-  return { ...data, allRelations: data.allRelations ?? [] };
+  return request<WikiSnapshot>('/api/wiki');
 }
 
 /** 获取单个实体详情 */
@@ -67,11 +90,6 @@ export async function getResumes(): Promise<ResumeConfig[]> {
   // API 返回 { resumes: [...], total } 信封格式
   const data = await request<{ resumes: ResumeConfig[] }>('/api/resumes');
   return data.resumes ?? [];
-}
-
-/** 获取单份简历配置 */
-export async function getResume(id: string): Promise<ResumeConfig> {
-  return request<ResumeConfig>(`/api/resumes/${id}`);
 }
 
 /** 保存简历配置 */
@@ -128,18 +146,6 @@ export async function getTemplates(): Promise<TemplateConfig[]> {
   return data.templates ?? [];
 }
 
-// ---------- 生成 + 导出 ----------
-
-/** 生成结构化简历 JSON */
-export async function generateResume(
-  config: ResumeConfig,
-): Promise<Record<string, unknown>> {
-  return request<Record<string, unknown>>('/api/resume/generate', {
-    method: 'POST',
-    body: JSON.stringify(config),
-  });
-}
-
 /** 获取 Agent 进行简历润色所需的原始事实和用户口吻样本。 */
 export async function getResumePolishContext(
   config: ResumeConfig,
@@ -150,22 +156,37 @@ export async function getResumePolishContext(
   });
 }
 
+/** 读取保存在当前用户目录中的 AI Provider 公共配置（不包含 API Key）。 */
+export async function getPolishProvider(): Promise<ResumePolishProviderConfig> {
+  return request<ResumePolishProviderConfig>('/api/resume/polish-provider');
+}
+
+/** 将 AI Provider 配置保存到当前用户目录；响应不会返回 API Key。 */
+export async function savePolishProvider(
+  provider: ResumePolishProviderConfig,
+): Promise<ResumePolishProviderConfig> {
+  return request<ResumePolishProviderConfig>('/api/resume/polish-provider', {
+    method: 'POST',
+    body: JSON.stringify(provider),
+  });
+}
+
 /** 点击 AI 润色后生成当前简历视角的润色结果。 */
 export async function polishResume(
   config: ResumeConfig,
-  provider: ResumePolishProviderConfig,
+  _provider: ResumePolishProviderConfig,
   options?: { only?: { path: string; field: ResumePolishField } },
 ): Promise<{ config: ResumeConfig; generated_count: number; candidate_count: number }> {
   return request<{ config: ResumeConfig; generated_count: number; candidate_count: number }>(
     '/api/resume/polish',
     {
       method: 'POST',
-      body: JSON.stringify({ config, provider, ...options }),
+      body: JSON.stringify({ config, ...options }),
     },
   );
 }
 
-/** 从 OpenAI-compatible provider 拉取模型列表。 */
+/** 从 OpenAI-compatible provider 拉取模型列表；Anthropic Messages 需手动填写模型。 */
 export async function getPolishModels(
   provider: ResumePolishProviderConfig,
 ): Promise<string[]> {
@@ -174,19 +195,6 @@ export async function getPolishModels(
     body: JSON.stringify({ provider }),
   });
   return result.models ?? [];
-}
-
-/** 导出简历（json 格式直接下载，html/pdf 由前端处理） */
-export async function exportResumeJson(
-  config: ResumeConfig,
-): Promise<Blob> {
-  const resp = await fetch(BASE_URL + '/api/resume/export', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ config, format: 'json' }),
-  });
-  if (!resp.ok) throw new Error('导出 JSON 失败');
-  return resp.blob();
 }
 
 // ---------- Wiki 编译 ----------

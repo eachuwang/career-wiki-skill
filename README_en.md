@@ -184,6 +184,12 @@ The `web-editor` skill starts the React frontend with module ordering, field edi
 
 ---
 
+## Integration and releases
+
+- Target feature and dependency PRs at `develop`. Review the changes and wait for `Skill tests` and `Web editor` to pass, then use **Squash and merge**.
+- Open or reuse a `develop` → `main` PR when releasing. Confirm there are file changes, resolve conflicts, and rerun the required checks. Use **Create a merge commit**, not squash, to preserve shared history.
+- Sync changes unique to `main` back to `develop` through a separate PR. Do not push directly to protected branches or rewrite their history.
+
 ## Design principles
 
 | # | Principle | Description |

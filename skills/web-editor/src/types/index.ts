@@ -87,10 +87,13 @@ export interface TemplateSection {
   column?: 'sidebar' | 'main';
 }
 
+export type TemplatePreset = 'clear' | 'compact' | 'editorial' | 'index' | 'split' | 'band' | 'classic';
+
 export interface TemplateConfig {
   name: string;
   id: string;
   style: string; // CSS 文件名
+  preset?: TemplatePreset;
   layout: LayoutType;
   has_photo?: boolean;
   font?: {

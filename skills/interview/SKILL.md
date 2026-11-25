@@ -1,6 +1,6 @@
 ---
 name: interview
-description: 用途：通过结构化采访采集求职者信息。当用户说"开始采访"、"录入信息"、"补充经历"或主动提供个人/职业信息时触发。产出原始 markdown 存 knowledge/references/raw/，不预提取，采完自动调 wiki 引擎 compile。
+description: 用途：通过结构化采访采集求职者信息。当用户说"开始采访"、"录入信息"、"补充经历"或明确要求将个人/职业信息录入 Career Wiki时触发。产出原始 markdown 存 knowledge/references/raw/，不预提取，采完自动调 wiki 引擎 compile。
 version: 1.0.0
 author: career-wiki-skill
 license: MIT
@@ -23,14 +23,14 @@ metadata:
 - 用户说"补一下 / 补充 / 上次漏了"
 - 上一轮采访产出已 compile，用户要追加
 
-**不用于：** 用户上传文件（用 file-parser skill）；直接编辑 wiki 页面（用户应改 raw 再 recompile）。
+**不用于：** 用户明确要求导入文件（用 file-parser skill）；直接编辑 wiki 页面（用户应改 raw 再 recompile）。
 
 ## 数据目录约定
 
-- 存储：`~/.career_wiki/knowledge/references/raw/interview-{YYYYMMDD-HHmmss}.md`
+- 存储：`<WorkspaceRoot>/knowledge/references/raw/interview-{YYYYMMDD-HHmmss}.md`
 - 续采时 round 递增（首轮 round=1，第一次补 round=2）
-- 进行中的采访断点：`~/.career_wiki/.career-wiki-skill/interview-checkpoint.json`
-- 所有路径以 `~/.career_wiki` 为根，Agent 首次调用先确认该目录存在；不存在则提示用户先跑 env-init skill
+- 进行中的采访断点：`<WorkspaceRoot>/.career-wiki-skill/interview-checkpoint.json`
+- 按 [env-init](../env-init/SKILL.md) 定位 `WorkspaceRoot`；明确采访或录入时才初始化和写断点。普通对话不落盘。
 
 ## 产出文件格式
 
@@ -94,12 +94,12 @@ interviewer: career-wiki-skill
 
 > 🔴 **CHECKPOINT** — 开始采访前必须完成以下确认
 >
-> 1. 确认 `~/.career_wiki/` 存在；不存在 → 🛑 STOP，提示用户先跑 env-init
+> 1. 检查数据目录；缺失时直接按 env-init 完成授权范围内的初始化，再继续采访。
 > 2. 先检查 `interview-checkpoint.json`：如果 `status=in_progress`，恢复同一轮采访，不创建新 round；读取其中的完整已确认内容、当前节、当前项目、最后完成字段和待问问题。
 > 3. 如果没有进行中的 checkpoint，再读取最新 interview raw；对其中“详见某个 raw 文件”或来源列表里的引用，继续读取对应 raw 文件全文，并核对已有 `knowledge/` 编译结果，再告诉用户已有什么、问要补哪节。
 > 4. 如果是首轮，说明流程："我会按 7 节问，基本信息快过，经历项目你自由讲我来整理确认"
 >
-> 🛑 目录不存在时不要继续。没有数据目录，采集的内容无处可写。
+> 初始化或保存确实失败时，只暂停后续采集并说明阻塞，避免丢失内容。
 
 ### 中断恢复方式
 
@@ -216,21 +216,9 @@ interviewer: career-wiki-skill
 
 ### 阶段 8：写文件 + 触发 compile
 
-> 🔴 **CHECKPOINT** — 触发 compile 前必须完成以下确认
->
-> 1. 向用户确认：采访已结束，即将写入 raw 文件并触发 wiki 引擎 compile
-> 2. 告知用户 compile 可能需要时间（有 subagent 则并行，无则同步阻塞）
-> 3. 用户确认后，执行以下步骤：
->
-> 1. 用 `write_file` 写 `~/.career_wiki/knowledge/references/raw/interview-{timestamp}.md`
->    - frontmatter：`interview_date / round / interviewer: career-wiki-skill`
->    - 正文按 7 节组织，用户原话用 `>` 引用块，Agent 确认用普通文本
-> 2. **自动触发 wiki 引擎 compile**（F04）：
->    - **有 subagent 能力**：并行触发 compile，不阻塞用户
->    - **无 subagent 能力**：同步执行 compile，跑完告诉用户"已编译进 wiki"
->    - compile 必须全量读取 `knowledge/references/raw/`，包括 `knowledge/references/raw/uploads/` 下的简历 raw；简历 raw 中的项目描述、本人职责和其他实体必须解析并保存到对应 Wiki 页面，不能只作为采访文件的引用。
->    - compile 完成后核对相关 Wiki 页面的 `sources` 是否包含简历 raw，并确认项目页面保留描述和职责正文。
-> 3. 告诉用户文件路径 + compile 状态
+用户明确结束采访后，独占创建本轮 `Reference`，保存完整原话，标记 checkpoint 为 `completed`。不重复询问是否结束；用户暂时离开时只保存 checkpoint。
+
+通过 [Wiki 编译流程](../wiki-engine/SKILL.md) 全量发布；用生成页 `sources` 验证本轮 Reference 与相关已导入简历都参与编译。报告 Reference 路径和状态：发布失败是**待编译**，用现有 Reference 重试，不创建新一轮；校验且生效后才称**已发布**。
 
 ### 每轮对话后的保存规则
 
@@ -288,7 +276,7 @@ interviewer: career-wiki-skill
 
 ## Verification Checklist
 
-- [ ] `~/.career_wiki/knowledge/references/raw/interview-{timestamp}.md` 已创建
+- [ ] `<WorkspaceRoot>/knowledge/references/raw/interview-{timestamp}.md` 已创建
 - [ ] 采访过程中每轮回答都已更新 `interview-checkpoint.json`
 - [ ] frontmatter 含 `interview_date / round / interviewer: career-wiki-skill`
 - [ ] 正文按 7 节组织，经历的节有循环

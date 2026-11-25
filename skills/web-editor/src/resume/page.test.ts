@@ -6,7 +6,8 @@ import {
   CONTENT_WIDTH_MM,
   CONTENT_HEIGHT_MM,
   mmToPx,
-  computePageIndexes,
+  paginateBlocks,
+  paragraphBlocks,
 } from './page.ts';
 
 test('A4 常量与保护区域尺寸正确', () => {
@@ -22,59 +23,18 @@ test('mmToPx 按 96dpi 换算', () => {
   assert.equal(mmToPx(0), 0);
 });
 
-test('全部内容在一页内时所有块页码为 0', () => {
-  const pageHeight = mmToPx(CONTENT_HEIGHT_MM);
-  const indexes = computePageIndexes(
-    [
-      { top: 0, height: 200 },
-      { top: 200, height: 300 },
-      { top: 500, height: 100 },
-    ],
-    pageHeight,
-  );
-  assert.deepEqual(indexes, [0, 0, 0]);
+test('分页使用每页的剩余空间，而不是连续文档上的固定边界', () => {
+  assert.deepEqual(paginateBlocks([600, 600, 300, 100], 1000), { indexes: [0, 1, 1, 1], overflow: false });
+  assert.deepEqual(paginateBlocks([900, 100, 800, 900], 1000), { indexes: [0, 0, 1, 2], overflow: false });
+  assert.deepEqual(paginateBlocks([999.5, 0.75], 1000), { indexes: [0, 1], overflow: false });
 });
 
-test('块起点越过页底时换页', () => {
-  const pageHeight = 1000;
-  const indexes = computePageIndexes(
-    [
-      { top: 0, height: 600 },
-      { top: 600, height: 500 }, // 起点 600 < 1000，但终点 1100 > 1000 → 跨页移入下一页
-      { top: 1100, height: 100 }, // 起点已越过第一页底 → 下一页
-    ],
-    pageHeight,
-  );
-  // 第 2 块跨页移入第 1 页；第 3 块紧随其后也在第 1 页
-  assert.deepEqual(indexes, [0, 1, 1]);
+test('不可拆的超高块明确标记为溢出，而非静默切掉内容', () => {
+  assert.deepEqual(paginateBlocks([2500, 100], 1000), { indexes: [0, 1], overflow: true });
+  assert.deepEqual(paginateBlocks([], 1000), { indexes: [], overflow: false });
 });
 
-test('连续多页正确换页', () => {
-  const pageHeight = 1000;
-  const indexes = computePageIndexes(
-    [
-      { top: 0, height: 900 },
-      { top: 900, height: 100 }, // 终点 1000，未越过页底 → 第 0 页
-      { top: 1000, height: 800 }, // 起点越过页底 → 第 1 页
-      { top: 1800, height: 900 }, // 起点越过第二页底（2000）→ 第 2 页
-    ],
-    pageHeight,
-  );
-  assert.deepEqual(indexes, [0, 0, 1, 2]);
-});
-
-test('超高块独占一页且不无限换页', () => {
-  const pageHeight = 1000;
-  const indexes = computePageIndexes(
-    [
-      { top: 0, height: 2500 }, // 超过一页高：移入下一页并独占
-      { top: 2500, height: 100 }, // 起点越过 → 再下一页
-    ],
-    pageHeight,
-  );
-  assert.deepEqual(indexes, [1, 2]);
-});
-
-test('空块列表返回空页码', () => {
-  assert.deepEqual(computePageIndexes([], 1000), []);
+test('长文本仅在明确换行处分块，并支持中英混排与长链接', () => {
+  const url = 'https://example.test/' + 'a'.repeat(250);
+  assert.deepEqual(paragraphBlocks(`中文 English\r\n\r\n${url}\n最后一段`), ['中文 English', url, '最后一段']);
 });

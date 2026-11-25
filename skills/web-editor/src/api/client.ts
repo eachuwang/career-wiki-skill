@@ -2,7 +2,7 @@
  * Career-Wiki-Skill API client — 封装对 resume-generator API server 的调用。
  *
  * 开发时 Vite proxy 把 /api 代理到 http://localhost:3001。
- * 生产环境通过 VITE_API_URL 环境变量配置。
+ * 浏览器只请求当前源的 /api。
  */
 
 import type {
@@ -15,12 +15,10 @@ import type {
   ResumePolishProviderConfig,
 } from '../types';
 
-const BASE_URL = import.meta.env?.VITE_API_URL || '';
-
 /** 让服务端浏览器直接用当前预览 HTML/CSS 生成 PDF，避免 canvas 二次重绘。 */
 export async function generateResumePdf(html: string): Promise<Blob> {
   const path = '/api/resume/pdf';
-  const resp = await fetch(BASE_URL + path, {
+  const resp = await fetch(path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ html }),
@@ -44,8 +42,7 @@ export async function generateResumePdf(html: string): Promise<Blob> {
 
 /** 通用请求函数 */
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const url = BASE_URL + path;
-  const resp = await fetch(url, {
+  const resp = await fetch(path, {
     headers: { 'Content-Type': 'application/json', ...(options?.headers || {}) },
     ...options,
   });
@@ -93,10 +90,10 @@ export async function getResumes(): Promise<ResumeConfig[]> {
 }
 
 /** 保存简历配置 */
-export async function saveResume(config: ResumeConfig): Promise<void> {
+export async function saveResume(config: ResumeConfig, options?: { createOnly: true }): Promise<void> {
   await request<void>('/api/resume/save', {
     method: 'POST',
-    body: JSON.stringify(config),
+    body: JSON.stringify({ ...config, ...(options?.createOnly ? { create_only: true } : {}) }),
   });
 }
 
@@ -110,23 +107,15 @@ export async function deleteResume(id: string): Promise<void> {
 
 // ---------- 模板 ----------
 
-/** 获取模板 CSS 文本（用于复制模板时携带样式） */
-export async function getTemplateCss(id: string): Promise<string> {
-  const resp = await fetch(
-    `${BASE_URL}/api/template/css?id=${encodeURIComponent(id)}`,
-  );
-  if (!resp.ok) throw new Error('读取模板 CSS 失败');
-  return resp.text();
-}
-
 /** 保存/更新模板（可携带 CSS 文本） */
 export async function saveTemplate(
   template: TemplateConfig,
   css?: string,
+  options?: { createOnly: true },
 ): Promise<void> {
   await request<void>('/api/template/save', {
     method: 'POST',
-    body: JSON.stringify({ template, css }),
+    body: JSON.stringify({ template, css, ...(options?.createOnly ? { create_only: true } : {}) }),
   });
 }
 
@@ -200,8 +189,8 @@ export async function getPolishModels(
 // ---------- Wiki 编译 ----------
 
 /** 触发 wiki 重新 compile */
-export async function refreshWiki(): Promise<void> {
-  await request<void>('/api/wiki/refresh', { method: 'PUT' });
+export async function refreshWiki(): Promise<{ status: string; message?: string }> {
+  return request<{ status: string; message?: string }>('/api/wiki/refresh', { method: 'PUT' });
 }
 
 // ---------- 缺口分析（前端计算） ----------
@@ -261,7 +250,7 @@ export function analyzeGaps(
 
 export async function healthCheck(): Promise<boolean> {
   try {
-    const resp = await fetch(BASE_URL + '/api/health');
+    const resp = await fetch('/api/health');
     return resp.ok;
   } catch {
     return false;

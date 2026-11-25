@@ -68,7 +68,9 @@ export default function GraphCanvas({
 
   // 初始化/更新图谱(theme 变化时按新 token 重建配色)
   useEffect(() => {
-    if (!containerRef.current || !wiki) return;
+    const container = containerRef.current;
+    if (!container || !wiki) return;
+    let cancelled = false;
 
     const nodeText = themeVar('--graph-node-text', '#172033');
     const nodeFontBg = themeVar('--graph-node-font-bg', 'rgba(248, 250, 252, 0.92)');
@@ -79,6 +81,7 @@ export default function GraphCanvas({
 
     // 动态导入 vis-network(避免 SSR 问题 + 按需加载)
     import('vis-network/standalone').then(({ Network, DataSet }) => {
+      if (cancelled) return;
       const { nodes: graphNodes, edges: graphEdges } = buildGraph(wiki);
 
       // 高亮缺口节点
@@ -131,7 +134,7 @@ export default function GraphCanvas({
       }
 
       networkRef.current = new Network(
-        containerRef.current!,
+        container,
         { nodes: visNodes, edges: visEdges },
         {
           layout: { improvedLayout: true, hierarchical: false },
@@ -165,6 +168,7 @@ export default function GraphCanvas({
     });
 
     return () => {
+      cancelled = true;
       if (networkRef.current) {
         networkRef.current.destroy();
         networkRef.current = null;

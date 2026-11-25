@@ -23,9 +23,24 @@ export interface SaveExportBlobInput {
   extension: string;
 }
 
-/** JSON、预览、HTML 和 PDF 共用同一个 ResumeView，不在 adapter 中重算领域规则。 */
+/** Share only rendered document content. Paths, cross-links, configuration and IDs stay local. */
 export function createResumeJsonBlob(view: ResumeView): Blob {
-  return new Blob([JSON.stringify(view, null, 2)], { type: 'application/json' });
+  const textFields = (fields: Record<string, unknown>, allowed: string[]) => Object.fromEntries(
+    allowed.filter((field) => fields[field] != null).map((field) => [field, String(fields[field])]),
+  );
+  const content = {
+    person: view.person && textFields(view.person.fields, ['name', 'current_title', 'email', 'phone', 'github', 'website']),
+    sections: view.sections.filter((section) => section.grouped ? section.groups?.length : section.items?.length).map((section) => ({
+      title: section.title,
+      ...(section.grouped ? {
+        groups: section.groups?.map((group) => ({
+          title: group.key,
+          items: group.items.map((item) => textFields(item.fields, ['name', 'level'])),
+        })),
+      } : { items: section.items?.map((item) => textFields(item.fields, section.fields.filter((field) => !['id', 'path', 'links', 'sources', 'relations'].includes(field)))) }),
+    })),
+  };
+  return new Blob([JSON.stringify(content, null, 2)], { type: 'application/json' });
 }
 
 type SaveFilePicker = (options: {
@@ -105,7 +120,8 @@ export function buildStandaloneResumeHtml({
     .paginate-measure { display: none !important; }
     /* 独立 HTML 文档视图：去掉预览用的阴影和外边距，接近最终文档外观 */
     .a4-page { box-shadow: none; margin: ${pdf ? '0' : '0 auto 16px'}; }
-    body { background: #fff; }
+    body { background: #fff; margin: 0; }
+    .resume-pages { margin-inline: auto; }
     ${pdf ? `
     @page { size: A4 portrait; margin: 0; }
     html, body { width: 210mm; margin: 0; }
@@ -123,7 +139,7 @@ export function collectDocumentCss(): string {
   return Array.from(document.styleSheets)
     .flatMap((sheet) => {
       try {
-        return Array.from(sheet.cssRules).map((rule) => rule.cssText);
+        return Array.from(sheet.cssRules).filter((rule) => !/^@(?:import|font-face)\b/i.test(rule.cssText)).map((rule) => rule.cssText);
       } catch {
         return [];
       }

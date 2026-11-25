@@ -1,8 +1,8 @@
 /**
- * TopBar — 单行顶栏
+ * TopBar — 简历与图谱共用导航
  *
  * 品牌 + 页面切换 + 页面工具区(children)+ 右侧全局操作(trailing)。
- * 所有菜单与操作合并进这一栏,内容区不再有第二条工具条。
+ * 主操作留在顶栏，次要设置由各页面按需展开。
  */
 
 import type { ReactNode } from 'react';

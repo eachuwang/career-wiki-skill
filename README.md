@@ -49,7 +49,7 @@ career-wiki-skill 把这些问题一次性解决：**采访采集 → Wiki 知�
 - **深度串行采访** — 项目采访一次只问一个问题；当前回答不明确时持续追问，明确后才进入下一项。
 - **完整项目知识归档** — 分别保存项目描述、本人职责、技术栈、困难、解决方案、结果和复盘；原话保存在 raw，结构化字段进入 Wiki。
 - **多简历视角** — 同一份 Wiki 可生成多份岗位简历，并按简历隐藏不相关的项目或字段；项目描述和岗位职责可由 Agent 基于用户原话做轻量扩写，不修改知识库原始数据。
-- **可视化编辑与实时预览** — 暗色优先双主题编辑器(Geist 字体、胶囊圆角、噪声质感、弹簧动效),支持模块排序、字段覆盖、条目显隐、模板切换、AI 润色/原文切换和 A4 实时预览;A4 简历纸始终保持白纸质感,打印与 PDF 导出不受主题影响。
+- **可视化编辑与实时预览**：拖拽章节排序，点击纸面内容编辑。七套 A4 模板包括清晰、紧凑、编辑式、技术索引、商务双区、色带作品集和经典履历。预览、HTML 和 PDF 共用排版。
 - **直接下载 PDF** — 在预览区直接生成并下载渲染好的 PDF，无需选择打印机；同时支持 HTML、JSON 和 OKF。
 - **可读 Wiki 图谱** — 实体节点、关系、图例和详情信息使用高对比度配色，便于浏览项目与技能关系。
 
@@ -129,57 +129,21 @@ used_skill · did_project · at_company · took_course · references
 
 ## 快速开始
 
-### 1. 安装
+### 1. 安装并打开
 
-在你的 Agent 里直接说：
-
-```
-安装 skill：https://github.com/eachuwang/career-wiki-skill
-```
-
-Agent 会自动 clone 仓库到 skill 目录。
-
-手动安装：
+克隆整个仓库，让 Agent 从仓库根目录使用 `SKILL.md`。保留 `skills/package.json`、锁文件和全部子目录，不要分别复制子 skill。推荐 Node 22.20+ 或 24.12+（LTS）和 npm。
 
 ```bash
 git clone https://github.com/eachuwang/career-wiki-skill.git
+cd career-wiki-skill
+node skills/env-init/scripts/launch.mjs
 ```
 
-把 `skills/` 下的目录放到你 Agent 的 skill 目录（如 `~/.claude/skills/`）。
+首次启动安装锁定依赖并初始化 `~/.career_wiki/`；再次运行会验证并复用现有服务。自选目录时先运行 `python3 skills/env-init/scripts/env_check.py --root "/path/to/workspace"`（Python 3.9+）；后续启动自动沿用。旧布局会提示迁移，不会初始化覆盖。
 
-### 2. 初始化环境（🔴 安装后必须执行，不能跳过）
+### 2. 导入或采访
 
-安装只是把文件放到了 skill 目录，数据目录和依赖还没建。必须先初始化：
-
-在你的 Agent 里说：
-
-```
-检查 career-wiki 环境 / 初始化 career-wiki 环境
-```
-
-env-init skill 会：
-1. 检查 Node.js ≥ 18 / Python ≥ 3.9 / npm
-2. 按 env-init 的目录契约创建 `~/.career_wiki/` 知识、原始资料和应用状态目录
-3. 安装 Node 依赖（gray-matter 等）
-4. 写入配置文件
-
-**初始化完成后才能开始采访、编译 wiki、生成简历。**
-
-### 3. 开始采访
-
-```
-开始采访 / 帮我录入信息
-```
-
-interview skill 启动多轮对话采集。项目部分一次只问一个问题，依次确认项目描述、本人职责、技术栈、困难、解决方案、结果与复盘；回答不明确时会先追问当前项，不会同时抛出多个问题。
-
-### 4. 查看和编辑简历
-
-```
-打开编辑器 / 看看简历预览
-```
-
-web-editor skill 启动 React 前端，支持模块排序、字段编辑、项目显隐、实时预览，以及 PDF/HTML/JSON 导出。PDF 会按当前 A4 预览直接生成并下载，不会打开打印机选择窗口。
+对 Agent 说「把这份简历导入 Career Wiki」，或「开始采访」。导入明确授权归档原件、生成 Reference 并编译；只说「读这个文件」不会写入。发布后，Agent 打开同一工作区的简历编辑器。编译失败时用已归档资料重试，不必再次上传。
 
 ---
 

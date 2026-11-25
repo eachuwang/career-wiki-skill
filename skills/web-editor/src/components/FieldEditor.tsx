@@ -7,7 +7,7 @@
  * 润色字段支持「换一换」单条重生成。
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import type { ResumePolishConfig, ResumePolishField } from '../types';
 
 interface FieldEditorProps {
@@ -56,13 +56,8 @@ export default function FieldEditor({
   onRegeneratePolish,
 }: FieldEditorProps) {
   const externalValue = String(value ?? '');
-  const [localVal, setLocalVal] = useState(externalValue);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const isMultiline = MULTILINE_FIELDS.has(field);
-
-  useEffect(() => {
-    setLocalVal(externalValue);
-  }, [externalValue]);
 
   // 多行编辑框随内容自动增高
   useEffect(() => {
@@ -70,7 +65,7 @@ export default function FieldEditor({
     if (!el || !isMultiline) return;
     el.style.height = 'auto';
     el.style.height = Math.max(76, el.scrollHeight + 2) + 'px';
-  }, [localVal, isMultiline]);
+  }, [externalValue, isMultiline]);
 
   const fieldLabel = getFieldLabel(field);
   const isPolishField = field === 'description' || field === 'responsibilities' || field === 'content';
@@ -92,9 +87,8 @@ export default function FieldEditor({
           id={inputId}
           ref={textareaRef}
           rows={3}
-          value={localVal}
+          value={externalValue}
           onChange={(e) => {
-            setLocalVal(e.target.value);
             onOverride(moduleId, itemPath, field, e.target.value);
           }}
           className="field-editor-input field-editor-textarea"
@@ -103,9 +97,8 @@ export default function FieldEditor({
         <input
           id={inputId}
           type="text"
-          value={localVal}
+          value={externalValue}
           onChange={(e) => {
-            setLocalVal(e.target.value);
             onOverride(moduleId, itemPath, field, e.target.value);
           }}
           className="field-editor-input"

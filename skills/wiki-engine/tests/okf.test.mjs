@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { execFile } from 'node:child_process';
+import fs, { mkdir, mkdtemp, readFile, stat, rm, writeFile } from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { promisify } from 'node:util';
 import test from 'node:test';
 import matter from 'gray-matter';
 import {
@@ -11,6 +15,106 @@ import {
   validateConceptDocument,
 } from '../scripts/okf.mjs';
 import { checkBundle, migrateBundle } from '../scripts/okf_bundle.mjs';
+
+const exec = promisify(execFile);
+
+async function temporaryRoot(t) {
+  const root = await mkdtemp(join(tmpdir(), 'career-phase1-okf-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  return root;
+}
+
+test('same-name Markdown uploads remain distinct and only References are concepts', async (t) => {
+  const root = await temporaryRoot(t);
+  const candidate = await temporaryRoot(t);
+  const importer = fileURLToPath(new URL('../../file-parser/import_source.mjs', import.meta.url));
+  const cli = fileURLToPath(new URL('../scripts/okf_bundle.mjs', import.meta.url));
+  const importFile = async (...args) => (await exec(process.execPath, [importer, ...args, '--root', root])).stdout.trim();
+  const bundle = join(root, 'knowledge');
+  const index = '---\nokf_version: "0.2"\n---\n';
+  await mkdir(join(bundle, 'projects'), { recursive: true });
+  await writeFile(join(bundle, 'index.md'), index);
+  const manual = '---\ntype: career.project\ntitle: Kept by author\n---\n';
+  const handWritten = join(bundle, 'projects', 'manual.md');
+  await writeFile(handWritten, manual);
+  const old = join(bundle, 'projects', 'old.md');
+  const oldGenerated = '---\ntype: career.project\ngenerated: { by: career-wiki-agent }\n---\n';
+  await writeFile(old, oldGenerated);
+
+  const sources = [];
+  const archivePaths = [];
+  for (const name of ['First', 'Second']) {
+    const original = join(root, 'resume.md');
+    const originalText = `---\ntype: arbitrary-user-frontmatter\n---\n# ${name}\n`;
+    await writeFile(original, originalText);
+    const archive = await importFile('archive', original);
+    const reference = await importFile('reference', basename(archive), original);
+    const document = matter(await readFile(reference, 'utf8'));
+    assert.equal(document.data.type, 'Reference');
+    assert.ok(document.content.includes(originalText));
+    assert.deepEqual(document.data.sources, [{ resource: `/references/uploads/${basename(archive)}` }]);
+    await assert.rejects(importFile('reference', basename(archive), original), /EEXIST/);
+    sources.push({ resource: `/references/raw/uploads/${basename(reference)}` });
+    archivePaths.push([archive, originalText]);
+  }
+  assert.notEqual(archivePaths[0][0], archivePaths[1][0]);
+
+  const newProjects = join(candidate, 'knowledge', 'projects');
+  await mkdir(newProjects, { recursive: true });
+  await writeFile(join(candidate, 'knowledge', 'index.md'), index);
+  const generated = matter.stringify('', {
+    type: 'career.project', generated: { by: 'career-wiki-agent' }, sources,
+  });
+  await writeFile(join(newProjects, 'manual.md'), generated);
+  const publish = () => exec(process.execPath, [cli, 'publish', candidate, '--root', root]);
+  await assert.rejects(publish(), /将覆盖现有页面/);
+  assert.equal(await readFile(old, 'utf8'), oldGenerated);
+  await fs.rename(join(newProjects, 'manual.md'), join(newProjects, 'new.md'));
+  const result = await publish();
+  const backup = result.stdout.match(/备份：(.+)/)[1];
+  assert.deepEqual(await checkBundle(root), { conceptCount: 4, errors: [], warnings: [] });
+  assert.equal(await readFile(handWritten, 'utf8'), manual);
+  assert.deepEqual(matter(await readFile(join(bundle, 'projects', 'new.md'), 'utf8')).data.sources, sources);
+  await assert.rejects(stat(old), { code: 'ENOENT' });
+  assert.equal(await readFile(join(backup, 'projects', 'old.md'), 'utf8'), oldGenerated);
+  for (const [archive, content] of archivePaths) assert.equal(await readFile(archive, 'utf8'), content);
+});
+
+test('fixing malformed app state or a failed replacement allows migration retry', async (t) => {
+  const root = await temporaryRoot(t);
+  const legacy = join(root, 'wiki', 'persons');
+  const state = join(root, '.career-wiki-skill');
+  await mkdir(legacy, { recursive: true });
+  await mkdir(state);
+  const original = '---\nentity: person\nname: Synthetic\n---\n';
+  const person = join(legacy, 'synthetic.md');
+  const checkpoint = join(state, 'interview-checkpoint.json');
+  await writeFile(person, original);
+  await writeFile(checkpoint, '{');
+  await assert.rejects(migrateBundle(root), /interview-checkpoint\.json/);
+  await assert.rejects(stat(join(root, 'knowledge')), { code: 'ENOENT' });
+  assert.equal(await readFile(person, 'utf8'), original);
+  const fixed = '{"status":"in_progress","interview_file":"sources/raw/interview.md"}';
+  await writeFile(checkpoint, fixed);
+  const rename = fs.rename;
+  fs.rename = async (from, to) => {
+    if (to === join(state, 'resumes')) throw new Error('synthetic replacement failure');
+    return rename(from, to);
+  };
+  syncBuiltinESMExports();
+  try {
+    await assert.rejects(migrateBundle(root), /synthetic replacement failure/);
+  } finally {
+    fs.rename = rename;
+    syncBuiltinESMExports();
+  }
+  await assert.rejects(stat(join(root, 'knowledge')), { code: 'ENOENT' });
+  assert.equal(await readFile(person, 'utf8'), original);
+  assert.equal(await readFile(checkpoint, 'utf8'), fixed);
+  const result = await migrateBundle(root);
+  assert.deepEqual(result.errors, []);
+  assert.equal(await readFile(join(result.backup, 'wiki', 'persons', 'synthetic.md'), 'utf8'), original);
+});
 
 test('旧 Career Wiki 项目迁移为 OKF v0.2 concept', () => {
   const legacy = matter.stringify(

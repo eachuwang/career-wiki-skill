@@ -1,6 +1,6 @@
 ---
 name: career-wiki-skill
-description: "用 AI Agent 采访采集信息，生成严格 OKF v0.2 职业知识库，并从同一知识源创建多份简历。当用户要求采访、解析简历、编译或检查知识库、迁移旧数据、生成简历、打开编辑器、管理模板或脱敏时使用。跨 Agent 兼容，用户数据默认纯本地存储。"
+description: "用 AI Agent 采访采集信息，生成严格 OKF v0.2 职业知识库，并从同一知识源创建多份简历。当用户要求采访、导入简历、编译或检查知识库、迁移旧数据、生成简历、打开编辑器、管理模板或脱敏时使用。跨 Agent 兼容，用户数据默认纯本地存储。"
 version: 2.0.0
 author: eachuwang
 license: MIT
@@ -20,7 +20,8 @@ license: MIT
 |--------|----------|------|
 | "检查 career-wiki 环境" / "初始化 career-wiki 环境" / "初始化 career-wiki" | env-init | 检查 Node/Python，创建目录，安装依赖 |
 | "开始采访" / "录入信息" / "补充经历" | interview | 多轮对话采集，产出 raw markdown |
-| "解析简历文件" / "读这个文件" / "上传 PDF" | file-parser | Agent Read 提取内容，落到 raw |
+| "把这份简历导入 Career Wiki" | file-parser | 归档原件、提取 Reference、编译并打开编辑器 |
+| "读这个文件" / 一次性提取 | — | 只读并返回结果，不初始化、不归档、不编译 |
 | "编译 wiki" / "compile" / "重建 wiki" | wiki-engine | 全量重建 knowledge/，实体识别+合并+去重 |
 | "检查 wiki" / "lint" | wiki-engine | 孤儿/断链/重复/过期检查 |
 | "删除项目经历" / "从 Wiki 删除项目" / "从知识库删除经历" / "删除知识库实体" | wiki-engine | 先确认是删除当前简历视图还是 Wiki 知识；确认删除 Wiki 后登记删除清单并全量重建 |
@@ -53,7 +54,7 @@ resume-generator ──→ web-editor（前端调 API，含模板/多简历/脱�
 
 ## 数据目录
 
-默认 `~/.career_wiki/`，用户可自定义。
+默认 `~/.career_wiki/`；下方路径相对于实际 `WorkspaceRoot`，定位方法见 [env-init](skills/env-init/SKILL.md)。
 
 ```
 ~/.career_wiki/
@@ -137,39 +138,19 @@ role: AI 工程师
 
 ---
 
-## 安装
+## 安装与启动
 
-```bash
-git clone https://github.com/eachuwang/career-wiki-skill.git
-```
+克隆整个仓库并从其根目录加载本 skill；保留 `skills/` 的 workspace 清单、锁文件和全部子目录，不单独复制各子 skill。运行环境见 [env-init](skills/env-init/SKILL.md)。
 
-把 `skills/` 下的目录放到你 Agent 的 skill 目录（如 `~/.claude/skills/`）。
-
-### 安装后第一步：必须初始化环境
-
-🔴 **安装完不能直接用，必须先运行环境初始化。**
-
-在你的 Agent 里说：
-
-```
-检查 career-wiki 环境 / 初始化 career-wiki 环境
-```
-
-env-init skill 会：
-1. 检查 Node.js ≥ 18 / Python ≥ 3.9 / npm
-2. 按 env-init 的目录契约创建 `~/.career_wiki/` 知识、原始资料和应用状态目录
-3. 安装 Node 依赖（gray-matter 等）
-4. 写入配置文件
-
-**初始化完成后才能开始采访、编译 wiki、生成简历。**
-
-首次使用时说"检查 career-wiki 环境"或"初始化 career-wiki 环境"，env-init skill 会检查环境并创建数据目录。
+- `打开编辑器`：运行 `node skills/env-init/scripts/launch.mjs`，首次启动会初始化，回访复用已验证的服务。
+- `初始化 Career Wiki` 或自选数据目录：按 [env-init](skills/env-init/SKILL.md) 初始化并记住 `WorkspaceRoot`。
+- 导入或采访前按 env-init 定位 `WorkspaceRoot`，将同一个绝对路径传给 Wiki CLI 的 `--root`。遇到无效路径或旧布局时停下，报告错误或按已授权的迁移流程处理。
 
 ---
 
 ## Common Pitfalls
 
-1. **跳过 env-init 直接用** — 数据目录不存在，后续 skill 会找不到路径。先跑 env-init。
+1. **硬编码数据根** — 用 env-init 定位实际 `WorkspaceRoot`，再读写资料。
 
 2. **人工编辑 wiki 页面** — wiki 是编译产物，下次 compile 会被覆盖。改信息改 `knowledge/references/raw/` 再 recompile。
 
@@ -177,7 +158,7 @@ env-init skill 会：
 
 4. **在不同 Agent 里用特定工具** — 不要用 lark-cli、imsg 等平台特定工具。只用 Bash + Python + Node 通用工具链。
 
-5. **不给用户确认就清空 wiki** — compile 前必须向用户确认，不可逆操作。
+5. **先清空后构建。** compile 必须先备份、在 staging 生成并校验，再替换生成数据；保留原始材料与人工内容。明确的 compile 请求不再重复审批。
 
 6. **test-prompts.json 泄露用户数据** — test-prompts 只用于评估，不要放真实用户信息。
 
@@ -185,7 +166,7 @@ env-init skill 会：
 
 ## Verification Checklist
 
-- [ ] env-init 已运行，`~/.career_wiki/` 目录结构已创建
+- [ ] 已确定 `WorkspaceRoot`，并确认所需目录就绪
 - [ ] interview 产出的 raw markdown 在 `knowledge/references/raw/` 下
 - [ ] file-parser 提取的 markdown 在 `knowledge/references/raw/uploads/` 下，原始文件在 `knowledge/references/uploads/`
 - [ ] wiki-engine compile 后 `knowledge/` 各子目录有页面

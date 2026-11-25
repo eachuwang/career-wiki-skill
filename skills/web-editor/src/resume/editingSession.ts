@@ -6,11 +6,13 @@ import type {
 
 export type ResumeSaveStatus = 'clean' | 'dirty' | 'saving' | 'saved' | 'failed';
 
+export type ResumeDraft = ResumeConfig;
+
 export interface ResumeEditingSessionSnapshot {
   resumes: ResumeConfig[];
   currentResumeId: string;
   saved: ResumeConfig | null;
-  draft: ResumeConfig | null;
+  draft: ResumeDraft | null;
   saveStatus: ResumeSaveStatus;
   error: string;
 }
@@ -35,6 +37,7 @@ export type ResumeDraftPatch = Partial<
 export type ResumeEditingSessionCommand =
   | { type: 'change-name'; name: string }
   | { type: 'edit-draft'; patch: ResumeDraftPatch }
+  | { type: 'open-draft'; draft: ResumeDraft }
   | { type: 'replace-resumes'; resumes: ResumeConfig[] }
   | { type: 'prepare-destructive-change' }
   | { type: 'switch-resume'; resumeId: string; discardDirty?: boolean }
@@ -59,7 +62,9 @@ export type ResumeEditingSessionResult =
 
 interface CreateResumeEditingSessionInput {
   resumes: ResumeConfig[];
-  saveResume: (config: ResumeConfig) => Promise<void>;
+  selectedResumeId?: string;
+  initialDraft?: ResumeDraft;
+  saveResume: (config: ResumeConfig, options?: { createOnly: true }) => Promise<void>;
   deleteResume?: (id: string) => Promise<void>;
   polishResume?: (
     config: ResumeConfig,
@@ -88,17 +93,21 @@ function equalValue(left: unknown, right: unknown): boolean {
  */
 export function createResumeEditingSession({
   resumes,
+  selectedResumeId,
+  initialDraft,
   saveResume,
   deleteResume,
   polishResume,
 }: CreateResumeEditingSessionInput): ResumeEditingSession {
-  const initial = resumes[0] ? cloneValue(resumes[0]) : null;
+  const selected = resumes.find((resume) => resume.id === selectedResumeId) ?? resumes[0];
+  const initial = selected ? cloneValue(selected) : null;
+  const draft = initial ?? initialDraft ?? null;
   let snapshot: ResumeEditingSessionSnapshot = {
     resumes: resumes.map(cloneValue),
-    currentResumeId: initial?.id || '',
+    currentResumeId: draft?.id || '',
     saved: initial,
-    draft: initial ? cloneValue(initial) : null,
-    saveStatus: 'clean',
+    draft: draft ? cloneValue(draft) : null,
+    saveStatus: draft && !initial ? 'dirty' : 'clean',
     error: '',
   };
   let draftRevision = 0;
@@ -116,7 +125,7 @@ export function createResumeEditingSession({
     draftRevision += 1;
     update({
       draft: { ...snapshot.draft, ...cloneValue(patch) },
-      saveStatus: 'dirty',
+      saveStatus: activeSave ? 'saving' : 'dirty',
       error: '',
     });
   };
@@ -135,10 +144,11 @@ export function createResumeEditingSession({
       const savingRevision = draftRevision;
       update({ saveStatus: 'saving', error: '' });
       try {
-        await saveResume(config);
-        const nextResumes = snapshot.resumes.map((resume) =>
-          resume.id === config.id ? cloneValue(config) : resume,
-        );
+        const createOnly = !snapshot.saved;
+        await saveResume(config, createOnly ? { createOnly: true } : undefined);
+        const nextResumes = createOnly
+          ? [...snapshot.resumes, cloneValue(config)]
+          : snapshot.resumes.map((resume) => resume.id === config.id ? cloneValue(config) : resume);
         const draftChangedWhileSaving = draftRevision !== savingRevision;
         update({
           resumes: nextResumes,
@@ -170,6 +180,14 @@ export function createResumeEditingSession({
 
       if (command.type === 'edit-draft') {
         editDraft(command.patch);
+        return { status: 'updated' };
+      }
+
+      if (command.type === 'open-draft') {
+        if (!snapshot.draft) {
+          draftRevision += 1;
+          update({ currentResumeId: command.draft.id, draft: cloneValue(command.draft), saveStatus: 'dirty', error: '' });
+        }
         return { status: 'updated' };
       }
 
@@ -215,7 +233,7 @@ export function createResumeEditingSession({
         if (activeSave) await activeSave;
         const config = cloneValue(command.config);
         try {
-          await saveResume(config);
+          await saveResume(config, { createOnly: true });
         } catch (cause) {
           const error = cause instanceof Error ? cause.message : String(cause);
           return { status: 'failed', error };

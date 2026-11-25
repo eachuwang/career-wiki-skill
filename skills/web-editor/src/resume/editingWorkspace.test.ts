@@ -71,11 +71,13 @@ function memoryStorage(value: unknown = provider): ResumePolishProviderStorage {
 
 function createWorkspace(options: {
   configs?: ResumeConfig[];
+  resolveUnsaved?: () => Promise<'save' | 'discard' | 'stay'>;
   confirms?: boolean[];
   providerStorageValue?: unknown;
   scheduledFeedback?: Array<{ callback: () => void; delay: number }>;
 } = {}) {
   const saved: ResumeConfig[] = [];
+  const createOnly: boolean[] = [];
   const deletedResumes: string[] = [];
   const deletedTemplates: string[] = [];
   const confirmations: string[] = [];
@@ -85,7 +87,7 @@ function createWorkspace(options: {
     resumes: options.configs || [resume(), resume({ id: 'product', name: '产品简历' })],
     templates: templateList,
     wikiEntities,
-    saveResume: async (config) => saved.push(structuredClone(config)),
+    saveResume: async (config, options) => { saved.push(structuredClone(config)); createOnly.push(options?.createOnly === true); },
     deleteResume: async (id) => { deletedResumes.push(id); },
     polishResume: async (config) => ({
       config: {
@@ -107,7 +109,6 @@ function createWorkspace(options: {
     modelClient: { getModels: async () => ['model-a'] },
     templateRepository: {
       list: async () => structuredClone(templateList),
-      getCss: async () => '.resume {}',
       save: async (config) => {
         templateList = [...templateList.filter((item) => item.id !== config.id), config];
       },
@@ -117,6 +118,7 @@ function createWorkspace(options: {
       },
     },
     confirmation: {
+      resolveUnsaved: options.resolveUnsaved,
       confirm: async (message) => {
         confirmations.push(message);
         return confirmAnswers.shift() ?? true;
@@ -134,7 +136,7 @@ function createWorkspace(options: {
       },
     } : {}),
   });
-  return { workspace, saved, deletedResumes, deletedTemplates, confirmations };
+  return { workspace, saved, createOnly, deletedResumes, deletedTemplates, confirmations };
 }
 
 test('工作区统一投影编辑、预览、模板和润色状态', async () => {
@@ -202,16 +204,47 @@ test('反馈生命周期由工作区统一管理，成功与失败使用不同�
   assert.equal(workspace.getSnapshot().feedback?.tone, 'error');
 });
 
-test('模板复制和删除在工作区事务完成后同步模板投影', async () => {
+test('模板副本使用独立 ID 且保留原受控样式', async () => {
   const { workspace, deletedTemplates } = createWorkspace();
-
+  await workspace.dispatch({ type: 'select-template', templateId: 'preset-compact' });
   await workspace.dispatch({ type: 'duplicate-template' });
-  assert.equal(workspace.getSnapshot().templateId, 'minimal-copy');
-  assert.ok(workspace.getSnapshot().templates.some((item) => item.id === 'minimal-copy'));
-
+  const first = workspace.getSnapshot().templateId;
+  await workspace.dispatch({ type: 'duplicate-template' });
+  const second = workspace.getSnapshot().templateId;
+  assert.notEqual(first, second);
+  assert.equal(workspace.getSnapshot().currentTemplate?.preset, 'compact');
   await workspace.dispatch({ type: 'delete-template' });
-  assert.deepEqual(deletedTemplates, ['minimal-copy']);
-  assert.equal(workspace.getSnapshot().templateId, 'minimal');
+  assert.deepEqual(deletedTemplates, [second]);
+  assert.equal(workspace.getSnapshot().templateId, 'preset-clear');
+  assert.ok(workspace.getSnapshot().templates.some((item) => item.id === first));
+});
+
+test('首次草稿在刷新时保留手动值，初次保存使用创建语义', async () => {
+  const { workspace, saved, createOnly } = createWorkspace({ configs: [] });
+  const draft = workspace.getSnapshot();
+  assert.equal(draft.saveStatus, 'dirty');
+  assert.equal(draft.templateId, 'preset-clear');
+  assert.equal(saved.length, 0);
+  await workspace.dispatch({ type: 'override-field', moduleId: 'module-project', itemPath: wikiEntities[0].path, field: 'description', value: '未保存值' });
+  await workspace.dispatch({ type: 'replace-inputs', wikiEntities: [{ ...wikiEntities[0], fields: { description: '新 Wiki' } }] });
+  assert.equal(workspace.getSnapshot().resumeView?.sections[0].items?.[0].fields.description, '未保存值');
+  await workspace.dispatch({ type: 'save' });
+  assert.equal(workspace.getSnapshot().currentResumeId, draft.currentResumeId);
+  assert.equal(workspace.getSnapshot().saveStatus, 'saved');
+  await workspace.dispatch({ type: 'save' });
+  assert.deepEqual(createOnly, [true, false]);
+});
+
+test('切换可以先保存，连续复制独立创建', async () => {
+  const { workspace, saved, createOnly } = createWorkspace({ resolveUnsaved: async () => 'save' });
+  await workspace.dispatch({ type: 'change-name', name: '待保存简历' });
+  await workspace.dispatch({ type: 'select-resume', resumeId: 'product' });
+  assert.equal(saved[0]?.name, '待保存简历');
+  assert.equal(workspace.getSnapshot().currentResumeId, 'product');
+  await workspace.dispatch({ type: 'duplicate-resume' });
+  await workspace.dispatch({ type: 'duplicate-resume' });
+  assert.equal(new Set(saved.map(({ id }) => id)).size, 3);
+  assert.deepEqual(createOnly, [false, true, true]);
 });
 
 test('润色动作更新预览并通过工作区反馈成功结果', async () => {

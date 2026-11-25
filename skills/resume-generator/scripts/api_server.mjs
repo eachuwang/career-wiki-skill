@@ -7,7 +7,7 @@
  */
 
 import { createServer } from 'node:http';
-import { readFile } from 'node:fs/promises';
+import { resolveWorkspaceRoot } from '../../env-init/scripts/workspace_root.mjs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { createCareerWikiAppState } from './app_state.mjs';
@@ -24,20 +24,8 @@ import { createResumePdfRenderer } from './resume_pdf.mjs';
 
 const DEFAULT_PORT = 3001;
 
-async function resolveWikiRoot() {
-  if (process.env.WIKI_ROOT) return process.env.WIKI_ROOT;
-  const configPath = join(homedir(), '.career_wiki', '.career-wiki-skill', 'config.json');
-  try {
-    const config = JSON.parse(await readFile(configPath, 'utf8'));
-    if (config.root) return config.root;
-  } catch {
-    // Missing or malformed configuration falls back to the standard local root.
-  }
-  return join(homedir(), '.career_wiki');
-}
-
 async function start() {
-  const root = await resolveWikiRoot();
+  const root = resolveWorkspaceRoot();
   const port = Number.parseInt(process.env.PORT || String(DEFAULT_PORT), 10);
   const appState = createCareerWikiAppState({ root });
   const environmentProvider = {
@@ -60,10 +48,10 @@ async function start() {
   });
   const server = createServer(adapter);
 
-  server.listen(port, () => {
+  server.listen(port, '127.0.0.1', () => {
     console.log(`Career Wiki API v${VERSION}`);
     console.log(`Root: ${root}`);
-    console.log(`URL: http://localhost:${port}/api/health`);
+    console.log(`URL: http://127.0.0.1:${server.address().port}/api/health`);
     console.log(`Endpoints:\n${ENDPOINTS.map((endpoint) => `  ${endpoint}`).join('\n')}`);
   });
   server.on('error', (error) => {

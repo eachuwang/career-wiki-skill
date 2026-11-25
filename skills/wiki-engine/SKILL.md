@@ -24,35 +24,33 @@ Career Wiki 的知识层是一个严格的 [Open Knowledge Format v0.2](https://
 
 ### 编译
 
-1. 读取 `.career-wiki-skill/deletions.json`。
-2. 递归读取 `knowledge/references/raw/` 下所有 Reference concepts 的正文。
-3. 用 Agent 理解能力识别、跨来源合并、语义去重 10 类职业实体。
-4. 为每个实体生成一个 `type: career.<entity>` 的 OKF concept。
-5. 使用标准 Markdown 链接表达实体关系。
-6. 用户确认后清理旧的生成 concepts；保留 `references/` 和 `index.md`。
-7. 写入新 concepts，重建根 `index.md`，运行严格校验：
+明确的编译请求、已完成采访或明确导入产生的 Reference 才触发发布。定位 `WorkspaceRoot` 后读取删除清单，并递归读取 `knowledge/references/raw/` 下所有 `type: Reference`；`knowledge/references/uploads/` 仅用于核对原件，不论扩展名都不是 concepts。
+
+1. 用 Agent 识别、合并和语义去重，按现有 OKF 契约产出 `career.*` 页面、根 `index.md`。把这些文件写到单独的 staging 根下的 `knowledge/`。每个生成页写 `generated.by: career-wiki-agent`（可带 `/版本`），并在 `sources` 中列出支撑事实的 Reference。不要将原件或人工内容写进 staging。
+2. 对照删除清单、来源和完整职业字段检查候选页，然后执行：
 
    ```bash
-   node skills/wiki-engine/scripts/okf_bundle.mjs check --root <数据根目录>
+   node skills/wiki-engine/scripts/okf_bundle.mjs publish "$STAGING_ROOT" --root "$ROOT"
    ```
 
-完成标准：所有 Reference 都已读取；所有生成页通过 OKF 校验；删除清单中的实体和关系均不存在；项目的描述、职责、技术栈等事实没有因简历展示需求被压缩。
+3. 发布器合并保留项、严格校验，再备份并替换生成页和索引。原件、References 和人工内容留在原位；候选页若覆盖人工内容则停止。失败时保留材料，按报告修复后重试发布，不重复上传或审批。
+4. 完成标准：所有 Reference 均已读取，生成页通过校验且已生效，已删除事实和关系不再出现，项目字段完整。状态区分**待编译**（Reference 已存）和**已发布**（已生效）。
 
 ### 迁移旧工作区
 
-运行：
+用户明确要求迁移时，在选定工作区停止其他写入后运行：
 
 ```bash
-node skills/wiki-engine/scripts/okf_bundle.mjs migrate --root <数据根目录>
+node skills/wiki-engine/scripts/okf_bundle.mjs migrate --root "$ROOT"
 ```
 
-迁移器先备份旧 `wiki/sources/resumes/templates`，在 staging 中构建并校验 `knowledge/`，成功后才切换目录。迁移后严格使用新契约，不保留旧格式读取分支。
+迁移器先在 staging 校验知识和应用状态，再把旧布局原件移入备份并发布。替换失败时回滚，修复报错后重试；已有 `knowledge/` 或新状态数据冲突时不要覆盖。成功后重新运行 env-init 记住迁移后的工作区。
 
 ### 删除知识实体
 
 1. 精确定位 concept 类型、相对 `knowledge/` 的路径与显示名。
 2. 列出来源、标准 Markdown 入链和简历引用。
-3. 明确告知用户删除影响并获得确认。
+3. 核对用户是否已明确授权删除该知识实体；已授权则说明影响后执行。仅当简历视图删除与知识删除的范围不清或影响超出授权时询问。
 4. 登记负向事实：
 
    ```bash
@@ -71,7 +69,7 @@ node skills/wiki-engine/scripts/okf_bundle.mjs migrate --root <数据根目录>
 
 ## OKF concept 契约
 
-每个非 `index.md` / `log.md` Markdown 文件必须包含合法 frontmatter，并至少有非空 `type`。Career Wiki 生成页使用以下类型：
+除 `references/uploads/` 外，每个非 `index.md` / `log.md` Markdown 文件必须包含合法 frontmatter，并至少有非空 `type`。Career Wiki 生成页使用以下类型：
 
 | 领域实体 | OKF type | 目录 |
 |---|---|---|
@@ -148,10 +146,6 @@ tech_stack: Python、FastAPI、Qwen、MySQL、Redis
 - `sources` 合并去重；每项保持稳定 `id`，正文脚注可用该 id 做逐条归因。
 - 人工确认优先于机器确认；机器确认优先于未确认，但不得把该判断写成自定义 confidence 分数。
 - 同类型且语义同名时合并；不同类型保持独立 concepts。
-
-## 破坏性编译检查点
-
-清理生成 concepts 前必须向用户确认。先确保 `.career-wiki-skill/backups/` 有可恢复备份；仅清理 10 个实体目录，保留 `knowledge/references/`。用户未明确确认时停止。
 
 ## 校验
 

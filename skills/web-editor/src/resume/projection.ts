@@ -1,5 +1,6 @@
 import type {
   EntityType,
+  PrivacyConfig,
   ResumeConfig,
   TemplateConfig,
   TemplateSection,
@@ -37,6 +38,7 @@ export interface ResumeView {
     template: string;
   };
   person: ResumeViewItem | null;
+  personSectionIndex?: number;
   sections: ResumeViewSection[];
   meta: {
     entity_count: number;
@@ -124,19 +126,30 @@ function hiddenFields(config: ResumeConfig, module: EntityType): Set<string> {
   );
 }
 
+export const DEFAULT_PRIVACY: PrivacyConfig = {
+  mask_name: false,
+  mask_phone: true,
+  mask_email: true,
+  mask_salary: true,
+  mask_company: false,
+  mask_github: false,
+};
+
 function maskValue(field: string, value: unknown, config: ResumeConfig): unknown {
-  const privacy = config.privacy || {};
+  const privacy = config.privacy ?? DEFAULT_PRIVACY;
   const text = String(value ?? '');
   if (!text) return value;
-  if (privacy.mask_phone && (field === 'phone' || /^\d{11}$/.test(text))) {
-    return text.length >= 7 ? `${text.slice(0, 3)}****${text.slice(-4)}` : text;
+  if (privacy.mask_phone && field === 'phone') {
+    const digits = text.replace(/\D/g, '');
+    return digits.length > 7 ? `${digits.slice(0, 3)}****${digits.slice(-4)}` : '[电话已隐藏]';
   }
   if (privacy.mask_email && field === 'email') {
     const at = text.indexOf('@');
-    return at > 0 ? `${text[0]}***${text.slice(at)}` : text;
+    return at > 0 ? `${text[0]}***${text.slice(at)}` : '[邮箱已隐藏]';
   }
   if (privacy.mask_name && field === 'name') {
-    return text.length > 1 ? `${text[0]}${'*'.repeat(text.length - 1)}` : text;
+    const [first, ...rest] = [...text];
+    return rest.length ? `${first}${'*'.repeat(rest.length)}` : '*';
   }
   if (privacy.mask_company && field === 'company') return '[公司已隐藏]';
   if (privacy.mask_salary && field === 'salary') return '[薪资已隐藏]';
@@ -222,9 +235,7 @@ function projectPerson(
  */
 export function projectResume({ wiki, config, template }: ProjectResumeInput): ResumeView {
   const templateSections = effectiveSections(config, template);
-  const selectedModules = config.modules.length > 0
-    ? config.modules
-    : templateSections.map((section) => section.module);
+  const selectedModules = config.modules;
   const polishedWiki = applyPolishToEntities(wiki, config.polish);
   const sections: ResumeViewSection[] = selectedModules
     .filter((module) => module !== 'person')
@@ -284,6 +295,7 @@ export function projectResume({ wiki, config, template }: ProjectResumeInput): R
       template: config.template || template?.id || '',
     },
     person: projectPerson(polishedWiki, config, selectedModules),
+    personSectionIndex: selectedModules.indexOf('person'),
     sections,
     meta: {
       entity_count: entityCount,

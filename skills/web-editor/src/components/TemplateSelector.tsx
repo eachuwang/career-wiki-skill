@@ -1,11 +1,3 @@
-/**
- * TemplateSelector — 模板选择 + 管理（原 template-manager 能力并入编辑器）
- *
- * 下拉选择当前模板，并提供「复制当前模板」「删除当前模板」操作。
- * 复制会生成新 id/name 并携带源模板 CSS；预设模板同样可删（删除的是
- * ~/.career_wiki/.career-wiki-skill/templates/ 下的副本，不影响 skill 包内预设文件）。
- */
-
 import { useEffect, useRef, useState } from 'react';
 import type { TemplateConfig } from '../types';
 import UiIcon from './UiIcon';
@@ -13,6 +5,7 @@ import UiIcon from './UiIcon';
 interface TemplateSelectorProps {
   templates: TemplateConfig[];
   currentId: string | null;
+  deletable: boolean;
   onChange: (id: string) => void;
   onDuplicate: () => void;
   onDelete: () => void;
@@ -21,11 +14,11 @@ interface TemplateSelectorProps {
 export default function TemplateSelector({
   templates,
   currentId,
+  deletable,
   onChange,
   onDuplicate,
   onDelete,
 }: TemplateSelectorProps) {
-  const deletable = templates.length > 1;
   const [menuOpen, setMenuOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -53,7 +46,7 @@ export default function TemplateSelector({
           </option>
           {templates.map((t) => (
             <option key={t.id} value={t.id}>
-              {t.name}（{t.layout === 'single-column' ? '单栏' : '双栏'}）
+              {t.name}
             </option>
           ))}
         </select>

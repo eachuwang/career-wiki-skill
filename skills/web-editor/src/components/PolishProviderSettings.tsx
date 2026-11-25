@@ -195,7 +195,7 @@ export default function PolishProviderSettings({
           </button>
           <button type="button" className="toolbar-button primary compact" onClick={() => onSave(draft, draftSelectedFields)}>保存配置</button>
         </div>
-        <p className="polish-settings-hint">每批最多处理 2 条,超时或服务繁忙时自动重试一次。Key 仅保存在本机用户目录，浏览器不会持久化。</p>
+        <p className="polish-settings-hint">生成润色时，原始简历内容会发送到所选 Provider；预览脱敏不适用于该请求。API Key 仅保存在本机。</p>
         {error && <p className="polish-settings-error" role="alert">{error}</p>}
       </div>
     </div>

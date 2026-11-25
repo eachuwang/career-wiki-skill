@@ -7,6 +7,7 @@ interface ExportDialogProps {
   open: boolean;
   resumeName: string;
   privacyEnabledCount: number;
+  unsaved: boolean;
   onClose: () => void;
   onExport: (format: ResumeExportFormat, filename: string) => Promise<ExportResult>;
 }
@@ -30,6 +31,7 @@ export default function ExportDialog({
   open,
   resumeName,
   privacyEnabledCount,
+  unsaved,
   onClose,
   onExport,
 }: ExportDialogProps) {
@@ -94,7 +96,6 @@ export default function ExportDialog({
       >
         <header className="export-dialog-header">
           <div>
-            <span className="export-dialog-kicker">完成并分享</span>
             <h2 id="export-dialog-title">导出简历</h2>
           </div>
           <button
@@ -167,7 +168,7 @@ export default function ExportDialog({
         {error && <div className="export-dialog-error" role="alert">{error}</div>}
 
         <footer className="export-dialog-footer">
-          <p>导出内容与当前预览、模板和模块顺序一致。</p>
+          <p>{unsaved ? '导出将包含尚未保存的草稿。' : '导出与当前预览一致。'} 字段遮蔽不检查正文中的敏感信息。</p>
           <div>
             <button type="button" className="toolbar-button ghost" onClick={onClose} disabled={exporting}>取消</button>
             <button type="button" className="toolbar-button primary export-confirm-button" onClick={() => void handleSubmit()} disabled={exporting}>

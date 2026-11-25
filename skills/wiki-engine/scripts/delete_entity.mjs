@@ -1,24 +1,13 @@
 #!/usr/bin/env node
 
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
-import { homedir } from 'node:os';
 import { join } from 'node:path';
+import { resolveWorkspaceRoot } from '../../env-init/scripts/workspace_root.mjs';
 import { bundleDirectory } from './layout.mjs';
 
 export const DELETION_MANIFEST = '.career-wiki-skill/deletions.json';
 
-/** 解析数据根目录，优先使用显式参数，其次读取 env-init 配置。 */
-export async function resolveDataRoot(input) {
-  if (input) return String(input);
-  const configPath = join(homedir(), '.career_wiki', '.career-wiki-skill', 'config.json');
-  try {
-    const config = JSON.parse(await readFile(configPath, 'utf8'));
-    if (config.root) return String(config.root);
-  } catch {
-    // 配置不存在时使用默认数据目录。
-  }
-  return join(homedir(), '.career_wiki');
-}
+export const resolveDataRoot = resolveWorkspaceRoot;
 
 /** 统一 Wiki 实体路径，确保删除记录按精确路径匹配。 */
 export function normalizeEntityPath(value) {
@@ -108,7 +97,6 @@ function parseArgs(argv) {
 /** 执行命令行删除登记，立即移除生成页并等待后续全量 compile 清理关系。 */
 async function main() {
   const args = parseArgs(process.argv.slice(2));
-  const root = await resolveDataRoot(String(args.root || '').trim());
   if (!args.entity || !args.path) {
     console.error(
       '用法: node delete_entity.mjs --root <数据根目录> --entity <实体类型> --path <Wiki相对路径> [--name <名称>] [--reason <原因>]',
@@ -116,6 +104,7 @@ async function main() {
     process.exitCode = 1;
     return;
   }
+  const root = resolveDataRoot(args.root);
   const record = await addDeletion(root, {
     entity: args.entity,
     path: args.path,

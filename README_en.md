@@ -129,60 +129,31 @@ Pure local Markdown + YAML frontmatter, Git-friendly, with no database dependenc
 
 ## Quick start
 
-### 1. Install
+### 1. Install and open
 
-Tell your agent:
-
-```
-Install this skill: https://github.com/eachuwang/career-wiki-skill
-```
-
-The agent can clone the repository into its skill directory.
-
-Manual installation:
+Clone the entire repository and point your agent at `SKILL.md` in its root. Keep `skills/package.json`, both lockfiles, and all subdirectories together. Use Node 22.20+ or 24.12+ (LTS) and npm.
 
 ```bash
 git clone https://github.com/eachuwang/career-wiki-skill.git
+cd career-wiki-skill
+node skills/env-init/scripts/launch.mjs
 ```
 
-Copy the directories under `skills/` into your agent's skill directory, such as `~/.claude/skills/`.
+The first launch installs locked dependencies and initializes `~/.career_wiki/`. Later runs verify and reuse existing services. To choose a different directory, first run `python3 skills/env-init/scripts/env_check.py --root "/path/to/workspace"` (Python 3.9+); later launches remember it. A legacy workspace requires migration before initialization.
 
-### 2. Initialize the environment (required after installation)
+The editor includes seven A4 layouts: Clear, Compact, Editorial, Technical Index, Split Header, Color Band, and Classic. Drag the handles in the outline to reorder sections.
 
-Installing the files alone does not create the data directory or install dependencies. Initialize first:
+### 2. Import or interview
 
-Tell your agent:
-
-```
-Check the career-wiki environment / Initialize the career-wiki environment
-```
-
-The `env-init` skill will:
-
-1. Check Node.js ≥ 18, Python ≥ 3.9, and npm.
-2. Create the `~/.career_wiki/` directory structure.
-3. Install Node dependencies such as `gray-matter`.
-4. Write the runtime configuration.
-
-**Interviewing, Wiki compilation, and resume generation are available after initialization.**
-
-### 3. Start an interview
-
-```
-Start an interview / Help me record my experience
-```
-
-The `interview` skill starts a multi-turn conversation. For projects, it asks one question at a time about the description, responsibilities, tech stack, challenges, solutions, outcomes, and learnings. Unclear answers are followed up before moving on.
-
-### 4. View and edit resumes
-
-```
-Open the editor / Show my resume preview
-```
-
-The `web-editor` skill starts the React frontend with module ordering, field editing, project visibility, live preview, and PDF/HTML/JSON export. PDFs are generated directly from the current A4 preview without opening a printer dialog.
+Tell your agent “Import this resume into Career Wiki” or “Start an interview.” An explicit import archives the original, creates a Reference, and compiles the Wiki. “Read this file” does not write to the workspace. After publication the agent opens the editor for that workspace. If compilation fails, retry from the archived material without uploading again.
 
 ---
+
+## Integration and releases
+
+- Target feature and dependency PRs at `develop`. Review the changes and wait for `Skill tests` and `Web editor` to pass, then use **Squash and merge**.
+- Open or reuse a `develop` → `main` PR when releasing. Confirm there are file changes, resolve conflicts, and rerun the required checks. Use **Create a merge commit**, not squash, to preserve shared history.
+- Sync changes unique to `main` back to `develop` through a separate PR. Do not push directly to protected branches or rewrite their history.
 
 ## Design principles
 

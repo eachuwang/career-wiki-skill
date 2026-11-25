@@ -1,6 +1,5 @@
 /* ============================================================
    A4 简历投影:白纸与简历文档排版(主题无关,预览/HTML/PDF 共用)
-   从原 index.css 精确迁移,勿改尺寸与分页规则
    ============================================================ */
 
 /* 多张 A4 页面容器:预览时页面之间留出间距 */
@@ -18,7 +17,7 @@
   box-sizing: border-box;
   padding: 15mm 16mm;
   margin-bottom: 24px;
-  background: var(--paper-bg);
+  background: #fff;
   box-shadow: var(--paper-shadow);
   overflow: hidden;
 }
@@ -46,40 +45,92 @@
 }
 
 .preview-page-shell {
-  position: absolute;
-  inset: 0 auto auto 0;
   width: 210mm;
-  transform-origin: top left;
-  transition: transform 0.15s ease;
 }
 
 /* ---------- 简历文档排版 ---------- */
 
 /* 调研结论:A4、单栏、可抽取文本、适度留白与单一深色强调。 */
 .resume-document {
+  --resume-sans: Arial, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  --resume-serif: Georgia, 'Songti SC', SimSun, serif;
   --resume-accent: #1f4e79;
   --resume-text: #172033;
   --resume-muted: #586579;
   --resume-rule: #cdd6df;
   color: var(--resume-text);
-  font-family: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', Arial, sans-serif;
+  font-family: var(--resume-sans);
+  font-variant-numeric: lining-nums;
   font-size: 10.5pt;
   line-height: 1.38;
   text-align: left;
 }
 
-.resume-document.academic-plain {
-  --resume-accent: #222;
-  font-family: 'Times New Roman', 'Songti SC', SimSun, serif;
-}
+/* The same flow root includes margins in both measurement and paper. */
+.paginate-block { display: flow-root; }
+.resume-document, .resume-document * { box-sizing: border-box; }
+.resume-document { overflow-wrap: anywhere; }
 
-.resume-document.business-sidebar {
-  --resume-accent: #17324d;
+.resume-document.preset-compact {
+  --resume-accent: #223847;
+  font-size: 10pt;
+  line-height: 1.34;
 }
+.preset-compact .resume-header { margin-bottom: 3mm; padding-bottom: 2mm; }
+.preset-compact .resume-header h1 { font-size: 18pt; }
+.preset-compact .section-head { margin-top: 3mm; }
+.preset-compact .section-title { margin-bottom: 1mm; border: 0; letter-spacing: 0; }
+.preset-compact .entry-lead { margin-top: 2mm; }
+.preset-compact .entry-desc { margin-top: 0.8mm; }
 
-.resume-document.creative-color {
-  --resume-accent: #5c4b8a;
+.resume-document.preset-editorial {
+  --resume-accent: #4f4136;
+  --resume-rule: #d5cbc1;
+  line-height: 1.48;
 }
+.preset-editorial .resume-header { text-align: center; padding-bottom: 6mm; }
+.preset-editorial :is(h1, .section-title), .preset-classic :is(h1, .section-title) { font-family: var(--resume-serif); }
+.preset-editorial .resume-header h1 { font-size: 24pt; font-weight: 500; }
+.preset-editorial .resume-contact { justify-content: center; }
+.preset-editorial .section-head { margin-top: 6mm; }
+.preset-editorial .section-title { border-bottom-width: 2px; font-weight: 600; }
+.preset-editorial .entry-lead { display: grid; grid-template-columns: minmax(0, 1fr) 36mm; column-gap: 5mm; }
+.preset-editorial .entry-title { grid-column: 1; }
+.preset-editorial .entry-sub { display: contents; }
+.preset-editorial .entry-role { grid-column: 1; }
+.preset-editorial .entry-date { grid-column: 2; grid-row: 1; text-align: right; }
+
+/* Each preset uses the same paper and measured block flow. */
+.resume-document.preset-index { --resume-accent: #405247; --resume-rule: #bcc8c0; }
+.preset-index .resume-header { border: 0; padding: 0 0 2mm; margin-bottom: 3mm; }
+.preset-index .resume-header h1 { font-size: 19pt; }
+.preset-index .section-title { background: #e9eee9; padding: 1.5mm 2.5mm; border: 0; }
+.preset-index .entry-lead { display: grid; grid-template-columns: 34mm minmax(0, 1fr); column-gap: 3mm; }
+.preset-index .entry-title, .preset-index .entry-role { grid-column: 2; }
+.preset-index .entry-sub { display: contents; }
+.preset-index .entry-date { grid-column: 1; grid-row: 1; font-size: 8.5pt; }
+.preset-index .entry-desc-block { margin-left: 37mm; }
+
+.resume-document.preset-split { --resume-accent: #164e57; --resume-rule: #b8cccc; }
+.preset-split .resume-header { display: grid; grid-template-columns: minmax(0, 1fr) 61mm; gap: 7mm; border-bottom: 2px solid var(--resume-accent); }
+.preset-split .resume-contact { display: grid; align-content: center; margin: 0; border-left: 1px solid var(--resume-rule); padding-left: 4mm; }
+.preset-split .resume-contact-item::after { display: none; }
+.preset-split .section-title { border: 0; border-left: 3px solid var(--resume-accent); padding-left: 2.5mm; }
+
+.resume-document.preset-band { --resume-accent: #904738; --resume-rule: #e0c7bd; }
+.preset-band .resume-header { background: #7b3f34; padding: 6mm; border: 0; }
+.preset-band .resume-header :is(h1, .resume-headline, .resume-contact, .resume-contact-icon) { color: #fff; }
+.preset-band .resume-header h1 { font-size: 26pt; }
+.preset-band .section-title { display: table; border: 0; border-radius: 1mm; padding: 1mm 3mm; background: #f1e3de; }
+.preset-band .entry-lead { border-left: 1px solid var(--resume-rule); padding-left: 3mm; }
+
+.resume-document.preset-classic { --resume-accent: #242424; --resume-muted: #4d4d4d; --resume-rule: #8e8e8e; }
+.preset-classic .resume-header { border-block: 3px double #444; padding: 4mm 0; }
+.preset-classic .resume-header h1 { font-size: 25pt; font-weight: 500; }
+.preset-classic .resume-contact-icon { display: none; }
+.preset-classic .section-title { border: 0; border-top: 1px solid var(--resume-rule); padding-top: 2mm; font-size: 13pt; letter-spacing: 0; }
+.preset-classic .entry-sub { display: flex; flex-wrap: wrap; gap: 0 3mm; }
+.preset-classic :is(.entry-role, .entry-desc, .resume-summary) { color: #303030; }
 
 /* 模块头部块:标题与首条内容同块,承担原 .preview-section 的间距 */
 .section-head {
@@ -118,8 +169,12 @@
   line-height: 1.3;
 }
 
+.resume-contact, .entry-date { font-family: var(--resume-sans); font-variant-numeric: lining-nums tabular-nums; }
+
 .resume-contact-item {
   display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
   align-items: center;
   gap: 1mm;
   overflow-wrap: anywhere;
@@ -197,8 +252,8 @@
 .entry-date {
   color: var(--resume-muted);
   font-size: 9.5pt;
-  white-space: nowrap;
-  font-variant-numeric: tabular-nums;
+  max-width: 36mm;
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
 .entry-desc,

@@ -1,139 +1,126 @@
-/**
- * App — 主入口
- *
- * 两个页面:简历编辑器 + Wiki 图谱。
- * 共用数据层(wiki 实体、模板、简历配置)。
- * 顶栏由各页面通过 TopBar 渲染,菜单合并为单行。
- */
-
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import ResumeEditor from './pages/ResumeEditor';
 import WikiGraph from './pages/WikiGraph';
 import * as api from './api/client';
-import type {
-  WikiSnapshot,
-  WikiEntity,
-  TemplateConfig,
-  ResumeConfig,
-  ResumePolishProviderConfig,
-} from './types';
-import UiIcon from './components/UiIcon';
+import { createResumeEditingWorkspace } from './resume/editingWorkspace';
+import { POLISH_PROVIDER_STORAGE_KEY } from './resume/polishWorkflow';
+import type { ResumeConfig, ResumePolishProviderConfig, TemplateConfig, WikiSnapshot } from './types';
+import type { TopBarPage } from './components/TopBar';
 
-type Page = 'editor' | 'graph';
+const LAST_RESUME_KEY = 'career-wiki.selected-resume';
+type UnsavedChoice = 'save' | 'discard' | 'stay';
+interface EditorInputs {
+  wiki: WikiSnapshot;
+  resumes: ResumeConfig[];
+  templates: TemplateConfig[];
+  provider: ResumePolishProviderConfig | null;
+}
 
 export default function App() {
-  const [page, setPage] = useState<Page>('editor');
-
-  // 共享数据
-  const [wiki, setWiki] = useState<WikiSnapshot | null>(null);
-  const [templates, setTemplates] = useState<TemplateConfig[]>([]);
-  const [resumes, setResumes] = useState<ResumeConfig[]>([]);
-  const [polishProvider, setPolishProvider] = useState<ResumePolishProviderConfig | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [inputs, setInputs] = useState<EditorInputs | null>(null);
   const [error, setError] = useState('');
-
-  // 加载所有数据
-  const loadAll = useCallback(async () => {
-    setLoading(true);
+  const load = async () => {
     setError('');
     try {
-      const [wikiData, tplData, resumeData, providerData] = await Promise.all([
-        api.getWiki(),
-        api.getTemplates(),
-        api.getResumes(),
-        api.getPolishProvider(),
+      const [wiki, resumes, templates, provider] = await Promise.all([
+        api.getWiki(), api.getResumes(), api.getTemplates(), api.getPolishProvider().catch(() => null),
       ]);
-      setWiki(wikiData);
-      setTemplates(tplData);
-      setResumes(resumeData);
-      setPolishProvider(providerData);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
+      setInputs({ wiki, resumes, templates, provider });
+    } catch (cause) {
+      setError(String(cause));
     }
-  }, []);
+  };
+  useEffect(() => { void load(); }, []);
 
-  useEffect(() => {
-    loadAll();
-  }, [loadAll]);
-
-  // 刷新 wiki(触发后端重新 compile)
-  const handleRefreshWiki = useCallback(async () => {
-    try {
-      await api.refreshWiki();
-      await loadAll();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }, [loadAll]);
-
-  // wiki 实体扁平列表(给编辑器用)
-  const wikiEntities: WikiEntity[] = wiki?.entities || [];
-
-  if (loading) {
-    return (
-      <div className="h-full flex items-center justify-center bg-ink-100">
-        <div className="text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-lg bg-[var(--bg-layer-2)] text-brand-700 shadow-sm animate-pulse">
-            <UiIcon name="book" size={24} />
-          </div>
-          <div className="text-sm text-ink-500">正在加载工作区数据...</div>
-        </div>
-      </div>
-    );
-  }
-
-  const topBarTrailing = (
-    <>
-      {error && (
-        <div className="app-error" role="alert">
-          {error}
-          <button
-            onClick={loadAll}
-            className="ml-2 underline hover:text-[var(--text-primary)]"
-          >
-            重试
-          </button>
-        </div>
-      )}
-      <button
-        type="button"
-        className="toolbar-icon-button"
-        onClick={handleRefreshWiki}
-        title="重新编译 Wiki"
-        aria-label="重新编译 Wiki"
-      >
-        <UiIcon name="refresh" size={16} />
-      </button>
-    </>
+  if (!inputs) return (
+    <main className="workspace-empty">
+      {error ? <><p role="alert">{error}</p><button type="button" className="toolbar-button" onClick={load}>重试</button></>
+        : <p role="status">正在加载工作区…</p>}
+    </main>
   );
+  return <WorkspaceApp inputs={inputs} />;
+}
+
+function WorkspaceApp({ inputs }: { inputs: EditorInputs }) {
+  const [page, setPage] = useState<TopBarPage>('editor');
+  const [wiki, setWiki] = useState(inputs.wiki);
+  const [notice, setNotice] = useState<{ message: string; error?: boolean } | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [choice, setChoice] = useState<{ message: string; resolve: (choice: UnsavedChoice) => void } | null>(null);
+  const [workspace] = useState(() => createResumeEditingWorkspace({
+    ...inputs,
+    wikiEntities: inputs.wiki.entities,
+    selectedResumeId: window.localStorage.getItem(LAST_RESUME_KEY) ?? undefined,
+    saveResume: api.saveResume,
+    deleteResume: api.deleteResume,
+    polishResume: api.polishResume,
+    modelClient: { getModels: api.getPolishModels },
+    polishProviderStorage: { load: () => inputs.provider, save: api.savePolishProvider },
+    templateRepository: { list: api.getTemplates, save: api.saveTemplate, delete: api.deleteTemplate },
+    confirmation: {
+      confirm: (message) => window.confirm(message),
+      resolveUnsaved: (message) => new Promise((resolve) => setChoice({ message, resolve })),
+    },
+  }));
+  const state = useSyncExternalStore(workspace.subscribe, workspace.getSnapshot, workspace.getSnapshot);
+  const savedId = state.resumes.some((resume) => resume.id === state.currentResumeId) ? state.currentResumeId : '';
+  useEffect(() => { window.localStorage.removeItem(POLISH_PROVIDER_STORAGE_KEY); }, []);
+  useEffect(() => {
+    if (savedId) window.localStorage.setItem(LAST_RESUME_KEY, savedId);
+  }, [savedId]);
+  useEffect(() => {
+    if (state.saveStatus !== 'dirty' && state.saveStatus !== 'failed' && state.saveStatus !== 'saving') return;
+    const guard = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
+    window.addEventListener('beforeunload', guard);
+    return () => window.removeEventListener('beforeunload', guard);
+  }, [state.saveStatus]);
+
+  const refresh = async (requestCompile = false) => {
+    setRefreshing(true);
+    try {
+      const guidance = requestCompile ? await api.refreshWiki() : null;
+      const next = await api.getWiki();
+      await workspace.dispatch({ type: 'replace-inputs', wikiEntities: next.entities });
+      setWiki(next);
+      setNotice({ message: guidance?.status === 'needs_agent' ? guidance.message || '请交给 Agent 编译 Wiki。' : '已刷新 Wiki 数据' });
+    } catch (cause) {
+      setNotice({ message: String(cause), error: true });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+  const navigate = (next: TopBarPage) => {
+    if (next !== page) void workspace.dispatch({ type: 'close-overlay' });
+    setPage(next);
+  };
+  const finishChoice = (answer: UnsavedChoice) => {
+    choice?.resolve(answer);
+    setChoice(null);
+  };
+  const trailing = <button type="button" className="toolbar-button ghost" onClick={() => void refresh()} disabled={refreshing}>刷新 Wiki</button>;
 
   return (
-    <div className="h-full flex flex-col bg-ink-100">
-      {/* 页面内容:顶栏由各页面渲染(TopBar) */}
-      <div className="flex-1 overflow-hidden">
-        {page === 'editor' && polishProvider ? (
-          <ResumeEditor
-            wikiEntities={wikiEntities}
-            templates={templates}
-            resumes={resumes}
-            polishProvider={polishProvider}
-            page={page}
-            onNavigate={setPage}
-            trailing={topBarTrailing}
-          />
-        ) : (
-          <WikiGraph
-            wiki={wiki}
-            resumes={resumes}
-            onRefreshWiki={handleRefreshWiki}
-            page={page}
-            onNavigate={setPage}
-            trailing={topBarTrailing}
-          />
-        )}
+    <div className="h-full flex flex-col">
+      {notice && (
+        <div className="workspace-notice" role={notice.error ? 'alert' : 'status'}>
+          {notice.message} <button type="button" onClick={() => setNotice(null)}>关闭</button>
+        </div>
+      )}
+      <div className="flex-1 min-h-0 overflow-hidden">
+        {page === 'editor'
+          ? <ResumeEditor workspace={workspace} state={state} wikiEmpty={!wiki.entities.length} page={page} onNavigate={navigate} trailing={trailing} onCompile={() => void refresh(true)} />
+          : <WikiGraph wiki={wiki} resumes={state.resumes} onRefreshWiki={() => void refresh()} page={page} onNavigate={navigate} trailing={trailing} />}
       </div>
+      {choice && (
+        <dialog ref={(element) => { if (element && !element.open) element.showModal(); }} className="workspace-choice" onCancel={(event) => { event.preventDefault(); finishChoice('stay'); }} aria-label="未保存修改">
+          <h2>{choice.message}</h2>
+          <div className="workspace-choice-actions">
+            <button type="button" autoFocus className="toolbar-button" onClick={() => finishChoice('stay')}>留在原处</button>
+            <button type="button" className="toolbar-button" onClick={() => finishChoice('discard')}>放弃修改</button>
+            <button type="button" className="toolbar-button strong" onClick={() => finishChoice('save')}>保存并继续</button>
+          </div>
+        </dialog>
+      )}
     </div>
   );
 }

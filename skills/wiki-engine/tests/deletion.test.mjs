@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -54,7 +54,7 @@ test('删除清单按实体类型和精确路径幂等登记', async () => {
 test('显式数据根目录优先于默认配置', async () => {
   const root = await mkdtemp(join(tmpdir(), 'career-wiki-root-'));
   try {
-    assert.equal(await resolveDataRoot(root), root);
+    assert.equal(await resolveDataRoot(root), await realpath(root));
   } finally {
     await rm(root, { recursive: true, force: true });
   }

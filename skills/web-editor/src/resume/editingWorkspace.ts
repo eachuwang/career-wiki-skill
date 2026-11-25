@@ -16,7 +16,7 @@ import {
   type ModuleMoveDirection,
   type ResumeContentOrchestrationResult,
 } from './contentOrchestration.ts';
-import { createResumeEditingSession } from './editingSession.ts';
+import { createResumeEditingSession, type ResumeDraft, type ResumeSaveStatus } from './editingSession.ts';
 import { applyPolishToEntities, getSelectedPolishFields } from './polish.ts';
 import {
   createResumePolishWorkflow,
@@ -24,7 +24,8 @@ import {
   type ResumePolishModelClient,
   type ResumePolishProviderStorage,
 } from './polishWorkflow.ts';
-import { projectResume, type ResumeView } from './projection.ts';
+import { DEFAULT_PRIVACY, projectResume, type ResumeView } from './projection.ts';
+import { getTemplatePreset, TEMPLATE_PRESETS } from './templates.ts';
 
 export type ResumeWorkspaceView = 'edit' | 'preview';
 export type ResumeWorkspaceOverlay = 'polish' | 'privacy' | 'export';
@@ -38,7 +39,7 @@ export interface ResumeWorkspaceFeedback {
 export interface ResumeEditingWorkspaceSnapshot {
   resumes: ResumeConfig[];
   currentResumeId: string;
-  draft: ResumeConfig | null;
+  draft: ResumeDraft | null;
   resumeName: string;
   templates: TemplateConfig[];
   templateId: string;
@@ -60,6 +61,8 @@ export interface ResumeEditingWorkspaceSnapshot {
   resumeWikiEntities: WikiEntity[];
   resumeView: ResumeView | null;
   saving: boolean;
+  saveStatus: ResumeSaveStatus;
+  saveError: string;
   view: ResumeWorkspaceView;
   activeOverlay: ResumeWorkspaceOverlay | null;
   feedback: ResumeWorkspaceFeedback | null;
@@ -109,20 +112,21 @@ export interface ResumeEditingWorkspace {
 
 export interface ResumeTemplateRepository {
   list(): Promise<TemplateConfig[]>;
-  getCss(id: string): Promise<string>;
-  save(config: TemplateConfig, css: string): Promise<void>;
+  save(config: TemplateConfig, css?: string, options?: { createOnly: true }): Promise<void>;
   delete(id: string): Promise<void>;
 }
 
 export interface ResumeWorkspaceConfirmation {
   confirm(message: string): boolean | Promise<boolean>;
+  resolveUnsaved?(message: string): Promise<'save' | 'discard' | 'stay'>;
 }
 
 interface CreateResumeEditingWorkspaceInput {
   resumes: ResumeConfig[];
   templates: TemplateConfig[];
   wikiEntities: WikiEntity[];
-  saveResume(config: ResumeConfig): Promise<void>;
+  selectedResumeId?: string;
+  saveResume(config: ResumeConfig, options?: { createOnly: true }): Promise<void>;
   deleteResume(id: string): Promise<void>;
   polishResume(
     config: ResumeConfig,
@@ -140,17 +144,9 @@ interface CreateResumeEditingWorkspaceInput {
   };
 }
 
-const DEFAULT_PRIVACY: PrivacyConfig = {
-  mask_name: false,
-  mask_phone: true,
-  mask_email: true,
-  mask_salary: true,
-  mask_company: false,
-  mask_github: false,
-};
-
 const DEFAULT_MODULE_TYPES: EntityType[] = [
   'person',
+  'summary',
   'experience',
   'project',
   'skill',
@@ -158,7 +154,7 @@ const DEFAULT_MODULE_TYPES: EntityType[] = [
 ];
 
 function createDefaultModules(): ModuleInstance[] {
-  return DEFAULT_MODULE_TYPES.map((type) => ({
+  return [...new Set([...DEFAULT_MODULE_TYPES, ...MODULE_LIBRARY.map((module) => module.type)])].map((type) => ({
     id: `module-${type}`,
     type,
     label: MODULE_LIBRARY.find((module) => module.type === type)?.label || type,
@@ -178,6 +174,7 @@ function messageForError(error: unknown): string {
  */
 export function createResumeEditingWorkspace({
   resumes,
+  selectedResumeId,
   templates,
   wikiEntities: initialWikiEntities,
   saveResume,
@@ -193,15 +190,31 @@ export function createResumeEditingWorkspace({
     clearTimeout: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
   },
 }: CreateResumeEditingWorkspaceInput): ResumeEditingWorkspace {
-  const session = createResumeEditingSession({ resumes, saveResume, deleteResume, polishResume });
+  let templateList = templates;
+  let wikiEntities = initialWikiEntities;
+  const availableTemplates = () => [...TEMPLATE_PRESETS.map((official) => {
+    const saved = templateList.find((template) => template.id === official.id);
+    return saved ? { ...saved, name: official.name, layout: official.layout, preset: official.preset } : official;
+  }), ...templateList.filter((template) =>
+    !TEMPLATE_PRESETS.some((preset) => preset.id === template.id))];
+  const newDraft = (name: string) => createResumeConfig({
+    resumeName: name,
+    resumeId: `resume-${crypto.randomUUID()}`,
+    templateId: TEMPLATE_PRESETS[0].id,
+    privacy: DEFAULT_PRIVACY,
+    modules: createDefaultModules().filter((module) => wikiEntities.some((entity) => entity.entity === module.type)),
+    today: now().toISOString().slice(0, 10),
+  });
+  const session = createResumeEditingSession({
+    resumes, selectedResumeId, saveResume, deleteResume, polishResume,
+    initialDraft: !resumes.length && wikiEntities.length ? newDraft('新建简历') : undefined,
+  });
   const polishWorkflow = createResumePolishWorkflow({
     session,
     modelClient,
     ...(polishProviderStorage ? { storage: polishProviderStorage } : {}),
   });
-  let templateList = templates;
-  let wikiEntities = initialWikiEntities;
-  let view: ResumeWorkspaceView = 'edit';
+  let view: ResumeWorkspaceView = 'preview';
   let activeOverlay: ResumeWorkspaceOverlay | null = null;
   let feedback: ResumeWorkspaceFeedback | null = null;
   let feedbackTimer: unknown | null = null;
@@ -224,15 +237,16 @@ export function createResumeEditingWorkspace({
     const sessionSnapshot = session.getSnapshot();
     const polishSnapshot = polishWorkflow.getSnapshot();
     const draft = sessionSnapshot.draft;
-    const templateId = draft?.template || templateList[0]?.id || '';
-    const currentTemplate = templateList.find((template) => template.id === templateId) || null;
+    const templates = availableTemplates();
+    const currentTemplate = templates.find((template) => template.id === draft?.template) ?? TEMPLATE_PRESETS[0];
+    const templateId = currentTemplate.id;
     const polish = draft?.polish;
     return {
       resumes: sessionSnapshot.resumes,
       currentResumeId: sessionSnapshot.currentResumeId,
       draft,
       resumeName: draft?.name || '新建简历',
-      templates: templateList,
+      templates,
       templateId,
       currentTemplate,
       privacy: draft?.privacy || DEFAULT_PRIVACY,
@@ -254,6 +268,8 @@ export function createResumeEditingWorkspace({
         ? projectResume({ wiki: wikiEntities, config: draft, template: currentTemplate })
         : null,
       saving: sessionSnapshot.saveStatus === 'saving',
+      saveStatus: sessionSnapshot.saveStatus,
+      saveError: sessionSnapshot.error,
       view,
       activeOverlay,
       feedback,
@@ -302,6 +318,22 @@ export function createResumeEditingWorkspace({
     return { status: 'failed', error: message };
   };
 
+  let choosing = false;
+  const chooseUnsaved = async (message: string) => {
+    if (choosing) return 'stay';
+    if (!confirmation.resolveUnsaved) return await confirmation.confirm(message) ? 'discard' : 'stay';
+    choosing = true;
+    try {
+      const decision = await confirmation.resolveUnsaved(message);
+      if (decision !== 'save') return decision;
+      const result = await session.dispatch({ type: 'save' });
+      if (result.status === 'failed') failed('保存失败', result.error);
+      return session.getSnapshot().saveStatus === 'saved' ? 'save' : 'stay';
+    } finally {
+      choosing = false;
+    }
+  };
+
   session.subscribe(() => {
     contentOrchestration.setWikiEntities(getResumeWikiEntities());
     emit();
@@ -324,6 +356,11 @@ export function createResumeEditingWorkspace({
         if (command.wikiEntities) {
           wikiEntities = command.wikiEntities;
           contentOrchestration.setWikiEntities(getResumeWikiEntities());
+        }
+        if (!session.getSnapshot().draft) {
+          const first = session.getSnapshot().resumes[0];
+          if (first) await session.dispatch({ type: 'switch-resume', resumeId: first.id });
+          else if (wikiEntities.length) await session.dispatch({ type: 'open-draft', draft: newDraft('新建简历') });
         }
         emit();
         return { status: 'completed' };
@@ -348,14 +385,12 @@ export function createResumeEditingWorkspace({
       if (command.type === 'select-resume') {
         const result = await session.dispatch({ type: 'switch-resume', resumeId: command.resumeId });
         if (result.status === 'confirm-discard') {
-          const confirmed = await confirmation.confirm(
-            '当前简历有未保存修改，切换后这些修改会丢失。确定继续吗？',
-          );
-          if (!confirmed) return { status: 'cancelled' };
+          const decision = await chooseUnsaved('切换简历前，如何处理当前修改？');
+          if (decision === 'stay') return { status: 'cancelled' };
           const switched = await session.dispatch({
             type: 'switch-resume',
             resumeId: command.resumeId,
-            discardDirty: true,
+            discardDirty: decision === 'discard',
           });
           if (switched.status === 'failed') return failed('切换简历失败', switched.error);
         } else if (result.status === 'failed') {
@@ -368,32 +403,21 @@ export function createResumeEditingWorkspace({
       if (command.type === 'create-resume' || command.type === 'duplicate-resume') {
         const prepared = await session.dispatch({ type: 'prepare-destructive-change' });
         if (prepared.status === 'ready' && prepared.hasUnsavedDraft) {
-          const action = command.type === 'create-resume' ? '新建后切换' : '创建副本';
-          const confirmed = await confirmation.confirm(
-            `当前简历有未保存修改，${action}会丢失这些修改。确定继续吗？`,
-          );
-          if (!confirmed) return { status: 'cancelled' };
+          const decision = await chooseUnsaved('打开另一份简历前，如何处理当前修改？');
+          if (decision === 'stay') return { status: 'cancelled' };
         }
 
         const current = session.getSnapshot();
         let config: ResumeConfig;
         if (command.type === 'create-resume') {
-          const timestamp = now().getTime();
-          config = createResumeConfig({
-            resumeName: `新简历 ${current.resumes.length + 1}`,
-            resumeId: `resume-${timestamp}`,
-            templateId: current.draft?.template || templateList[0]?.id || '',
-            privacy: DEFAULT_PRIVACY,
-            modules: createDefaultModules(),
-            today: now().toISOString().slice(0, 10),
-          });
+          config = newDraft(`新简历 ${current.resumes.length + 1}`);
         } else {
           const source = current.resumes.find((resume) => resume.id === current.currentResumeId);
           if (!source) return failed('复制简历失败', '找不到当前简历');
           const today = now().toISOString().slice(0, 10);
           config = {
             ...structuredClone(source),
-            id: `${source.id}-copy`,
+            id: `resume-${crypto.randomUUID()}`,
             name: `${source.name} 副本`,
             created: today,
             updated: today,
@@ -438,10 +462,9 @@ export function createResumeEditingWorkspace({
       if (command.type === 'duplicate-template') {
         const current = snapshot.currentTemplate;
         if (!current) return failed('复制模板失败', '找不到当前模板');
-        const copy = { ...current, id: `${current.id}-copy`, name: `${current.name} 副本` };
+        const copy = { ...current, preset: getTemplatePreset(current), id: `template-${crypto.randomUUID()}`, name: `${current.name} 副本` };
         try {
-          const css = await templateRepository.getCss(current.id);
-          await templateRepository.save(copy, css);
+          await templateRepository.save(copy, undefined, { createOnly: true });
           templateList = await templateRepository.list();
           await session.dispatch({ type: 'edit-draft', patch: { template: copy.id } });
           return { status: 'completed' };
@@ -452,7 +475,7 @@ export function createResumeEditingWorkspace({
 
       if (command.type === 'delete-template') {
         const current = snapshot.currentTemplate;
-        if (!current || templateList.length <= 1) return { status: 'cancelled' };
+        if (!current || TEMPLATE_PRESETS.some((template) => template.id === current.id) || !templateList.some((template) => template.id === current.id)) return { status: 'cancelled' };
         if (!await confirmation.confirm(`确定删除模板「${current.name}」？`)) {
           return { status: 'cancelled' };
         }
@@ -461,7 +484,7 @@ export function createResumeEditingWorkspace({
           templateList = await templateRepository.list();
           await session.dispatch({
             type: 'edit-draft',
-            patch: { template: templateList[0]?.id || '' },
+            patch: { template: TEMPLATE_PRESETS[0].id },
           });
           return { status: 'completed' };
         } catch (error) {

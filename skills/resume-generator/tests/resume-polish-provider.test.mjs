@@ -224,3 +224,32 @@ test('Provider 超时后只重试一次并返回完整结果', async (t) => {
   assert.equal(attempts, 2);
   assert.equal(result.entries.length, 1);
 });
+
+
+test('Provider 拒绝重定向且不向后续地址转发请求', async (t) => {
+  const requests = [];
+  const provider = await listen((request, response) => {
+    requests.push(request.url);
+    request.resume();
+    response.writeHead(307, { Location: '/redirected' });
+    response.end();
+  });
+  t.after(provider.close);
+  const config = { protocol: 'openai', base_url: provider.baseUrl, api_key: 'test-key', model: 'model-a' };
+  await assert.rejects(listProviderModels(config), { code: 'PROVIDER_REDIRECT_REJECTED' });
+  await assert.rejects(generateWithProvider(context(), config), { code: 'PROVIDER_REDIRECT_REJECTED' });
+  assert.deepEqual(requests, ['/v1/models', '/v1/chat/completions']);
+});
+
+test('Provider 拒绝含用户信息、查询、片段或非回环 HTTP 的 Base URL', async () => {
+  for (const base_url of [
+    'https://user@example.invalid/v1',
+    'https://example.invalid/v1?region=test',
+    'https://example.invalid/v1#models',
+    'http://example.invalid/v1',
+  ]) {
+    await assert.rejects(listProviderModels({ protocol: 'openai', base_url, api_key: 'test-key' }), {
+      statusCode: 400,
+    });
+  }
+});

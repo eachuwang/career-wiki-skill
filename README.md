@@ -147,6 +147,12 @@ node skills/env-init/scripts/launch.mjs
 
 ---
 
+## 集成与发布
+
+- 功能和依赖 PR 先合入 `develop`。检查 `Skill tests` 和 `Web editor` 通过，完成人工审查，再用 **Squash and merge**。
+- 发布时手动创建或复用 `develop` → `main` 的 PR。确认有实际文件变化，处理冲突并重新通过必需检查。使用 **Create a merge commit**，不要 squash 发布 PR，以保留两条分支的共同历史。
+- 如果 `main` 有 `develop` 未包含的改动，通过独立 PR 同步回 `develop`。不要直接推送到受保护分支，也不要强推重写历史。
+
 ## 设计原则
 
 | # | 原则 | 说明 |

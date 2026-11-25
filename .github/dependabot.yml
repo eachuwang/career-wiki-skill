@@ -22,7 +22,7 @@ updates:
           - patch
 
   - package-ecosystem: npm
-    directory: /skills/resume-generator
+    directory: /skills
     target-branch: develop
     schedule:
       interval: weekly

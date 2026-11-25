@@ -20,15 +20,20 @@ export const ENDPOINTS = Object.freeze([
   'PUT /api/wiki/refresh',
 ]);
 
-const JSON_HEADERS = Object.freeze({
-  'Content-Type': 'application/json; charset=utf-8',
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-});
+const MAX_BODY_BYTES = 2 * 1024 * 1024;
+const LOOPBACK_HOST = /^(?:127\.0\.0\.1|localhost|\[::1\])(?::([1-9][0-9]{0,4}))?$/i;
 
-function sendJson(response, statusCode, value) {
-  response.writeHead(statusCode, JSON_HEADERS);
+function isLocalRequest(request) {
+  const { host, origin, 'sec-fetch-site': fetchSite } = request.headers;
+  const local = LOOPBACK_HOST.exec(host || '');
+  return local && !(Number(local[1]) > 65535)
+    && request.headersDistinct.host?.length === 1
+    && (origin === undefined || origin === `http://${host.toLowerCase()}`)
+    && (fetchSite === undefined || fetchSite === 'same-origin' || fetchSite === 'none');
+}
+
+function sendJson(response, statusCode, value, headers = {}) {
+  response.writeHead(statusCode, { 'Content-Type': 'application/json; charset=utf-8', ...headers });
   response.end(JSON.stringify(value, null, 2));
 }
 
@@ -36,30 +41,62 @@ function sendPdf(response, pdf) {
   response.writeHead(200, {
     'Content-Type': 'application/pdf',
     'Content-Length': pdf.length,
-    'Access-Control-Allow-Origin': '*',
   });
   response.end(pdf);
 }
 
+function requestError(message, statusCode) {
+  return Object.assign(new Error(message), { statusCode });
+}
+
 async function readBody(request) {
+  const tooLarge = () => requestError('请求体超过 2 MiB', 413);
+  if (Number(request.headers['content-length']) > MAX_BODY_BYTES) throw tooLarge();
+  if (request.headers['content-type']?.split(';')[0].trim().toLowerCase() !== 'application/json') {
+    throw requestError('请求体须使用 application/json', 415);
+  }
   const chunks = [];
-  for await (const chunk of request) chunks.push(chunk);
+  let size = 0;
+  // Keep the socket open long enough to send 413 when a streamed body crosses the limit.
+  for await (const chunk of request.iterator({ destroyOnReturn: false })) {
+    size += chunk.length;
+    if (size > MAX_BODY_BYTES) throw tooLarge();
+    chunks.push(chunk);
+  }
   const raw = Buffer.concat(chunks).toString('utf8');
   if (!raw) return {};
+  let body;
   try {
-    return JSON.parse(raw);
+    body = JSON.parse(raw);
   } catch {
-    throw Object.assign(new Error('JSON 解析失败'), { statusCode: 400 });
+    throw requestError('JSON 解析失败', 400);
   }
+  if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    throw requestError('请求体须为 JSON 对象', 400);
+  }
+  return body;
+}
+
+function saveInput(body, key) {
+  const { create_only, ...fields } = body;
+  if (create_only !== undefined && typeof create_only !== 'boolean') {
+    throw requestError('create_only 须为布尔值', 400);
+  }
+  const input = fields[key] || fields;
+  if (input !== fields && input && typeof input === 'object' && !Array.isArray(input)) {
+    const { create_only: _ignored, ...config } = input;
+    return { config, createOnly: create_only === true };
+  }
+  return { config: input, createOnly: create_only === true };
 }
 
 function publicError(error, fallback) {
   return {
     error: fallback,
-    message: error.message,
+    message: error.statusCode ? error.message : fallback,
     ...(error.code ? { code: error.code } : {}),
     ...(error.id ? { id: error.id } : {}),
-    ...(error.path ? { path: error.path } : {}),
+    ...(error.statusCode && error.path ? { path: error.path } : {}),
   };
 }
 
@@ -79,15 +116,17 @@ function routeErrorLabel(pathname) {
 
 export function createCareerWikiHttpAdapter({ knowledge, appState, polish, pdf }) {
   return async function careerWikiHttpAdapter(request, response) {
-    const url = new URL(request.url, 'http://localhost');
+    if (!isLocalRequest(request)) {
+      return sendJson(response, 403, { error: '仅允许本地同源请求' }, { Connection: 'close' });
+    }
+    if (!request.url?.startsWith('/') || request.url.startsWith('//')) {
+      return sendJson(response, 400, { error: '请求路径无效' }, { Connection: 'close' });
+    }
+    const url = new URL(`http://localhost${request.url}`);
     const { pathname } = url;
     const method = request.method;
     const segments = pathname.split('/').filter(Boolean);
 
-    if (method === 'OPTIONS') {
-      response.writeHead(204, JSON_HEADERS);
-      return response.end();
-    }
     if (segments.length === 0) {
       return sendJson(response, 200, {
         service: 'career-wiki-skill-resume-generator',
@@ -162,8 +201,8 @@ export function createCareerWikiHttpAdapter({ knowledge, appState, polish, pdf }
         return sendPdf(response, await pdf.render(await readBody(request)));
       }
       if (method === 'POST' && pathname === '/api/resume/save') {
-        const body = await readBody(request);
-        return sendJson(response, 200, await appState.saveResume(body.config || body));
+        const { config, createOnly } = saveInput(await readBody(request), 'config');
+        return sendJson(response, 200, await appState.saveResume(config, { createOnly }));
       }
       if (method === 'POST' && pathname === '/api/resume/delete') {
         const body = await readBody(request);
@@ -171,8 +210,8 @@ export function createCareerWikiHttpAdapter({ knowledge, appState, polish, pdf }
       }
       if (method === 'POST' && pathname === '/api/template/save') {
         const body = await readBody(request);
-        const template = body.template || body;
-        return sendJson(response, 200, await appState.saveTemplate({ template, css: body.css }));
+        const { config: template, createOnly } = saveInput(body, 'template');
+        return sendJson(response, 200, await appState.saveTemplate({ template, css: body.css, createOnly }));
       }
       if (method === 'POST' && pathname === '/api/template/delete') {
         const body = await readBody(request);
@@ -182,7 +221,6 @@ export function createCareerWikiHttpAdapter({ knowledge, appState, polish, pdf }
         const css = await appState.readTemplateCss(url.searchParams.get('id'));
         response.writeHead(200, {
           'Content-Type': 'text/css; charset=utf-8',
-          'Access-Control-Allow-Origin': '*',
         });
         return response.end(css);
       }
@@ -193,6 +231,7 @@ export function createCareerWikiHttpAdapter({ knowledge, appState, polish, pdf }
         response,
         error.statusCode || (pathname === '/api/resume/polish' ? 502 : 500),
         publicError(error, fallback),
+        [413, 415].includes(error.statusCode) ? { Connection: 'close' } : {},
       );
     }
   };

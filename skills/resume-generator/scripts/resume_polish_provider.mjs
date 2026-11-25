@@ -150,21 +150,36 @@ function resolveProvider(provider) {
   return configured || fallback;
 }
 
-function normalizeProvider(provider = {}, { requireModel = true } = {}) {
-  const baseUrl = String(provider.base_url || '').trim().replace(/\/+$/, '');
-  const apiKey = String(provider.api_key || '').trim();
-  const model = String(provider.model || '').trim();
+function configurationError(message) {
+  return Object.assign(new Error(message), { statusCode: 400 });
+}
+
+export function providerDestination(provider = {}) {
   const protocol = String(provider.protocol || '').trim().toLowerCase();
   if (!['openai', 'anthropic'].includes(protocol)) {
-    const error = new Error('请选择 AI 润色协议（OpenAI-compatible 或 Anthropic Messages）');
-    error.statusCode = 400;
-    throw error;
+    throw configurationError('请选择 AI 润色协议（OpenAI-compatible 或 Anthropic Messages）');
   }
-  if (!baseUrl || !/^https?:\/\//i.test(baseUrl)) {
-    const error = new Error('请配置有效的 Base URL（必须以 http:// 或 https:// 开头）');
-    error.statusCode = 400;
-    throw error;
+  const raw = String(provider.base_url || '').trim();
+  const authority = /^https?:\/\/([^/]+)(?:\/|$)/i.exec(raw)?.[1];
+  let url;
+  try {
+    if (!authority || authority.includes('@') || /[?#\\\s]/.test(raw)) throw new Error();
+    url = new URL(raw);
+  } catch {
+    throw configurationError('请配置不含用户信息、查询或片段的有效 Base URL');
   }
+  if (url.protocol !== 'https:' && !['localhost', '127.0.0.1', '[::1]'].includes(url.hostname)) {
+    throw configurationError('非回环 AI Provider 必须使用 HTTPS');
+  }
+  const path = url.pathname.replace(/\/+$/, '');
+  const baseUrl = `${url.origin}${path.endsWith('/v1') ? path : `${path}/v1`}`;
+  return { protocol, baseUrl };
+}
+
+function normalizeProvider(provider = {}, { requireModel = true } = {}) {
+  const { protocol, baseUrl } = providerDestination(provider);
+  const apiKey = String(provider.api_key || '').trim();
+  const model = String(provider.model || '').trim();
   if (!apiKey) {
     const error = new Error('请配置 API Key');
     error.statusCode = 400;
@@ -180,11 +195,6 @@ function normalizeProvider(provider = {}, { requireModel = true } = {}) {
     ? Math.min(MAX_REQUEST_TIMEOUT_MS, Math.max(MIN_REQUEST_TIMEOUT_MS, requestedTimeout))
     : DEFAULT_REQUEST_TIMEOUT_MS;
   return { baseUrl, apiKey, model, timeoutMs, protocol };
-}
-
-function providerEndpoint(baseUrl, suffix) {
-  const base = baseUrl.endsWith('/v1') ? baseUrl : `${baseUrl}/v1`;
-  return `${base}/${suffix}`;
 }
 
 function authHeaders(apiKey) {
@@ -204,22 +214,31 @@ function anthropicHeaders(apiKey) {
 }
 
 async function fetchJson(url, options = {}, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  const signal = AbortSignal.timeout(timeoutMs);
   try {
-    return await fetch(url, { ...options, signal: controller.signal });
+    const response = await fetch(url, { ...options, signal, redirect: 'manual' });
+    if (response.status >= 300 && response.status < 400) {
+      await response.body?.cancel();
+      throw Object.assign(new Error('AI Provider 返回重定向，请配置最终 Base URL'), {
+        statusCode: 502,
+        code: 'PROVIDER_REDIRECT_REJECTED',
+      });
+    }
+    if (!response.ok) {
+      await response.body?.cancel();
+      return { status: response.status, ok: false };
+    }
+    const payload = await response.json().catch((error) => {
+      if (signal.aborted) throw error;
+      return {};
+    });
+    return { status: response.status, ok: true, payload };
   } catch (error) {
-    if (error?.name === 'AbortError') {
-      const timeoutError = new Error('AI 润色服务响应超时，请稍后重试');
-      timeoutError.statusCode = 504;
-      throw timeoutError;
+    if (error.statusCode) throw error;
+    if (signal.aborted) {
+      throw Object.assign(new Error('AI 润色服务响应超时，请稍后重试'), { statusCode: 504 });
     }
-    let serviceOrigin = url;
-    try {
-      serviceOrigin = new URL(url).origin;
-    } catch {
-      // 保留原始地址用于后续的配置提示。
-    }
+    const serviceOrigin = new URL(url).origin;
     const errorCode = error?.cause?.code || error?.code;
     const networkError = new Error(
       `无法连接 AI 润色服务（${serviceOrigin}）${errorCode ? `：${errorCode}` : '，请检查 Base URL、网络或代理设置'}`,
@@ -227,8 +246,6 @@ async function fetchJson(url, options = {}, timeoutMs = DEFAULT_REQUEST_TIMEOUT_
     networkError.statusCode = 502;
     networkError.cause = error;
     throw networkError;
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
@@ -289,7 +306,7 @@ export async function generateWithProvider(context, provider, { temperature = 0.
   for (let attempt = 1; attempt <= MAX_REQUEST_ATTEMPTS; attempt += 1) {
     let response;
     try {
-      response = await fetchJson(providerEndpoint(baseUrl, isAnthropic ? 'messages' : 'chat/completions'), {
+      response = await fetchJson(`${baseUrl}/${isAnthropic ? 'messages' : 'chat/completions'}`, {
         method: 'POST',
         headers: isAnthropic ? anthropicHeaders(apiKey) : authHeaders(apiKey),
         body: JSON.stringify(requestBody),
@@ -298,11 +315,11 @@ export async function generateWithProvider(context, provider, { temperature = 0.
       if (error?.statusCode === 504 && attempt < MAX_REQUEST_ATTEMPTS) continue;
       throw error;
     }
-    const payload = await response.json().catch(() => ({}));
+    const { payload } = response;
     if (!response.ok) {
       if (isRetryableStatus(response.status) && attempt < MAX_REQUEST_ATTEMPTS) continue;
       const error = new Error(
-        payload?.error?.message || payload?.message || `AI 润色服务请求失败（HTTP ${response.status}）`,
+        `AI 润色服务请求失败（HTTP ${response.status}）`,
       );
       error.statusCode = 502;
       throw error;
@@ -329,13 +346,13 @@ export async function listProviderModels(provider) {
     error.statusCode = 400;
     throw error;
   }
-  const response = await fetchJson(providerEndpoint(baseUrl, 'models'), {
+  const response = await fetchJson(`${baseUrl}/models`, {
     headers: authHeaders(apiKey),
   }, timeoutMs);
-  const payload = await response.json().catch(() => ({}));
+  const { payload } = response;
   if (!response.ok) {
     const error = new Error(
-      payload?.error?.message || payload?.message || `模型列表请求失败（HTTP ${response.status}）`,
+      `模型列表请求失败（HTTP ${response.status}）`,
     );
     error.statusCode = 502;
     throw error;

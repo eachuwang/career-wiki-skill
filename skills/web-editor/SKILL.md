@@ -1,6 +1,6 @@
 ---
 name: web-editor
-description: 用途：Career-Wiki-Skill 前端 React 应用（简历编辑器 + Wiki 图谱），集成了模板管理、多简历管理与隐私脱敏。用户说"打开编辑器""启动前端""看看简历预览""创建模板""创建字节版简历""预览脱敏效果""查看知识图谱"时触发。源码随 skill 包分发；首次使用或依赖变更时执行 npm install，依赖已存在时直接 npm run dev。调 resume-generator 的 API server（默认 localhost:3001）拿数据。支持拖拽排序、实时预览、多简历切换/新建/复制/删除、模板复制/删除、6 字段脱敏开关、PDF/HTML/JSON 直接下载。
+description: 打开 Career Wiki 简历编辑器，编辑或导出简历，应用模板和隐私设置，或查看 Wiki 图谱。通过本地工作区启动脚本打开同一个数据目录。
 version: 1.0.0
 author: career-wiki-skill
 license: MIT
@@ -17,17 +17,17 @@ metadata:
 
 Career-Wiki-Skill 的前端 React 应用，包含两个页面：
 
-1. **简历编辑器** — 内容编排区（按需添加/排序/编辑/删除）→ 右侧实时预览（按模板渲染）
+1. **简历编辑器**。使用章节大纲、A4 实时预览和字段编辑区。
 2. **Wiki 图谱** — vis-network 渲染实体关系图，点击节点查看详情，缺口分析
 
 **核心理念：** React 页面只渲染快照并 dispatch 用户意图。`Resume Editing Session` 负责草稿、保存、切换、新建、复制、删除和异步润色合并事务；`Resume Projection` 负责所有展示规则。数据通过 resume-generator 获取，编辑覆盖和润色结果只存简历配置 JSON，不回写 Wiki。
 
 ## 何时触发
 
-- 用户说"打开编辑器" / "启动前端" / "npm run dev" → 启动开发服务器
+- 用户说"打开编辑器" / "启动前端" / "npm run dev" → 运行工作区启动脚本
 - 用户说"看看简历预览" → 打开简历编辑器页面
 - 用户说"查看知识图谱" / "看看 wiki 图谱" → 打开图谱页面
-- 用户说"导出简历" → 点击预览栏唯一的「导出」入口，在导出面板选择 PDF / HTML / JSON、文件名与保存位置
+- 用户说"导出简历" → 打开「导出」，在导出面板选择 PDF / HTML / JSON、文件名与保存位置
 - 用户说"新建/复制/删除简历""切换简历" → 顶栏「简历」下拉 + 操作按钮，调 resumes API
 - 用户说"从当前简历隐藏项目" / "不在这份简历显示项目" → 当前简历的 `hide.items`；只影响当前简历，不删除 Wiki 实体
 - 用户说"复制/删除模板" → 顶栏模板下拉 + 操作按钮，调 templates API
@@ -37,133 +37,24 @@ Career-Wiki-Skill 的前端 React 应用，包含两个页面：
 
 **不用于：** 生成简历数据（用 resume-generator）；采访与 Wiki 编译（用 interview / wiki-engine）。模板管理、多简历管理、隐私脱敏已并入本前端，不再作为独立 skill。
 
-## 技术栈
+## 打开工作区
 
-- **React 18** + **TypeScript**
-- **Vite** — 构建工具 + 开发服务器
-- **dnd-kit** — 编辑区内拖拽排序
-- **Tailwind CSS** — 样式
-- **vis-network** — 图谱可视化
-- **Chromium + Playwright Core** — 复用预览 HTML/CSS 原生生成 A4 PDF
-
-## 启动方式
+在完整包的根目录运行：
 
 ```bash
-cd skills/web-editor
-
-# 仅在依赖缺失，或 package-lock.json 比 node_modules 的安装锁更新时安装
-if [ ! -x node_modules/.bin/vite ] || [ ! -f node_modules/.package-lock.json ] || [ package-lock.json -nt node_modules/.package-lock.json ]; then
-  npm install --no-audit --no-fund
-fi
-
-npm run dev          # 启动开发服务器（http://localhost:5173）
+node skills/env-init/scripts/launch.mjs
 ```
 
-### 启动决策
+只在用户明确指定数据目录时传 `--root <path>`。如果启动失败，报告实际错误和数据目录。不要另起指向默认目录的服务。空工作区可回到 Agent 明确请求「导入这份简历到 Career Wiki」或「开始采访」。编译完成后，在编辑器刷新 Wiki 数据。不把普通文件读取当成导入。
 
-按以下顺序执行，不要每次启动都无条件运行 `npm install`：
+## 编辑和导出
 
-1. 先检查 `http://localhost:5173` 是否已经有可用的 Vite 服务；已有服务时直接告知用户编辑器已运行，不要再启动第二个进程。
-2. 检查 `node_modules/.bin/vite` 是否存在且可执行；存在时复用当前依赖，直接运行 `npm run dev`。
-3. 依赖目录不存在、Vite 二进制缺失，或 `package-lock.json` 比 `node_modules/.package-lock.json` 更新时，才运行 `npm install --no-audit --no-fund`。
-4. 依赖安装完成后再运行 `npm run dev`，并确认 5173 端口已监听。
-5. 服务停止只代表停止进程，不要因为上次服务停止就重新安装依赖。
+1. 在章节大纲选择、排列和定位内容。移除章节或隐藏条目只改变当前简历。
+2. 点击纸面内容，在字段编辑区修改或恢复继承内容。编辑不回写 Wiki。
+3. 根据保存状态区分当前草稿和已保存简历。切换模板只改变当前简历的布局。
+4. 从「导出」选择 PDF、HTML 或 JSON。导出以当前预览和隐私设置为准，不另加一次对话确认。本地导出不代表已授权对外发送。
 
-**前提：** resume-generator 的 API server 需先启动（默认 `http://localhost:3001`）。Vite 开发服务器已配置代理，将 `/api` 请求转发到 API server。
-
-**环境变量：**
-- `VITE_API_URL` — API server 地址（默认 `http://localhost:3001`，留空走 Vite proxy）
-
-```bash
-VITE_API_URL=http://localhost:3001 npm run dev
-```
-
-## 项目结构
-
-```
-skills/web-editor/
-├── SKILL.md              ← 本文件
-├── package.json
-├── vite.config.ts        ← Vite 配置（含 /api proxy）
-├── tailwind.config.js
-├── postcss.config.js
-├── tsconfig.json
-├── index.html
-└── src/
-    ├── main.tsx          ← React 入口
-    ├── App.tsx          ← 主入口（页面切换 + 数据加载）
-    ├── index.css        ← 全局样式 + Tailwind + 打印样式
-    ├── pages/
-    │   ├── ResumeEditor.tsx    ← 简历编辑器页面
-    │   └── WikiGraph.tsx       ← Wiki 图谱页面
-    ├── components/
-    │   ├── ModulePicker.tsx     ← 编排区按需添加模块选择器
-    │   ├── EditPanel.tsx        ← 中间编辑区（拖拽排序/编辑/删除）
-    │   ├── PreviewPanel.tsx     ← 右侧实时预览（按模板渲染）
-    │   ├── TemplateSelector.tsx ← 模板选择下拉框
-    │   ├── PrivacyControls.tsx  ← 脱敏开关面板
-    │   └── GraphCanvas.tsx      ← vis-network 图谱画布
-    ├── api/
-    │   └── client.ts            ← API client（封装 fetch 调用）
-    ├── resume/
-    │   ├── editingSession.ts    ← 草稿、持久化与异步合并事务
-    │   └── projection.ts        ← 预览与导出的唯一投影接口
-    └── types/
-        └── index.ts            ← TypeScript 类型定义
-```
-
-## 简历编辑器页面
-
-### 布局
-
-```
-┌──────────────────────────────────────────────────────────────────┐
-│ 紧凑顶栏：简历 | 模板 | 润色 | 隐私 | 编辑/预览 | 保存              │
-├──────────┬───────────────────────────────┬──────────────────────┤
-│ 内容编排 │ 中间编辑区 +「添加模块」入口      │ 右侧预览              │
-│          │ ┌─────────────────────────┐     │ ┌──────────────────┐ │
-│          │ │ ⋮⋮ 个人信息     ▼  ✕   │     │ │  简历预览          │ │
-│          │ │   name: [王二____]      │     │ │                    │ │
-│          │ └─────────────────────────┘     │ │  王二              │ │
-│          │ ┌─────────────────────────┐     │ │  后端开发工程师     │ │
-│          │ │ ⋮⋮ 工作经历     ▶  ✕   │     │ │                    │ │
-│          │ └─────────────────────────┘     │ │  工作经历           │ │
-│          │                                 │ │  ...               │ │
-│          │  点击「添加模块」选择需要的内容  │ │  [100%] [−][+]    │ │
-│          │                                 │ └──────────────────┘ │
-└──────────┴───────────────────────────────┴──────────────────────┘
-```
-
-### 交互流程
-
-1. **按需添加模块** — 点击内容编排区的「添加模块」，勾选要保留在当前简历预览/导出中的模块后应用；取消勾选会从当前简历移除，不会删除或修改 Wiki
-2. **编辑覆盖** — 点击模块展开，可编辑字段。输入时立即更新右侧预览，保存为当前简历 JSON 的 `content_overrides[Wiki相对路径][字段名]`，**不回写 wiki**；重新打开当前简历时恢复，PDF/HTML/JSON 导出使用同一覆盖结果
-3. **子项隐藏/恢复** — 项目、经历等条目可从当前简历隐藏并恢复；保存为 `hide.items`，预览与导出同步生效，Wiki 数据不变。要从知识库删除实体，必须退出编辑器并触发 wiki-engine 的删除流程。
-4. **排序** — 编辑区内拖拽模块卡片上下排序
-5. **删除** — 点击模块卡片右上角 ✕ 从当前简历预览/导出中移除；不删除或修改 Wiki
-6. **右侧实时预览** — 按选中模板渲染，编辑改动实时反映到预览
-8. **模板切换** — 顶栏下拉框切换模板，预览即时更新
-9. **缩放** — 预览区有 +/− 按钮缩放
-10. **脱敏** — 顶栏脱敏开关实时控制预览中的字段脱敏
-11. **AI 润色显示** — 顶栏「AI 润色」开关默认关闭；齿轮按钮选择 OpenAI-compatible / Anthropic Messages 协议，配置模型并选择项目描述、个人优势、岗位职责等内容；OpenAI-compatible 支持拉取 `/v1/models`，Anthropic 需手填模型。关闭显示原始输入，开启显示已校验的 `polish.entries`；已生成字段旁提供「换一换」，只重新生成当前条目的当前字段，切换即时影响编辑区、预览和导出
-
-### 导出
-
-> 🔴 **CHECKPOINT** — 导出前必须让用户确认
->
-> 点击导出按钮后，导出面板会在真正写文件前集中确认：
-> - 当前模板、脱敏设置、模块顺序是否符合预期
-> - 文件格式与文件名
-> - 当前脱敏项数量
-> - 支持 File System Access API 时由系统窗口选择保存位置；否则保存到浏览器默认下载目录
->
-> 🛑 不要在用户未确认前直接触发导出。导出是不可逆操作，导出后才发现脱敏没开会泄露隐私。
-
-| 格式 | 方式 | 说明 |
-|------|------|------|
-| PDF | `Chromium + Playwright Core` | 将 `.print-area` 的同一份 HTML/CSS 交给本地 API 的 Chromium 原生打印引擎生成 PDF，不调用打印对话框 |
-| HTML | `Blob` 下载 | 取 `.print-area` 的 outerHTML，包成完整 HTML 文件下载 |
-| JSON | `ResumeView` Blob | 浏览器直接序列化与预览相同的 Resume Projection 结果 |
+隐私设置只遮蔽指定字段，不匿名化自由文本。分享前核对预览中的内容。AI 润色独立于预览遮蔽。只在用户选择 Provider 并要求润色后向该 Provider 发送上下文。
 
 ## Wiki 图谱页面
 
@@ -199,12 +90,12 @@ skills/web-editor/
 | POST | `/api/resume/polish` | 生成当前简历的 AI 润色结果 |
 | POST | `/api/resume/polish-models` | 拉取用户配置 provider 的模型列表 |
 | POST | `/api/resume/save` | 保存简历配置 |
-| PUT | `/api/wiki/refresh` | 触发 wiki 重新 compile |
+| PUT | `/api/wiki/refresh` | 返回 Agent 编译提示，不直接编译 |
 | GET | `/api/health` | 健康检查 |
 
 ## Resume Projection
 
-`src/resume/projection.ts` 的 `projectResume({ wiki, config, template })` 是简历展示规则的唯一接口。固定顺序为：选择模块 → 应用有效润色 → 手动覆盖 → 隐藏条目/字段 → 排序/强调 → 隐私 → 分组。`PreviewPanel`、HTML、PDF 和 JSON 只消费最终 `ResumeView`。
+`src/resume/projection.ts` 的 `projectResume({ wiki, config, template })` 是简历展示规则的唯一接口。固定顺序为：选择模块 → 应用有效润色 → 手动覆盖 → 隐藏条目/字段 → 排序/强调 → 隐私 → 分组。预览、HTML、PDF 和分享 JSON 都从同一份投影生成。
 
 脱敏在 Resume Projection 中执行：
 
@@ -226,20 +117,20 @@ skills/web-editor/
 npm run build    # 输出到 dist/
 ```
 
-`dist/` 可部署到任意静态文件服务器。部署时需配置 `/api` 反向代理到 resume-generator API server。
+这个编辑器为本机工作区设计。浏览器通过同源 `/api` 代理连接本地服务。
 
 ## 跨 Agent 一致性
 
-- 假设 Agent 有终端执行能力（跑 `npm install` + `npm run dev`）
+- 假设 Agent 有终端执行能力（运行本地启动脚本）
 - 前端不直接读写文件系统，所有数据通过 API server
 - 类型定义（`src/types/index.ts`）跟 wiki-engine schema / 模板 JSON / 简历配置 JSON 格式对齐
 - Vite proxy 配置确保开发时前后端分离运行
 
 ## Common Pitfalls
 
-1. **API server 没启动。** 前端启动后会报连接错误。必须先启动 resume-generator 的 API server（`http://localhost:3001`）。Vite proxy 只在开发模式生效，生产部署需配 nginx 反代。
+1. **API server 没启动。** 运行工作区启动脚本，不要仅执行前端开发命令。
 
-2. **每次启动都重新安装依赖。** 停止 Vite 不会删除 `node_modules`。先检查 `node_modules/.bin/vite` 和锁文件状态，只有缺失或依赖声明变化时才安装。
+2. **每次启动都重新安装依赖。** 启动脚本检查当前依赖。不要为同一工作区反复手动安装。
 
 3. **把删除编辑器模块当成删除 Wiki 实体。** 编辑区的删除只移除当前简历模块；项目仍会从 Wiki 读取。删除知识库实体必须使用 wiki-engine 的删除清单和全量 compile 流程。
 
@@ -259,7 +150,7 @@ npm run build    # 输出到 dist/
 
 - [ ] `npm install` 成功安装所有依赖
 - [ ] 依赖已存在时未重复执行 `npm install`
-- [ ] `npm run dev` 启动开发服务器，`http://localhost:5173` 可访问
+- [ ] `npm run dev` 运行工作区启动脚本，`http://localhost:5173` 可访问
 - [ ] `npm run build` 成功构建到 `dist/`
 - [ ] API server 未启动时前端显示错误提示（不白屏）
 - [ ] 编排区「添加模块」可多选并加入模块

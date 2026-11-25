@@ -1,7 +1,7 @@
 /**
- * ModuleEditDialog — 中央悬浮编辑窗
+ * ModuleEditDialog — 文档旁的字段编辑区
  *
- * 承载单个模块的字段编辑:左侧条目列表,右侧字段编辑器。
+ * 承载单个模块的字段编辑:先选条目，再编辑字段。
  * 支持从预览文字点击定位到具体条目与字段并聚焦。
  */
 
@@ -15,14 +15,14 @@ import type {
   ResumePolishField,
   WikiEntity,
 } from '../types';
-import type { EditTarget } from '../pages/ResumeEditor';
+import type { EditorSelection } from '../pages/ResumeEditor';
 import FieldEditor from './FieldEditor';
 import UiIcon from './UiIcon';
 
 interface ModuleEditDialogProps {
   module: ModuleInstance;
   wikiEntities: WikiEntity[];
-  initialTarget: EditTarget;
+  initialTarget: EditorSelection;
   onClose: () => void;
   onOverrideField: (moduleId: string, itemPath: string, field: string, value: unknown) => void;
   onRestoreField: (moduleId: string, itemPath: string, field: string) => void;
@@ -76,31 +76,17 @@ export default function ModuleEditDialog({
 
   const polishSelectedFields = getSelectedPolishFields(polish);
 
-  // 从预览点击进入时,滚动并聚焦目标字段
   useEffect(() => {
-    if (!initialTarget.field || selectedIndex < 0) return;
-    const timer = setTimeout(() => {
-      const el = document.getElementById(
-        fieldInputId(module.id, selectedIndex, initialTarget.field || ''),
-      );
-      if (el) {
-        el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-        (el as HTMLElement).focus();
-      }
-    }, 80);
-    return () => clearTimeout(timer);
-    // 只在打开时定位一次
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const field = initialTarget.field;
+    const input = field && selectedIndex >= 0
+      ? document.getElementById(fieldInputId(module.id, selectedIndex, field))
+      : null;
+    (input || document.getElementById('module-inspector-close'))?.focus();
   }, []);
 
   return (
-    <div className="module-dialog-backdrop" role="presentation">
-      <div
-        className="module-dialog"
-        role="dialog"
-        aria-modal="true"
-        aria-label={'编辑' + module.label}
-      >
+      <aside className="module-dialog document-inspector no-print" aria-label={'编辑' + module.label}
+        onKeyDown={(event) => { if (event.key === 'Escape') onClose(); }}>
         <div className="module-dialog-head">
           <span className="module-dialog-icon">
             <UiIcon name={module.type} size={18} />
@@ -111,23 +97,22 @@ export default function ModuleEditDialog({
           </span>
           <button
             type="button"
-            className="icon-button module-dialog-close"
+            id="module-inspector-close"
+            className="toolbar-button ghost module-dialog-close"
             onClick={onClose}
             title="关闭编辑窗"
             aria-label="关闭编辑窗"
           >
-            <UiIcon name="close" size={18} />
+            关闭
           </button>
         </div>
         <div className="module-dialog-body">
-          <div className="module-item-list" role="listbox" aria-label={module.label + '条目列表'}>
+          <div className="module-item-list" aria-label={module.label + '条目列表'}>
             {items.map((item) => {
               const hidden = module.hiddenItemIds.includes(item.path);
               return (
                 <div
                   key={item.path}
-                  role="option"
-                  aria-selected={selectedPath === item.path}
                   className={
                     'module-item-option' +
                     (selectedPath === item.path ? ' active' : '') +
@@ -137,6 +122,7 @@ export default function ModuleEditDialog({
                   <button
                     type="button"
                     className="module-item-select"
+                    aria-pressed={selectedPath === item.path}
                     onClick={() => setSelectedPath(item.path)}
                   >
                     <span className="module-item-label">{getItemLabel(item)}</span>
@@ -162,10 +148,10 @@ export default function ModuleEditDialog({
             {selected ? (
               <>
                 <div className="module-item-fields-title">{getItemLabel(selected)}</div>
-                {getOrderedEntityFieldEntries(selected.entity, selected.fields).map(
-                  ([field, value], index) => (
+                {getOrderedEntityFieldEntries(selected.entity, { ...selected.fields, ...module.overrides[selected.path] }).map(
+                  ([field, value]) => (
                     <FieldEditor
-                      key={field}
+                      key={selected.path + field}
                       field={field}
                       value={value}
                       moduleId={module.id}
@@ -190,7 +176,6 @@ export default function ModuleEditDialog({
             )}
           </div>
         </div>
-      </div>
-    </div>
+      </aside>
   );
 }

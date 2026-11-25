@@ -72,8 +72,8 @@ async function previewShowsContactIcons(): Promise<void> {
 
   assert.ok(contactMarkup, '应渲染联系方式区域');
   assert.equal(contactMarkup.match(/<svg\b/g)?.length, 4);
-  assert.match(contactMarkup, /hello@example\.com/);
-  assert.match(contactMarkup, /13800138000/);
+  assert.match(contactMarkup, /h\*\*\*@example\.com/);
+  assert.match(contactMarkup, /138\*\*\*\*8000/);
   assert.match(contactMarkup, /github\.com\/example/);
   assert.match(contactMarkup, /example\.com/);
 }

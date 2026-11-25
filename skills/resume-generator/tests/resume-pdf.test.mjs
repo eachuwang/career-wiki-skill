@@ -12,9 +12,9 @@ test('PDF 生成器使用浏览器 screen 排版引擎输出 A4 PDF', async () =
           newContext: async (contextOptions) => {
             calls.push(['newContext', contextOptions]);
             return {
+              route: async (...args) => calls.push(['route', ...args]),
               newPage: async () => ({
-                route: async (pattern) => calls.push(['route', pattern]),
-                setContent: async (html, options) => calls.push(['setContent', html, options]),
+                goto: async (url, options) => calls.push(['goto', url, options]),
                 emulateMedia: async (options) => calls.push(['emulateMedia', options]),
                 evaluate: async () => {
                   calls.push(['fontsReady']);
@@ -40,6 +40,21 @@ test('PDF 生成器使用浏览器 screen 排版引擎输出 A4 PDF', async () =
   });
 
   assert.match(pdf.toString(), /^%PDF-1\.7 chromium/);
+  assert.equal(calls.find(([name]) => name === 'launch')[1].chromiumSandbox, true);
+  assert.deepEqual(calls.find(([name]) => name === 'newContext')[1], {
+    javaScriptEnabled: false,
+    offline: true,
+    serviceWorkers: 'block',
+  });
+  const [denyRoute, documentRoute] = calls.filter(([name]) => name === 'route');
+  assert.equal(denyRoute[1], '**/*');
+  assert.equal(denyRoute[2]({ abort: () => 'blocked' }), 'blocked');
+  const url = calls.find(([name]) => name === 'goto')[1];
+  assert.equal(documentRoute[1], url);
+  assert.deepEqual(documentRoute[3], { times: 1 });
+  const document = documentRoute[2]({ fulfill: (value) => value });
+  assert.match(document.headers['Content-Security-Policy'], /sandbox; default-src 'none'/);
+  assert.match(document.body, /简历正文/);
   assert.deepEqual(calls.find(([name]) => name === 'emulateMedia'), [
     'emulateMedia',
     { media: 'screen' },

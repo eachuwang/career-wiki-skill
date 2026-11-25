@@ -6,18 +6,20 @@ import {
 } from './export.ts';
 import type { ResumeView } from './projection.ts';
 
-test('JSON 导出逐字序列化预览使用的 ResumeView', async () => {
+test('分享 JSON 保留文档字段，移除路径、内部 ID、交叉链接及简历名称', async () => {
   const view: ResumeView = {
     resume: { id: 'ai', name: 'AI 简历', template: 'technical' },
-    person: null,
-    sections: [],
+    person: { path: 'private/person.md', fields: { name: '李*', email: 'l***@example.test', salary: 'hidden' }, links: [] },
+    sections: [{ module: 'project', grouped: false, title: '项目', fields: ['name', 'id', 'path', 'links'], items: [{
+      path: 'private/project.md', fields: { name: '合成项目', id: 'internal', path: 'internal', links: 'internal' }, links: [],
+    }] }],
     meta: { entity_count: 0, template: 'technical', resume_config: 'ai' },
   };
 
   const blob = createResumeJsonBlob(view);
 
   assert.equal(blob.type, 'application/json');
-  assert.deepEqual(JSON.parse(await blob.text()), view);
+  assert.deepEqual(JSON.parse(await blob.text()), { person: { name: '李*', email: 'l***@example.test' }, sections: [{ title: '项目', items: [{ name: '合成项目' }] }] });
 });
 
 test('HTML 导出复用预览标记并内嵌相同样式', () => {
@@ -38,8 +40,8 @@ test('导出 HTML 与 JSON 都包含简历正文', async () => {
     resume: { id: 'ai', name: 'AI 简历', template: 'technical' },
     person: {
       path: 'person/wang',
-      type: 'person',
-      fields: { name: '王羿邱', headline: 'AI 应用工程师' },
+      fields: { name: '王羿邱', current_title: 'AI 应用工程师' },
+      links: [],
     },
     sections: [],
     meta: { entity_count: 1, template: 'technical', resume_config: 'ai' },

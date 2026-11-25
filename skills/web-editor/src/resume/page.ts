@@ -35,45 +35,24 @@ export function mmToPx(mm: number): number {
   return mm * MM_TO_PX;
 }
 
-/** 参与分页计算的内容块：top/height 均相对测量容器内容区顶部（px） */
-export interface PaginateBlockRect {
-  top: number;
-  height: number;
+/** Greedily place measured blocks into the actual remaining space on each page. */
+export function paginateBlocks(heights: number[], pageHeight: number): { indexes: number[]; overflow: boolean } {
+  let page = 0;
+  let used = 0;
+  let overflow = false;
+  const indexes = heights.map((height) => {
+    if (height > pageHeight) overflow = true;
+    if (used > 0 && used + height > pageHeight) {
+      page += 1;
+      used = 0;
+    }
+    used += height;
+    return page;
+  });
+  return { indexes, overflow };
 }
 
-/**
- * 贪心计算每个内容块所属页码。
- *
- * 块在测量容器中连续流式排列，top/height 反映真实排版；
- * 若块起点已越过当前页底部，或块跨越页边界，则整体移入下一页，
- * 保证块（进而其中的文字行）永远不会被页边界切断。
- * 返回与输入等长的页码数组（从 0 开始）。
- */
-export function computePageIndexes(
-  blocks: PaginateBlockRect[],
-  pageContentHeight: number,
-): number[] {
-  const indexes: number[] = [];
-  let page = 0;
-  let pageEnd = pageContentHeight;
-
-  for (const block of blocks) {
-    const top = block.top;
-    const bottom = top + block.height;
-
-    // 块起点已越过当前页底部 → 从下一页开始
-    if (top >= pageEnd) {
-      page += 1;
-      pageEnd = pageContentHeight * (page + 1);
-    }
-    // 块跨越页边界（起点在本页、终点超出）→ 整块移入下一页
-    if (top < pageEnd && bottom > pageEnd) {
-      page += 1;
-      pageEnd = pageContentHeight * (page + 1);
-    }
-
-    indexes.push(page);
-  }
-
-  return indexes;
+/** Split long fields at explicit line boundaries, preserving non-empty lines in order. */
+export function paragraphBlocks(value: unknown): string[] {
+  return String(value ?? '').split(/\r?\n/).filter((line) => line.trim());
 }

@@ -5,9 +5,20 @@ import { exportResumePreview } from './browserExport.ts';
 test('PDF 导出将当前预览的同一份 HTML 和 CSS 交给浏览器 PDF 引擎', async () => {
   const previousDocument = globalThis.document;
   const resumeMarkup = '<article class="print-area"><svg></svg><span>i***@163.com</span></article>';
+  const fieldAttrs = new Set(['data-edit', 'tabindex', 'role', 'title']);
+  const blockAttrs = new Set(['data-section']);
+  const rootAttrs = new Set(['data-layout']);
+  let layout = 'ready';
+  const clone = {
+    removeAttribute: (attribute: string) => rootAttrs.delete(attribute),
+    querySelectorAll: (selector: string) => [{ removeAttribute: (attribute: string) => (
+      selector === '[data-edit]' ? fieldAttrs : blockAttrs
+    ).delete(attribute) }],
+    outerHTML: resumeMarkup,
+  };
   const fakeDocument = {
     querySelector: (selector: string) => selector === '.print-area'
-      ? { outerHTML: resumeMarkup }
+      ? { getAttribute: () => layout, cloneNode: () => clone }
       : null,
     styleSheets: [{
       cssRules: [{ cssText: '.resume-contact-item { display: inline-flex; align-items: center; }' }],
@@ -39,10 +50,15 @@ test('PDF 导出将当前预览的同一份 HTML 和 CSS 交给浏览器 PDF 引
     });
 
     assert.equal(result, 'saved');
+    assert.equal(fieldAttrs.size + blockAttrs.size + rootAttrs.size, 0);
     assert.match(submittedHtml, new RegExp(resumeMarkup.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
     assert.match(submittedHtml, /\.resume-contact-item \{ display: inline-flex; align-items: center; \}/);
     assert.equal(savedBlob?.type, 'application/pdf');
     assert.match(await savedBlob!.text(), /native-browser/);
+    layout = 'overflow';
+    await assert.rejects(exportResumePreview({ format: 'html', filename: '简历', resumeName: '简历', resumeView: null }), /超过 A4/);
+    layout = 'pending';
+    await assert.rejects(exportResumePreview({ format: 'html', filename: '简历', resumeName: '简历', resumeView: null }), /尚未准备/);
   } finally {
     if (previousDocument) {
       Object.defineProperty(globalThis, 'document', {

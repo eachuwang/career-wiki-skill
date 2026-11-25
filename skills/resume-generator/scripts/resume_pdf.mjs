@@ -1,5 +1,8 @@
 import { access } from 'node:fs/promises';
 
+const DOCUMENT_URL = 'https://resume-pdf.invalid/';
+const PDF_CSP = "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; font-src data:; base-uri 'none'; form-action 'none'";
+
 const CHROME_CANDIDATES = [
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/Applications/Chromium.app/Contents/MacOS/Chromium',
@@ -42,6 +45,7 @@ export function createResumePdfRenderer({ chromium, executablePath } = {}) {
       try {
         browser = await chromium.launch({
           headless: true,
+          chromiumSandbox: true,
           executablePath: chromePath,
         });
       } catch {
@@ -52,11 +56,21 @@ export function createResumePdfRenderer({ chromium, executablePath } = {}) {
       }
       let context;
       try {
-        context = await browser.newContext();
+        context = await browser.newContext({
+          javaScriptEnabled: false,
+          offline: true,
+          serviceWorkers: 'block',
+        });
+        // Serve supplied HTML as a document with a response CSP, not on a local file or application origin.
+        await context.route('**/*', (route) => route.abort());
+        await context.route(DOCUMENT_URL, (route) => route.fulfill({
+          contentType: 'text/html; charset=utf-8',
+          headers: { 'Content-Security-Policy': PDF_CSP },
+          body: html,
+        }), { times: 1 });
         const page = await context.newPage();
-        await page.route(/^https?:\/\//, (route) => route.abort());
         await page.emulateMedia({ media: 'screen' });
-        await page.setContent(html, { waitUntil: 'load' });
+        await page.goto(DOCUMENT_URL, { waitUntil: 'load' });
         const hasContent = await page.evaluate(async () => {
           await document.fonts.ready;
           return Array.from(document.querySelectorAll('.a4-page'))
@@ -76,8 +90,11 @@ export function createResumePdfRenderer({ chromium, executablePath } = {}) {
         });
         return Buffer.from(pdf);
       } finally {
-        await context?.close();
-        await browser.close();
+        try {
+          await context?.close();
+        } finally {
+          await browser.close();
+        }
       }
     },
   };

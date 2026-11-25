@@ -62,9 +62,10 @@ export default function ResumeSelector({
           className="toolbar-select"
           aria-label="选择简历"
         >
+          {!resumes.some((resume) => resume.id === currentId) && <option value={currentId}>{name}</option>}
           {resumes.map((r) => (
             <option key={r.id} value={r.id}>
-              {r.name}
+              {r.id === currentId ? name : r.name}
             </option>
           ))}
         </select>
@@ -103,7 +104,7 @@ export default function ResumeSelector({
           <button type="button" role="menuitem" onClick={() => { onNew(); setMenuOpen(false); }}>
             <UiIcon name="plus" size={15} /> 新建简历
           </button>
-          <button type="button" role="menuitem" onClick={() => { onDuplicate(); setMenuOpen(false); }}>
+          <button type="button" role="menuitem" disabled={!resumes.some((resume) => resume.id === currentId)} onClick={() => { onDuplicate(); setMenuOpen(false); }}>
             <UiIcon name="copy" size={15} /> 创建副本
           </button>
           <div className="selector-action-separator" />

@@ -12,6 +12,6 @@
   },
   "dependencies": {
     "career-wiki-wiki-engine": "1.0.0",
-    "playwright-core": "^1.62.1"
+    "playwright-core": "^1.65.1"
   }
 }
